@@ -16,6 +16,21 @@ issue has failed.
 
 (The tree grows per area; this seed fixes only the conventions.)
 
+## Current tree
+
+- `README.md` — this file: structure + conventions.
+- `glossary.md` — every domain term, one definition each.
+- `data/circles-yaml.md` — the circles.yaml schema stub + status resolution decision table.
+- `data/status-resolution.md` — how an item's traffic light is determined from its adapter.
+- `data/freshness.md` — the freshness adapter: date extraction, thresholds, timezone anchoring.
+- `data/adapters.md` — adapter taxonomy, interface contract, failure modes.
+- `render/sunburst.md` — sunburst geometry: ring order, arc subdivision, angular convention.
+- `render/layout.md` — one-screen/A4 constraint, scaling, page structure.
+- `render/interactions.md` — hover, click, detail page (annotated timeseries).
+- `render/colors.md` — traffic light palette, contrast, print/greyscale, color blindness.
+- `process/testing.md` — test-tier terminology (unit/system/e2e), decision-table linkage.
+- `process/bake.md` — bake pipeline: data.json schema, phases, error handling.
+
 ## Conventions
 
 - **Requirement IDs**: stable anchors `CIR-<AREA>-<NAME>` (e.g. `CIR-DATA-FRESHNESS-WINDOW`) —
