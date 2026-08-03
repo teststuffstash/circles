@@ -1,0 +1,59 @@
+# The synthetic fixture person (see fixtures/README.md — everything invented).
+# Rows here double as the specs' key examples: each item exercises one adapter/status case
+# from specs/data/circles-yaml.md §Status resolution.
+person: Alex Example
+rings:
+  - id: self
+    label: "① Self"
+    items:
+      - id: sleep
+        label: Sleep
+        guardrail: "Lights out by 23:00 on weeknights"
+        status:
+          freshness: # key example: freshness inside window (🟢 when data is recent)
+            source: notes/sleep-log.md
+            yellow_after: 7
+            red_after: 30
+      - id: labs
+        label: Quarterly labs
+        guardrail: "Blood panel every 90 days"
+        status:
+          freshness: # key example: freshness very stale (🔴 with an old date)
+            source: notes/labs.md
+            yellow_after: 100
+            red_after: 190
+      - id: exercise
+        label: Exercise
+        # key example: no adapter → ⚪ unmonitored (honest grey)
+  - id: partner
+    label: "② Partner"
+    items:
+      - id: date-night
+        label: Date night
+        guardrail: "Protected evening, twice a month"
+        status:
+          manual: yellow # key example: hand-set light (v0 mode)
+  - id: children
+    label: "③ Children"
+    items:
+      - id: nova
+        label: "◀ Nova"
+        share: 0.5 # key example: two half-arc siblings in one ring
+        status:
+          manual: green
+      - id: kit
+        label: "Kit ▶"
+        share: 0.5
+        status:
+          manual: green
+  - id: wider
+    label: "④ Wider life"
+    items:
+      - id: friends
+        label: Friends
+        status:
+          manual: red
+      - id: plants
+        label: Plants
+        status:
+          command: ["./notes/plants-status.sh"] # key example: command adapter (escape hatch)
