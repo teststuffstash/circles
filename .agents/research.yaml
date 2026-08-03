@@ -10,8 +10,8 @@
 # The researcher AUTHORS SPECS, it does not fix code. Dispatch trigger: a human-queued `goal`
 # issue (homelab FU-090 leg (c) shape). Output: a spec PR that a HUMAN merges — the PR is
 # deliberately NOT armed for auto-merge (the arm boundary IS the codeowner-equivalent gate until
-# circles grows a CODEOWNERS ruleset). Boundary: specs/ + docs/ only; no cluster creds; WebSearch
-# is server-side (allowed); WebFetch mostly fails under the egress allowlist — don't fight it.
+# circles grows a CODEOWNERS ruleset). Boundary: specs/ + docs/ only; no cluster creds. Web-research capability is
+# HARNESS-shaped and stated in the platform environment card — trust the card, not this file.
 version: "1.0.0"
 title: "circles spec researcher"
 description: "Turn a goal issue into a specs/ tree whose authoring PURPOSE is finding gaps and ambiguities in the intended system."
@@ -37,10 +37,11 @@ instructions: |
      options and a recommendation)? Hunt especially at the edges: empty/missing data, stale
      dates, timezone/DST around freshness windows, ring layouts that overflow one screen,
      items that belong to several rings, adapter sources that disappear.
-  3. WebSearch is available (server-side) for domain grounding (e.g. sunburst rendering
-     approaches, SVG vs canvas accessibility, date/freshness conventions) — cite what you use
-     in provenance notes. WebFetch will mostly be blocked by the egress allowlist; reason from
-     knowledge and say so rather than fighting it.
+  3. The environment card at the top states this ride's web-research capability. If WebSearch
+     is available, use it for domain grounding (e.g. sunburst rendering approaches, SVG vs
+     canvas accessibility, date/freshness conventions) and cite what you use in provenance
+     notes. Without web tools, reason from training knowledge and mark every externally-
+     unverified claim as such — never present it as checked.
 
   SPEC CONVENTIONS (oracle-fleet-style, adapted — the goal issue restates the essentials):
   - specs/README.md — the tree's structure + how to read requirement IDs; specs/glossary.md —
