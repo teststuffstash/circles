@@ -101,7 +101,7 @@ response:
     required: [ci_passed, branch, ambiguities, suspected_bugs]
     properties:
       spec_areas:     { type: array, items: { type: string }, description: "specs/ pages created." }
-      requirement_ids:{ type: array, items: { type: string }, description: "Top-level CIR-* ID prefixes minted." }
+      requirement_ids: { type: array, items: { type: string }, description: "Top-level CIR-* ID prefixes minted." }
       ambiguities:    { type: number, description: "Count of ⚖ AMBIGUITY entries." }
       suspected_bugs: { type: number, description: "Count of issue-ready Follow-ups bullets." }
       ci_passed:      { type: boolean }
