@@ -71,7 +71,27 @@ One definition per term; specs use these words and no synonyms.
 - **intervention event** — a dated annotation overlaid on a detail page's metric series,
   parsed from a markdown table.
 - **reference viewport** — the fixed CSS-pixel viewport the one-screen constraint is tested
-  at (`CIR-RENDER-LAYOUT-ONE-SCREEN`).
+  at: 1280×800 CSS px (`CIR-RENDER-LAYOUT-REFERENCE-VIEWPORT`).
+- **chrome** — the page furniture around the chart: title, center-disc name, ring key,
+  legend, generated-at stamp, warnings banner, detail strip
+  (`CIR-RENDER-LAYOUT-CHROME`).
+- **detail strip** — the fixed one-line chrome area the detail line appears in on
+  hover/focus/tap.
+- **warnings banner** — the chrome element summarizing build warnings (count + causes);
+  present only when `warnings[]` is non-empty.
+- **boot error** — the page's visible failure state when `data.json` is missing, malformed,
+  or an unrecognized version; never a blank page (`CIR-RENDER-LAYOUT-BOOT-ERROR`).
+- **text alternative** — the complete per-ring list of items with status words, generated
+  from the same `data.json`; always in the accessibility tree and in print
+  (`CIR-RENDER-A11Y-TEXT-ALTERNATIVE`).
+- **detail payload** — the per-item baked JSON (`details/<ring>--<item>.json`) behind a
+  detail page: metric series + intervention events (P2).
+- **content envelope** — the legibility bound the one-screen gate is tested within (≤ 6
+  rings, ≤ 8 items per ring at the reference viewport); beyond it the bake warns and the
+  page elides (`CIR-RENDER-GEOM-DENSITY`).
+- **luminance ladder** — the palette's strict grayscale ordering (amber > grey > green >
+  red) that keeps statuses pairwise distinguishable on B&W print
+  (`CIR-RENDER-COLOR-PALETTE`).
 
 ## Process
 
