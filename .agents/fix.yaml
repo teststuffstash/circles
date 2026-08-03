@@ -24,8 +24,10 @@ instructions: |
   it does NOT mean a restricted runtime — the platform environment card above states exactly
   what this ride CAN do (docker, egress). Trust it and verify, don't assume.
 
-  FIRST, read the issue — do not skip this. Run `gh issue view {{ issue }}` (add `--comments` if it
-  has discussion) and treat THAT body as the source of truth: the repro, the synthetic row(s), and
+  FIRST, read the issue — do not skip this. Run `gh issue view {{ issue }} --json title,body,comments`
+  (use the --json form: the plain human-format view renders EMPTY with exit 0 under this pod's
+  App token — empty output means you have NOT read the issue) and treat THAT body as the source
+  of truth: the repro, the synthetic row(s), and
   the exact expected output it specifies. Do NOT infer the bug from code comments or the existing
   fixture files alone — those can be stale or already-corrected and will send you in circles. If
   `gh issue view` fails, STOP and report it; never guess the issue from the repo.

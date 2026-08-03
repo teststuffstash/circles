@@ -22,7 +22,9 @@ instructions: |
   it is finding gaps, contradictions, and ambiguities in the intended product before it is built.
   A spec pass that merely restates the goal issue has failed its purpose.
 
-  FIRST, read the goal issue: `gh issue view {{ issue }} --comments`. It carries the goal,
+  FIRST, read the goal issue: `gh issue view {{ issue }} --json title,body,comments` (use the
+  --json form: the plain human-format view renders EMPTY with exit 0 under this pod's App
+  token — empty output means you have NOT read the issue). It carries the goal,
   the product model, acceptance criteria, and the platform facts you need (you have ONLY this
   repo and the issue — no homelab checkout, no cluster access, no other repos). If
   `gh issue view` fails, STOP and report.

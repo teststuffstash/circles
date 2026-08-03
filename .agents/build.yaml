@@ -23,8 +23,9 @@ instructions: |
   task as a bug hunt is the failure this recipe exists to prevent. The issue describes WHAT to build
   and how it will be ACCEPTED.
 
-  FIRST, read the issue — do not skip. Run `gh issue view {{ issue }} --comments` and treat THAT body
-  as the source of truth: the deliverables, the acceptance criteria, and any platform facts. If
+  FIRST, read the issue — do not skip. Run `gh issue view {{ issue }} --json title,body,comments`
+  (the --json form: the plain human-format view renders EMPTY with exit 0 under this pod's App
+  token) and treat THAT body as the source of truth: the deliverables, the acceptance criteria, and any platform facts. If
   `gh issue view` fails, STOP and report it; never guess the task from the repo.
 
   How to build:

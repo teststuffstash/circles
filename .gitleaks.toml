@@ -1,0 +1,13 @@
+# .gitleaks.toml — repo allowlist for the public circles repo.
+#
+# specs/ is documentation with FENCED JSON/YAML examples; a field literally named "key" in an
+# example trips `generic-api-key` (the opus spec arm lost a history squash + force-push to this,
+# 2026-08-03 — PR #3 follow-ups). Everything in specs/ is synthetic by hard repo rule
+# (CLAUDE.md), so path-allowlisting it loses no protection; code, chart, scripts, workflows and
+# fixtures stay fully scanned.
+[extend]
+useDefault = true
+
+[allowlist]
+description = "specs/ = synthetic documentation examples (field names like \"key\" false-positive generic-api-key)"
+paths = ['''specs/.*\.md''']
