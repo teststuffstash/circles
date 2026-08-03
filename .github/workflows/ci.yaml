@@ -1,0 +1,32 @@
+# circles CI — thin. All logic lives in `devbox run <task>` (devbox.json + scripts/),
+# so the exact same gate runs locally and here, and tool versions are pinned by devbox, not by
+# this YAML. Swapping the runner (self-hosted ARC → Blacksmith/Chainguard) needs no logic change.
+#
+# Runs on the homelab self-hosted runner (Actions Runner Controller, ephemeral laptop tier):
+# runs-on: homelab-ephemeral.
+#
+# pull_request ONLY (no push:master): the PR run is the required-check gate that must be green before
+# merge. On a squash-merge the master commit is identical content, so re-running on master would just
+# re-test the same tree — and it fires in PARALLEL with deploy.yaml (which doesn't wait for it), so it
+# can't gate a deploy anyway. The PR gate is the control; a direct admin push to master is the only
+# untested path and a parallel job couldn't stop it regardless.
+name: CI
+
+on:
+  pull_request:
+    branches: [master]
+  workflow_dispatch: {}
+
+jobs:
+  ci:
+    runs-on: homelab-ephemeral
+    steps:
+      - uses: actions/checkout@v4
+
+      # No toolchain install: the ARC runner image bakes single-user Nix + devbox + the LAN
+      # nix substituter (homelab docker/arc-runner/, FU-015).
+      - name: Chart validation + unit tests (devbox run ci)
+        run: devbox run ci
+
+      - name: Secret scan (devbox run scan-secrets)
+        run: devbox run scan-secrets

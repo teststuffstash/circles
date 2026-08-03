@@ -1,0 +1,22 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Release.Name }}
+  labels: { app.kubernetes.io/name: {{ .Chart.Name }} }
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { app.kubernetes.io/name: {{ .Chart.Name }} }
+  template:
+    metadata:
+      labels: { app.kubernetes.io/name: {{ .Chart.Name }} }
+    spec:
+      securityContext: { runAsNonRoot: true, seccompProfile: { type: RuntimeDefault } }
+      containers:
+        - name: {{ .Chart.Name }}
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports: [{ containerPort: {{ .Values.port }}, name: http }]
+          securityContext: { allowPrivilegeEscalation: false, capabilities: { drop: ["ALL"] } }
+          readinessProbe: { httpGet: { path: /, port: http } }
+          resources: {{- toYaml .Values.resources | nindent 12 }}

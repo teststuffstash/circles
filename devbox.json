@@ -1,0 +1,26 @@
+{
+  "$schema": "https://raw.githubusercontent.com/jetify-com/devbox/0.16.0/.schema/devbox.schema.json",
+  "packages": [
+    "kubectl@latest",
+    "python@3.11",
+    "uv@latest",
+    "gitleaks@latest",
+    "kubernetes-helm@latest",
+    "kubeconform@latest",
+    "goose-cli@latest",
+    "gh@latest",
+    "kind@latest",
+    "docker-client@latest"
+  ],
+  "shell": {
+    "init_hook": [],
+    "scripts": {
+      "ci":             ["bash scripts/ci.sh"],
+      "test-chart":     ["bash scripts/test-chart.sh"],
+      "scan-secrets":   ["gitleaks detect --source . --no-banner --verbose"],
+      "validate-chart": ["bash scripts/validate-chart.sh"],
+      "build-image":    ["bash scripts/build-image.sh"],
+      "package-chart":  ["bash scripts/package-chart.sh"]
+    }
+  }
+}

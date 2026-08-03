@@ -1,0 +1,40 @@
+# ghcr-cleanup.yaml — retention for the circles container package (FU-025 deploy pipeline).
+#
+# GitHub has NO declarative retention for ghcr packages (no API/resource — so tofu can't do it, unlike
+# ECR lifecycle policies). Retention is a scheduled cleanup instead: this prunes old image versions on
+# a cron. Every deploy pushes a new immutable tag `2026.<m>.<d>-g<sha>`, so tags accumulate; chart
+# artifacts are tiny and left alone.
+#
+# ⚠ NEVER delete the tag circles-iac currently pins. `keep-n-most-recent` + a generous `cut-off` keep the
+# recent (and therefore the deployed) versions; `latest` is skipped explicitly. If you ever hold an OLD
+# pin for a long time, bump N or exclude that tag. Run once with `dry-run` (the workflow_dispatch input)
+# and read the log before trusting it.
+name: ghcr-cleanup
+
+on:
+  schedule:
+    - cron: "17 4 1 * *" # 04:17 on the 1st of each month
+  workflow_dispatch:
+    inputs:
+      dry-run:
+        description: "List what would be deleted without deleting"
+        type: boolean
+        default: true
+
+permissions:
+  packages: write # delete package versions
+
+jobs:
+  cleanup:
+    runs-on: homelab-ephemeral
+    steps:
+      - uses: snok/container-retention-policy@v3
+        with:
+          account: teststuffstash
+          token: ${{ secrets.GITHUB_TOKEN }}
+          image-names: circles
+          tag-selection: both # tagged + untagged
+          cut-off: 12w # only consider versions older than 12 weeks…
+          keep-n-most-recent: 40 # …and always keep the 40 newest (covers the pinned tag)
+          skip-tags: latest
+          dry-run: ${{ github.event_name == 'workflow_dispatch' && inputs.dry-run || false }}

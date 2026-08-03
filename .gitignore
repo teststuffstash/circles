@@ -1,0 +1,11 @@
+*.tfvars
+*.sops.yaml
+secrets/
+.idea/
+.claude/settings.local.json
+.openrouter.env
+.devbox/
+crash.log
+
+# chart packaging output (package-chart.sh runs from the repo root)
+circles-*.tgz

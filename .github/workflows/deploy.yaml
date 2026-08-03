@@ -1,0 +1,93 @@
+# deploy.yaml — the circles deployment pipeline (homelab FU-025, docs/sleep-iac.md is the
+# pipeline reference, §"Deploy pipeline").
+#
+# Convention (matches ci.yaml + the other repos): a THIN workflow whose ARTIFACTS ARE BUILT WITH
+# DEVBOX — `devbox run build-image` / `package-chart`, i.e. the repo's own build scripts + PINNED
+# tools. That's the whole point: the slim ARC runner image lacks tools (helm, gh, xz), and devbox
+# supplies them deterministically, so a missing tool never breaks a build. Only auth/push PLUMBING
+# uses provided actions (checkout, docker/login, create-github-app-token). Same single-user-Nix
+# setup as ci.yaml (the ARC runner has no systemd, so devbox's daemon installer can't run).
+#
+# On an app-relevant master push (docs-only skipped), build image + chart at ONE version
+# 2026.<m>.<d>-g<sha> (chart version == appVersion == image tag) and open/update the single circles-iac
+# deploy PR. concurrency: newest push wins (older canceled). circles-iac pins only the chart version.
+name: deploy
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - "public/**"
+      - "chart/**"
+      - "Dockerfile"
+  workflow_dispatch: {} # manual re-deploy of current master
+
+concurrency:
+  group: deploy-circles
+  cancel-in-progress: true
+
+env:
+  IMAGE: ghcr.io/teststuffstash/circles
+
+jobs:
+  deploy:
+    runs-on: homelab-ephemeral
+    permissions:
+      contents: read
+      packages: write # push image + chart to ghcr via the job's GITHUB_TOKEN
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # deploy-pin.sh's monotonic ancestor guard needs full history
+
+      # No toolchain install: the ARC runner image bakes single-user Nix + devbox + the LAN
+      # nix substituter (homelab docker/arc-runner/, FU-015).
+
+      # Version = commit-date CalVer + short git sha (reproducible; `-g` keeps the sha out of SemVer's
+      # all-numeric-prerelease trap). chart version == appVersion == image tag == this.
+      - name: Compute version
+        id: ver
+        run: |
+          SHA=$(git rev-parse --short=12 HEAD)
+          DATE=$(git show -s --format=%cd --date=format:'%Y.%-m.%-d' HEAD)
+          echo "version=${DATE}-g${SHA}" >> "$GITHUB_OUTPUT"
+          echo "→ deploying ${DATE}-g${SHA}"
+
+      # auth to ghcr (action — pushing/auth via provided actions is fine)
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # --- ARTIFACTS: built with devbox (the repo's build scripts + pinned tools) ---
+      - name: Build + push image (devbox run build-image)
+        env:
+          CIRCLES_IMAGE: ${{ env.IMAGE }}
+          CIRCLES_TAG: ${{ steps.ver.outputs.version }}
+        run: devbox run build-image
+
+      - name: Package + push chart (devbox run package-chart)
+        env:
+          VERSION: ${{ steps.ver.outputs.version }}
+        run: |
+          echo "${{ secrets.GITHUB_TOKEN }}" | devbox run -- helm registry login ghcr.io -u "${{ github.actor }}" --password-stdin
+          devbox run package-chart
+
+      # cross-repo: mint a SHORT-LIVED token scoped to circles-iac (action), then open the deploy PR with
+      # DEVBOX's gh. Requires the homelab-deploy App on circles-iac + DEPLOY_APP_* secrets (one-time setup,
+      # homelab docs/sleep-iac.md (the pipeline reference) §"Deploy pipeline").
+      - name: Mint circles-iac token
+        id: iac
+        uses: actions/create-github-app-token@v1
+        with:
+          app-id: ${{ secrets.DEPLOY_APP_ID }}
+          private-key: ${{ secrets.DEPLOY_APP_PRIVATE_KEY }}
+          owner: teststuffstash
+          repositories: circles-iac
+
+      - name: Open/update the circles-iac deploy PR (devbox run -- deploy-pin.sh)
+        env:
+          GH_TOKEN: ${{ steps.iac.outputs.token }}
+          VERSION: ${{ steps.ver.outputs.version }}
+        run: devbox run -- bash scripts/deploy-pin.sh

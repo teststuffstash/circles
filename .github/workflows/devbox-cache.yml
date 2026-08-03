@@ -1,0 +1,28 @@
+# devbox-cache — publish this repo's devbox toolchain cache (eval seed + closure store) as an OCI
+# artifact for agent rides (homelab FU-096). Thin caller → the reusable homelab workflow, the
+# update-pr-branch.yml pattern. Level-triggered on the LOCK ITSELF (a merged devbox-update PR is
+# the rebuild signal — cron offsets guarantee nothing, homelab runner-image lesson); the build is
+# idempotent per lock hash, so extra fires are cheap skips.
+#
+# ⚠ One-time after the FIRST publish: flip the ghcr package `circles/devbox-cache` to PUBLIC
+# (it inherits this repo's private visibility; ride pods pull the ImageVolume without
+# imagePullSecrets — until flipped, rides run cold and say so).
+name: devbox-cache
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - devbox.json
+      - devbox.lock
+      - .github/workflows/devbox-cache.yml
+  workflow_dispatch: {} # first publish / manual rebake
+
+concurrency: { group: devbox-cache, cancel-in-progress: true }
+
+jobs:
+  publish:
+    uses: teststuffstash/homelab/.github/workflows/devbox-cache.reusable.yml@master
+    permissions:
+      contents: read
+      packages: write

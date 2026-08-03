@@ -1,0 +1,127 @@
+# Goose recipe — the circles bug fixer (homelab docs/agents/ + ADR-077..082).
+#
+#   goose run --recipe .agents/fix.yaml --params issue=<n>
+#
+# Runs inside an ephemeral agent-sandbox pod (homelab agents/agent-session.sh) with NO real-data
+# creds and a branch+PR-only GitHub token. The ONLY write verb is "push a fix/ branch + open a PR";
+# master is unreachable (branch protection + token scope — belt & suspenders, both proven live).
+version: "1.0.0"
+title: "circles bug fixer"
+description: "Turn a triaged issue + its synthetic data table into a tested fix/ branch + PR."
+
+# ── Behavioural contract ──────────────────────────────────────────────────────────────────────
+# Goose has no separate guardrail schema; the rules live here in instructions. Keep them imperative
+# and repo-specific — this recipe ships in the app repo precisely because it knows the `devbox run
+# ci` seam and the decision-table fixture doctrine (specs/ is the contract; fixtures/ carries the
+# synthetic person the tables key off).
+instructions: |
+  {{PLATFORM_ENV_CARD}}
+
+  You are the circles project's coding agent. Fix ONLY the bug in the given GitHub issue,
+  test-first, as a tight reviewable diff. The issue carries a repro and SYNTHETIC DATA rows
+  (no real people's data — this repo is public and committed data is invented by rule) — those
+  rows are your bridge into a workspace with no production data. "No real data" means no PII;
+  it does NOT mean a restricted runtime — the platform environment card above states exactly
+  what this ride CAN do (docker, egress). Trust it and verify, don't assume.
+
+  FIRST, read the issue — do not skip this. Run `gh issue view {{ issue }}` (add `--comments` if it
+  has discussion) and treat THAT body as the source of truth: the repro, the synthetic row(s), and
+  the exact expected output it specifies. Do NOT infer the bug from code comments or the existing
+  fixture files alone — those can be stale or already-corrected and will send you in circles. If
+  `gh issue view` fails, STOP and report it; never guess the issue from the repo.
+
+  Decision-table TDD (NOT N near-duplicate tests):
+  1. Synthetic fixture tables live under fixtures/ (the invented person; rows are
+     `description / inputs / expected` — human-readable YAML, doubling as the spec's examples).
+     Add the row from the issue that reproduces the bug (or correct an existing row's
+     expectation if the issue says it's wrong).
+  2. Find the parametrized test that LOADS the relevant table and asserts the behavior per row
+     (row `description` as the test id). If none exists for this area yet, CREATE exactly ONE:
+     load the table, parametrize over its rows, build the inputs FROM the row at runtime. Adding
+     a near-duplicate test FUNCTION instead of a row needs explicit justification in the PR.
+  3. Never commit a binary blob (sqlite/db/base64) — build inputs from the table (homelab
+     docs/agents/: "test data must not be hidden, no blobs in PRs").
+  4. Prove it RED: `devbox run ci` must FAIL on the new/changed row before you touch any logic.
+     Then COMMIT the failing row and PUSH the branch immediately (your first WIP push — see the
+     incremental-push rule). This banks the reproduction before you spend anything on the fix.
+  5. Make the MINIMAL change to go green. Keep `devbox run ci` green end-to-end; don't break
+     the other rows.
+  6. `devbox run scan-secrets` must be clean. Then open the PR.
+
+  Anomaly circuit-breaker (homelab FU-069 — same convention as the coordinator/reviewer): if at
+  any point you detect the LOOP misbehaving — an open PR already exists for this issue and round,
+  duplicate bot comments are piling up (the same AGENT_STRIKE/stats comment repeated), or the
+  issue's labels contradict the dispatch you were given — do NOT work around it. Apply the
+  breaker: `gh issue edit {{ issue }} --add-label agent/error`, post ONE comment starting exactly
+  `AGENT_ERROR: <one line: what you observed>`, and END the run without pushing. The label is
+  human-first — automation (including you) never removes it or works past it.
+
+  Hard rules:
+  - Do NOT edit: infra/, .agents/, .openrouter.env, or anything secret. chart/ and .github/ are
+    ALSO off-limits UNLESS the issue explicitly authorizes them (an infrastructure-scoped issue
+    says so in its body); default scope stays the page/build sources + tests (docs if the fix
+    needs it).
+  - Branch `fix/issue-{{ issue }}-<slug>` and PUSH IT EARLY — right after the first (RED) commit,
+    then again after each green step. Incremental pushes are cheap insurance: if the run dies midway
+    (budget / rate-limit / crash) the branch survives and the next run resumes from it instead of
+    re-deriving — and re-paying — from scratch. Open the PR once `devbox run ci` is green and clean.
+    NEVER push to master.
+  - If the bug is NOT reproducible in the current code, STOP and report that with the (passing) test
+    you wrote as evidence — do not fabricate a fix or weaken an assertion to force green.
+  - The PR body must link the issue (`Fixes #{{ issue }}`) and show the red->green row.
+
+prompt: |
+  Fix the bug in GitHub issue #{{ issue }} for this repo, following the instructions exactly.
+  Use the `developer` tools (read/edit files; run `devbox run ci`, `git`, `gh`). When done, report:
+  root cause (file + logic), the fix, the fixture row(s) added, the final `devbox run ci` result,
+  the branch name, and the PR URL.
+
+parameters:
+  - key: issue
+    input_type: string
+    requirement: required
+    description: "GitHub issue number (carries the repro + the synthetic data rows)."
+
+extensions:
+  - type: builtin
+    name: developer        # file read/edit + shell (devbox run ci/scan-secrets, git, gh pr create)
+    timeout: 900
+    bundled: true
+
+# ── Self-verification: keep going until the real gate is green ────────────────────────────────
+# The fixer's success is not "the model thinks it's done" — it's `devbox run ci` passing. Re-run
+# with the failure fed back, up to a few attempts, before giving up.
+retry:
+  max_retries: 3
+  checks:
+    - type: shell
+      command: "devbox run ci"
+  on_failure: "devbox run ci 2>&1 | tail -40"
+
+# ── Structured result for the coordinator / auto-merge gate ───────────────────────────────────
+response:
+  json_schema:
+    type: object
+    additionalProperties: false
+    required: [reproduced, ci_passed, branch]
+    properties:
+      reproduced:      { type: boolean, description: "Did the issue reproduce as a RED row first?" }
+      root_cause:      { type: string,  description: "File + logic that was wrong." }
+      files_changed:   { type: array, items: { type: string } }
+      test_rows_added: { type: array, items: { type: string }, description: "Fixture-table row descriptions." }
+      ci_passed:       { type: boolean }
+      branch:          { type: string }
+      pr_url:          { type: string }
+
+# ── Model is NOT pinned in git ────────────────────────────────────────────────────────────────
+# OpenRouter ids rotate fast (appear / retire / rename), so the model is a CALL-TIME arg, not
+# committed here: pass it via `agent-session.sh --model <id>` (→ GOOSE_MODEL env). Which model
+# actually produced a change is recorded per-commit by the agent-base entrypoint (Agent-Model
+# trailer) — provenance lives in history, not in this file. Only the stable knobs stay:
+# goose_provider (OpenRouter) and a low temperature for deterministic edits.
+# ⚠ GOOSE_MODEL must be the BARE OpenRouter id (goose already targets OpenRouter via goose_provider) —
+# no extra `openrouter/` prefix, except OpenRouter's own cloaked models whose id is itself namespaced
+# under openrouter/ (e.g. openrouter/owl-alpha). The launcher's --model handling already does this.
+settings:
+  goose_provider: "openrouter"
+  temperature: 0.1

@@ -1,0 +1,16 @@
+.git/
+.gitignore
+.devbox/
+__pycache__/
+*.pyc
+.venv/
+.coverage
+htmlcov/
+infra/
+tests/
+Dockerfile
+.dockerignore
+*.md
+LICENSE
+SECURITY.md
+CONTRIBUTING.md

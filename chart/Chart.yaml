@@ -1,0 +1,6 @@
+apiVersion: v2
+name: circles
+description: circles stack — vanilla bootstrap chart (shape arrives via specs; chart-is-deployable-unit)
+type: application
+version: 0.0.0-dev # CI stamps calver-gsha (deploy.yaml)
+appVersion: 0.0.0-dev

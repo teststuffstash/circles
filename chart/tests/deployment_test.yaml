@@ -1,0 +1,10 @@
+suite: vanilla deployment
+templates: [deployment.yaml]
+tests:
+  - it: renders a Deployment with the pinned image
+    set: { image: { tag: 1.2.3 } }
+    asserts:
+      - isKind: { of: Deployment }
+      - equal:
+          path: spec.template.spec.containers[0].image
+          value: "ghcr.io/teststuffstash/circles:1.2.3"
