@@ -96,4 +96,131 @@ repo (master) that the spec pass should have caught.
 
 **54 decision points.** Areas: DATA 16 · STATUS 6 · RENDER 18 · PROCESS 14.
 
-<!-- PHASE 1+ APPENDED BELOW -->
+## Master decision-point matrix
+
+Built by inventorying each arm's tree (`git show`/`git archive` from `origin/research/issue-1-*`;
+no arm branch was checked out) and deduping every requirement and ⚖ against the Phase-0
+checklist. **No PR body was read before this matrix was complete.**
+
+Tree sizes, recounted from the trees (PR bodies self-report; these are mine):
+
+| arm | pages | requirement ids | ⚖ entries | decision-table rows | files touched |
+|---|---|---|---|---|---|
+| `opus` | 15 | 64 | 33 (`CIR-Q-01…33`, indexed) | ~412 | `specs/` only |
+| `kimi-k3` | 13 | 68 | 26 (`⚖ AMBIGUITY: <SLUG>`) | ~232 | `specs/` only |
+| `deepseek-v4-flash-0731` | 8 | 37 | 24 (`⚖ <AREA>-<n>`) | ~51 | `specs/` only |
+| `mimo-v2.5-pro` | 12 | 42 | 21 (`⚖ AMBIGUITY: <text>`) | ~168 | `specs/` only |
+
+Every arm's diff against **its own merge base** touches `specs/` and nothing else. (Diffing an
+arm against current `master` shows spurious `.agents/` and `.gitleaks.toml` changes — those are
+merge-base artifacts from master's later recipe commits, **not** scope violations. Checked, so
+no arm is scored for them.) No arm carries a ✓/🚧 coverage marker: all four pass DP-54.
+
+Legend: **✓** covered as a decided requirement · **⚖** covered *and* recorded as an ambiguity ·
+**~** touched but weak/partial (not testable as written, or named without a rule) ·
+**—** missed · **!** covered but the encoded ruling is itself defective (footnoted).
+
+| id | decision point | opus | kimi-k3 | deepseek | mimo |
+|---|---|---|---|---|---|
+| DP-01 | threshold boundary inclusive/exclusive | ⚖ | ✓ | ✓ | ⚖ |
+| DP-02 | timezone/DST anchoring of "days old" | ⚖ | ⚖ | ⚖ | ⚖ |
+| DP-03 | date formats + where in the file a date may sit | ⚖⚖ | ⚖ | ⚖ | ✓ |
+| DP-04 | future-dated entries | ✓ | ⚖ | ⚖! [^ds-future] | — |
+| DP-05 | `share` sums / mixed declared+undeclared | ⚖ | ⚖ | ⚖~ [^ds-share] | ⚖⚖ |
+| DP-06 | sibling order **and** start angle/direction | ~ [^op-angle] | ⚖ | ⚖~ | ⚖⚖! [^mi-nova] |
+| DP-07 | two adapters on one item | ✓ | ✓ | ✓ | ✓ |
+| DP-08 | glob-matches-nothing vs file-with-no-date | ✓ | ⚖ | ~ | ✓ |
+| DP-09 | `yellow_after` ≥ `red_after` | ✓ | ✓ | ✓ | ✓ |
+| DP-10 | `command:` exec contract (cwd, timeout, env, stdout) | ✓✓ | ✓✓ | ~ | ⚖! [^mi-cwd] |
+| DP-11 | exit 0 with unparseable stdout | ✓ | ✓ | ✓ | ✓ |
+| DP-12 | `command:` as arbitrary code / trust boundary | ✓ | ✓ | — | — |
+| DP-13 | id uniqueness scope + the item ref | ⚖ | ✓ | ⚖✗ [^ds-fab] | — |
+| DP-14 | whole-file config failure; what stays served | ✓✓ | ✓✓ | ✓ | ✓ |
+| DP-15 | degenerate configs (0 rings, empty ring, 1 item) | ✓ | ⚖ | ⚖ | ✓ |
+| DP-16 | `link:` value space + path resolution | ✓ | ✓✓ | — | ~ |
+| DP-17 | **do rings have a colour / ring rollup** | ⚖ | ✓ | — | — |
+| DP-18 | ⚪ in aggregation (no total order over 4 states) | ✓ | ✓ | — | — |
+| DP-19 | triage inward-first: doctrine or computed? | ✓ | ✓ | ~ | ~ |
+| DP-20 | **where build warnings surface** | ✓✓ | ⚖✓ | — | ~! [^mi-warn] |
+| DP-21 | meta-freshness: the bake itself going stale | ⚖✓✓ | ⚖ | ~ | ~ |
+| DP-22 | the ⚪ surface as an aggregate property | ✓ | ✓ | — | — |
+| DP-23 | which viewport is "one screen" | ⚖ | ⚖ | ⚖ | ~ |
+| DP-24 | one-screen vs phone-first (contradiction) | ✓ | ⚖ | ⚖ | ~ |
+| DP-25 | A4 orientation, margins, print stylesheet | ⚖ | ✓ | ⚖ | ⚖⚖ |
+| DP-26 | **traffic lights collapse in greyscale print** | ✓✓ | ⚖✓✓ | ⚖~ | ⚖✓ |
+| DP-27 | colourblind safety of a red/green light | ✓ | ⚖✓ | ⚖ | ⚖ |
+| DP-28 | non-colour channel / screen-reader path | ✓✓✓ | ✓✓ | ⚖~ | ✓ |
+| DP-29 | "self-contained" vs a ~1 MB chart library / no CDN | ✓✓✓ | ✓✓ | ~ | — |
+| DP-30 | **renderer choice made concrete** | ⚖✓✓ | ⚖✓✓ | ⚖~ | ⚖ |
+| DP-31 | thin-arc label legibility / min arc | ✓✓ | ✓✓ | ⚖~ | ⚖ |
+| DP-32 | ring radial thickness policy | ⚖ | ✓ | — | — |
+| DP-33 | what fills the centre hole | ⚖ | ✓ | — | ~ |
+| DP-34 | legend: required, where, in the budget? | ✓ | ✓✓ | ⚖ | ✓ |
+| DP-35 | hover has no touch equivalent | ✓✓ | ⚖✓ | ⚖ | ~ |
+| DP-36 | click precedence: `link:` vs detail page | ⚖ | ⚖ | ⚖ | — |
+| DP-37 | detail page vs "don't design a multi-page app" | ⚖ | ✓ | ⚖✓✓ | — |
+| DP-38 | does `data.json` carry structure, not just statuses | ✓✓ | ✓✓ | ✗⚖ [^ds-unenc] | ✓ |
+| DP-39 | `data.json` versioning; does the page validate it | ✓ | ✓✓ | ~ | — |
+| DP-40 | intervention-events table contract | ⚖ | ✓✓ | — | — |
+| DP-41 | **the P0 build seam ("no bake" vs a data.json)** | ⚖✓✓ | ✓✓ | — | ⚖✓ |
+| DP-42 | **where a real person's config lives / deploy seam** | ⚖✓✓ | ⚖✓✓ | — | !! [^mi-deploy] |
+| DP-43 | does a content change force an image rebuild | ✓ | ⚖✓ | — | — |
+| DP-44 | **exposure: who can read the artifact** | ✓✓✓ | ~ | — | — |
+| DP-45 | the P1 bake job's contract | ✓ | ⚖✓ | — | ~ |
+| DP-46 | adapter plug-in seam as a real interface | ✓✓✓ | ✓✓ | ✓ | ✓ |
+| DP-47 | test tiers → actual commands / `scripts/ci.sh` | ⚖✓✓ | ✓✓ | ⚖ | ✓! [^mi-kind] |
+| DP-48 | decision-table row → test id, mechanically | ✓✓ | ✓✓✓ | ✓ | ✓ |
+| DP-49 | bake runtime/language (devbox already pins python) | — | — | — | ~ |
+| DP-50 | **the time-decaying fixture** (`sleep-log.md` rots) | ✓✓✓ | ✓✓ | — | ⚖✓ |
+| DP-51 | **glossary's own "circle / ring" synonym violation** | — | — | — | — |
+| DP-52 | `CIR-<AREA>` vocabulary never enumerated | ✓ | ✓ | ✓ | — |
+| DP-53 | phase markers / the anti-overreach mechanism | ✓✓ | ✓✓ | ✓ | ✓ |
+| DP-54 | no ✓/🚧 coverage markers | ✓ | ✓ | ✓ | ✓ |
+
+[^ds-future]: deepseek ⚖ DATA-7 rules a future-dated entry **🟢 + warning (age 0)**. A mistyped
+    year (`2027-…`) then pins the item green for a year — the exact dangerous-green both opus and
+    kimi identified and rejected. Covered, but the ruling should not be cherry-picked.
+[^ds-share]: deepseek ⚖ DATA-3 recommends "relative weights, normalised per ring" *and*
+    "no-share items split the remainder" — under normalisation there is no remainder, so the
+    mixed case stays undetermined. The ⚖ is real; the encoded rule does not close it.
+[^op-angle]: opus fixes ring order and focus order but never states a start angle or sweep
+    direction, so "which half is Nova" is unspecified in its tree. kimi and mimo both rule it.
+[^mi-nova]: mimo's row reads "Nova = left half, Kit = right half (reading top clockwise)" — but
+    clockwise from 12 o'clock puts the *first* item in the **right** half. The row contradicts
+    its own convention (and see the fixture-glyph miss below).
+[^mi-cwd]: mimo rules `command:` cwd = **repo root**, justified as "the fixture's
+    `./notes/plants-status.sh` path assumes repo-relative resolution". It does not: that script
+    is at `fixtures/alex/notes/plants-status.sh`, i.e. relative to the *config directory*. Same
+    error in `CIR-DATA-FRESHNESS-SOURCE` ("`source:` … relative to the repo root"), which makes
+    every fixture freshness source unresolvable. Verified against the committed fixture.
+[^mi-warn]: mimo puts build warnings **on stderr** only. Nothing reaches `data.json` or the page,
+    so a reader looking at a grey cell cannot learn why — the honest-grey doctrine stops at the
+    build log.
+[^ds-fab]: deepseek ⚖ DATA-5 states "the goal **explicitly lists** 'items that belong to several
+    rings' as an edge to hunt". Issue #1 contains no such text (verified: no match for
+    "several rings"/"belong"/"cross-ring"). The requirement it encodes is fine; the citation is
+    fabricated.
+[^ds-unenc]: deepseek ⚖ INTERACT-4 recommends "(a) fix a minimal schema in the spec now" — and
+    then does not. No `data.json` schema exists anywhere in its tree. Two more ⚖s (RENDER-5
+    accessible alternative, COLOR-1 hex tokens) likewise recommend something the tree never
+    encodes, deferring to "a PR Follow-up" instead.
+[^mi-deploy]: `CIR-PROCESS-BAKE-DEPLOY` has the bake write `public/index.html` + `public/data.json`
+    which the Dockerfile copies into the image. Applied to a real person, that bakes private life
+    data into a public repo's build — the inverse of `CLAUDE.md`'s synthetic-only invariant. Not
+    a miss but an actively wrong answer; scored `!!`.
+
+**Recall against the 54-point checklist** (counting ✓/⚖/~ as covered, `—` as missed):
+
+| arm | covered | missed | recall |
+|---|---|---|---|
+| `opus` | 52 | 2 (DP-49, DP-51) | **96%** |
+| `kimi-k3` | 52 | 2 (DP-49, DP-51) | **96%** |
+| `mimo-v2.5-pro` | 37 | 17 | **69%** |
+| `deepseek-v4-flash-0731` | 36 | 18 | **67%** |
+
+Volume did not drive this. `mimo` (42 requirements) out-recalls `deepseek` (37) by one point
+while `kimi` (68 requirements) ties `opus` (64) — and `deepseek`'s 24 ⚖ entries against opus's 33
+buy it 18 misses, because several of deepseek's ⚖s are filed on questions the goal already
+answers or that its own tree then declines to encode.
+
+<!-- PHASE 3 APPENDED BELOW -->
