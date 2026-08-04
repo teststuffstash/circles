@@ -42,6 +42,11 @@ instructions: |
     none).
   - The rest of the ARM branch (fixtures/, chart/, public/, scripts/) is fair game — a real
     builder would have it.
+  - Context repos (/work/context/, if the environment card lists them) are build ENVIRONMENT,
+    not product source: platform facts a real builder would have (SERVICES.md, deploy wiring in
+    circles-iac) are fair game, but do NOT read homelab's agent docs or trackers (meta-state,
+    TICK-LOG, retros, follow-ups) — they discuss the arms and their contents and would
+    contaminate this metric.
   - Read the arm via a detached worktree: `git fetch origin <arm-branch>` then
     `git worktree add /tmp/arm origin/<arm-branch>` — never check the arm out over your working
     tree.

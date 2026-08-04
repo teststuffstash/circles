@@ -35,7 +35,10 @@ instructions: |
     your counts, never theirs.
   - **Fabrication check**: any requirement citing a repo artifact (fixtures/, chart values,
     scripts/ci.sh, data.json fields) must match the actual file on that arm's branch — flag
-    invented fields/APIs as defects.
+    invented fields/APIs as defects. If the environment card lists context repos under
+    /work/context/ (homelab, circles-iac), use them to ground platform-facing claims too
+    (deploy pipeline, chart pinning, SERVICES.md facts) — they are reference material, never
+    judgment targets.
   - **Overreach is a defect, not thoroughness.** The goal issue says "anticipate, not overreach";
     specs are grown during implementation, not written complete upfront — nobody writes correct
     exhaustive P2 detail in advance. Count premature depth against the arm.

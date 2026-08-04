@@ -25,8 +25,9 @@ instructions: |
   FIRST, read the goal issue: `gh issue view {{ issue }} --json title,body,comments` (use the
   --json form: the plain human-format view renders EMPTY with exit 0 under this pod's App
   token — empty output means you have NOT read the issue). It carries the goal,
-  the product model, acceptance criteria, and the platform facts you need (you have ONLY this
-  repo and the issue — no homelab checkout, no cluster access, no other repos). If
+  the product model, acceptance criteria, and the platform facts you need. What this ride HAS
+  (repos under /work, context repos, web research) is stated in the environment card at the top —
+  trust the card, not folklore; cross-repo facts beyond it ride in this issue. If
   `gh issue view` fails, STOP and report.
 
   METHOD — research, then specify:
