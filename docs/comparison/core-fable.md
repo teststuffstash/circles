@@ -412,7 +412,12 @@ correctly). mimo's labs age arithmetic ("201 days from 2026-08-03") is off by on
 **Blinding caveat.** Branch names embed model slugs, so this was never blind. Every score above
 was computed from the trees before any PR body was opened, and no PR body was read at any point
 during scoring — but I knew which arm was which while reading, and the arm identities appear in
-the mission issue's arm table. Treat arm identity as an appendix fact. The one place it could
+the mission issue's arm table. One partial leak to declare: the anomaly circuit-breaker check
+(`gh pr list`) at the start of the run surfaced arm PR **titles**, two of which self-report counts
+("15 pages, 64 requirements, 33 ⚖"; "13 pages, 68 requirements, 26 ⚖"). I recounted from the trees
+regardless and the numbers agreed, which is corroboration rather than independence — the counts
+for `opus` and `kimi-k3` should be read as confirmed, not blindly derived. The `deepseek` and
+`mimo` counts had no such prior. Treat arm identity as an appendix fact. The one place it could
 have leaked is the tie at the top: `opus` and `kimi-k3` land at the same recall, and the map
 leans on opus as the skeleton mainly because its 15-page split is the superset the other trees
 fit into — a structural argument, not a quality verdict. A defensible alternative is a kimi
