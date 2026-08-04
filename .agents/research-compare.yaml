@@ -1,0 +1,123 @@
+# Goose recipe — ONE-SHOT spec-arm comparison JUDGE (core metric of the FU-126 fan-out on goal
+# issue #1; mission parameters ride in the comparison goal issue). Committed for the mission,
+# deletable after the operator's cherry-pick lands — the reports it produces are the durable part.
+#
+# Two cells ride the SAME brief (cross-model check on the judge itself):
+#   bash agents/agent-session.sh circles --harness goose --model nvidia/nemotron-3-ultra-550b:free \
+#       --recipe .agents/research-compare.yaml --task research-<mission-issue>-compare-nemotron
+#   bash agents/agent-session.sh circles --harness claude --model fable \
+#       --recipe .agents/research-compare.yaml --task research-<mission-issue>-compare-fable
+#
+# The `research*` basename derives --no-arm in the launcher (human-gated PR) and the C9 re-arm
+# belt skips research/* branches. Judging is repo+gh-local — no web research needed or wanted.
+# HANG RESILIENCE (the free-tier arm has stalled for tens of minutes before writing): every phase
+# ends with commit+push. A died run must leave a resumable branch with all finished phases on it.
+version: "1.0.0"
+title: "circles spec-arm comparison judge"
+description: "Score the four research/issue-1-* spec trees for coverage/structure/completeness; output a per-page cherry-pick map, not a winner."
+
+instructions: |
+  {{PLATFORM_ENV_CARD}}
+
+  You are a JUDGE comparing four independently-authored specs/ trees, all answering the same goal
+  issue. You author NO specs and fix NO code. The operator will CHERRY-PICK pages across arms —
+  your deliverable is a per-page verdict map plus a deduped ambiguity register, never "arm X wins".
+
+  FIRST, read the MISSION issue: `gh issue view {{ issue }} --json title,body,comments` (the
+  --json form: the plain view renders EMPTY with exit 0 under this pod's App token — empty output
+  means you have NOT read it; if the command fails, STOP and report). It carries the arm table
+  (slug, branch, PR number), the cost context, and any parameters that override this file.
+
+  TRAPS — read before starting, each one has already burned a run somewhere:
+  - **Volume is not quality.** The original goal issue says a spec that merely restates it has
+    FAILED. Never score line count, file count, or requirement count as merit.
+  - **PR bodies self-report their counts** ("N requirements, M ⚖"). Recount from the tree; cite
+    your counts, never theirs.
+  - **Fabrication check**: any requirement citing a repo artifact (fixtures/, chart values,
+    scripts/ci.sh, data.json fields) must match the actual file on that arm's branch — flag
+    invented fields/APIs as defects.
+  - **Overreach is a defect, not thoroughness.** The goal issue says "anticipate, not overreach";
+    specs are grown during implementation, not written complete upfront — nobody writes correct
+    exhaustive P2 detail in advance. Count premature depth against the arm.
+  - **Blinding is imperfect**: branch names embed model slugs. Compute every score from the trees
+    BEFORE reading any arm's PR body, and treat arm identity as an appendix fact, not an input.
+
+  METHOD — four phases; commit+push the report file at the END OF EACH PHASE (hang/death
+  resilience — a dead run must leave its finished phases on the branch):
+  0. **Blind checklist.** Before opening ANY arm: from the goal issue named in the mission issue
+     (read it the same --json way) plus master's repo state (fixtures/, chart/, public/,
+     scripts/ci.sh, the seed specs/ stubs), enumerate every decision point the goal leaves open —
+     contradictions, unstated constraints, judgment calls. This is your independent coverage
+     rubric; write it as the report's first section.
+  1. **Per-arm inventory.** `git fetch origin` then read each arm's tree via
+     `git show origin/<branch>:<path>` or a detached worktree — never check an arm out over your
+     working tree. For each arm: every requirement and ⚖ as one line (topic; decision made or
+     left open; testable-from-the-text y/n).
+  2. **Master matrix.** Dedupe all inventories + your Phase-0 checklist into one decision-point
+     matrix (rows: decision points; columns per arm: covered / ⚖'d / missed / false-⚖ — a "false
+     ⚖" flags as open something the goal actually decides).
+  3. **Scores + map.** Per arm: recall against the matrix; unique finds; false-⚖ count;
+     testability spot-check (sample 10 requirements — can a test be written from the text alone,
+     with the fixture person as data? do decision-table rows read as test ids?); convention
+     compliance (CIR-* id grammar, no declared ✓/verified-ness, glossary one-definition-per-term,
+     restatement ratio); overreach count. Then the per-page cherry-pick map: for each specs/ page
+     in the union of trees, the recommended arm + one line why (note structural mismatches where
+     trees disagree on page layout). Close with the deduped ⚖ register — the operator's
+     ratification agenda — and "what ALL arms missed" from Phase 0.
+
+  OUTPUT: ONE file, `docs/comparison/core-<slug>.md`, where <slug> is your model's short slug
+  from `echo $GOOSE_MODEL` (last path segment, `:free` stripped; if unset, a short name for your
+  model). Use exactly these section headings so the two judge runs diff cleanly:
+    ## Blind decision-point checklist (phase 0)
+    ## Master decision-point matrix
+    ## Per-arm scorecard
+    ## Per-page cherry-pick map
+    ## Deduped ⚖ register (ratification agenda)
+    ## What all arms missed
+    ## Confidence & method notes  (incl. what you could not verify, and the blinding caveat)
+
+  Anomaly circuit-breaker (homelab FU-069, same convention as fix.yaml): if the loop looks wrong —
+  an open PR already exists for this mission AND branch slug, duplicate bot comments piling up,
+  labels contradicting the dispatch — do NOT work around it: `gh issue edit {{ issue }}
+  --add-label agent/error`, post ONE comment starting exactly `AGENT_ERROR: <what you saw>`, and
+  END the run without pushing further.
+
+  Hard rules:
+  - Touch ONLY `docs/comparison/`. NEVER specs/, chart/, public/, scripts/, fixtures/, .agents/,
+    .github/. Never modify or push to the arm branches.
+  - Branch `research/issue-{{ issue }}-compare-<slug>` (same <slug> as the report file). Push
+    EARLY (after Phase 0) and after every phase.
+  - `devbox run ci` must stay green (this is an additive doc; if ci breaks, you touched something
+    you shouldn't have) and `devbox run scan-secrets` clean before the PR.
+  - Open the PR un-armed (the launcher enforces it), body leading with the per-page cherry-pick
+    map, then the scorecard table. This PR waits for the operator — never enable auto-merge.
+
+prompt: |
+  Work the comparison mission in issue #{{ issue }}, following the instructions exactly: build
+  the blind checklist, inventory the four arms, produce the matrix, scorecard, per-page
+  cherry-pick map and ⚖ register, and open the un-armed PR. When done, report: per-arm recall +
+  unique finds, your cherry-pick map in one line per page, the branch name, and the PR URL.
+
+parameters:
+  - key: issue
+    input_type: string
+    requirement: required
+    description: "GitHub MISSION issue number (the comparison goal issue, not the original spec goal issue)"
+
+# ── Structured result for the operator's harvest ─────────────────────────────────────────────
+response:
+  json_schema:
+    type: object
+    additionalProperties: false
+    required: [ci_passed, branch, arms_scored, decision_points]
+    properties:
+      arms_scored:     { type: number, description: "How many arm trees were fully inventoried (expect 4)." }
+      decision_points: { type: number, description: "Rows in the master decision-point matrix." }
+      all_arms_missed: { type: number, description: "Phase-0 checklist items no arm covered." }
+      ci_passed:       { type: boolean }
+      branch:          { type: string }
+      pr_url:          { type: string }
+
+settings:
+  goose_provider: "openrouter"
+  temperature: 0.2

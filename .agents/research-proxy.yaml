@@ -1,0 +1,117 @@
+# Goose recipe — ONE-SHOT downstream-proxy probe (second metric of the FU-126 arm comparison;
+# mission parameters ride in the comparison goal issue). Four runs, ONE ARM EACH, same model —
+# the metric is "how many questions would a builder still have to ask": fewer blockers = the
+# more complete spec. Committed for the mission, deletable after the cherry-pick lands.
+#
+#   bash agents/agent-session.sh circles --harness goose --model deepseek/deepseek-v4-flash \
+#       --recipe .agents/research-proxy.yaml --task research-<mission-issue>-proxy-<arm-slug>
+#   # …once per arm-slug from the mission issue's arm table (e.g. opus, kimi-k3,
+#   #    deepseek-v4-flash-0731, mimo-v2.5-pro)
+#
+# ARM SELECTION HAS NO LAUNCHER PARAM: the launcher passes only issue=; the assigned arm rides in
+# the task key, which reaches the pod as $AGENT_TASK (agent-session.sh AGENT_TASK env). The slug
+# after `proxy-` is looked up in the mission issue's arm table. (FU-117 sighting: a second recipe
+# parameter would be the clean shape; the task-key carry is the no-launcher-change workaround.)
+# The `research*` basename derives --no-arm in the launcher; C9 skips research/* branches.
+version: "1.0.0"
+title: "circles spec downstream proxy"
+description: "Read ONE arm's specs/ tree as the only product source and enumerate every question a builder must still ask before P0."
+
+instructions: |
+  {{PLATFORM_ENV_CARD}}
+
+  You are an IMPLEMENTATION-MINDED reader — the "downstream proxy" for a spec-completeness
+  metric. Pretend you are the builder about to implement the product's P0 from ONE spec tree.
+  You BUILD NOTHING and author NO specs: your entire deliverable is the list of questions you
+  would still have to ask a human before you could build P0 with confidence, plus what the spec
+  answered so well no question was needed.
+
+  FIRST, read the MISSION issue: `gh issue view {{ issue }} --json title,body,comments` (the
+  --json form: the plain view renders EMPTY with exit 0 under this pod's App token — empty
+  output means you have NOT read it; if the command fails, STOP and report). It carries the arm
+  table (slug → branch → PR).
+
+  YOUR ASSIGNED ARM: `echo $AGENT_TASK` — the segment after `proxy-` is your arm slug; resolve
+  it to a branch via the mission issue's arm table (fallback: `research/issue-1-<slug>`). If
+  $AGENT_TASK is unset or has no `proxy-` segment, STOP and report — never pick an arm yourself.
+
+  ISOLATION RULES — the metric is worthless if you leak context in:
+  - The arm's specs/ tree is your ONLY product source. Do NOT read the original spec goal issue,
+    the other three arm branches, any arm's PR body, or existing docs/comparison/ reports. The
+    mission issue's arm table is the only part of it you use for product context (it contains
+    none).
+  - The rest of the ARM branch (fixtures/, chart/, public/, scripts/) is fair game — a real
+    builder would have it.
+  - Read the arm via a detached worktree: `git fetch origin <arm-branch>` then
+    `git worktree add /tmp/arm origin/<arm-branch>` — never check the arm out over your working
+    tree.
+
+  METHOD:
+  1. Read the arm's specs/ tree end-to-end as the P0 build contract (P0 scope is whatever the
+     tree itself declares as P0/first phase; if it declares none, that's your first blocker).
+  2. Walk the build you would do — data schema parsing, status resolution, sunburst rendering,
+     one-screen/print constraint, interactions, testing gate — and at every step ask: does the
+     tree tell me enough to implement AND test this without guessing?
+  3. Record every gap as a QUESTION with: what's missing or ambiguous; where you looked (page +
+     nearest requirement id/anchor); severity — **blocker** (cannot build without an answer) /
+     **judgment** (buildable, but I'd be silently deciding product policy) / **minor**.
+     A question the tree answers with an explicit ⚖ recommendation counts as ANSWERED-BY-⚖, not
+     as a gap — list those separately (that is the spec doing its job).
+  4. Record what the tree answered WELL — places you expected a gap and found a decision table
+     or requirement that settled it. Arms earn credit here.
+
+  OUTPUT: ONE file, `docs/comparison/proxy-<arm-slug>.md`, exactly these sections so the four
+  runs diff cleanly:
+    ## Verdict (counts: blockers / judgment calls / minors / answered-by-⚖)
+    ## Blockers
+    ## Judgment calls
+    ## Minors
+    ## Answered by ⚖ (spec flagged it and recommended)
+    ## Answered well (no question needed)
+    ## Method notes (what you read, what you deliberately did not)
+
+  Anomaly circuit-breaker (homelab FU-069): if the loop looks wrong — an open PR already exists
+  for this mission AND arm slug, duplicate bot comments, labels contradicting the dispatch — do
+  NOT work around it: `gh issue edit {{ issue }} --add-label agent/error`, post ONE comment
+  starting exactly `AGENT_ERROR: <what you saw>`, and END the run without pushing further.
+
+  Hard rules:
+  - Touch ONLY `docs/comparison/`. NEVER specs/, chart/, public/, scripts/, fixtures/, .agents/,
+    .github/. Never modify or push to the arm branches.
+  - Branch `research/issue-{{ issue }}-proxy-<arm-slug>`. Push EARLY (file skeleton after step
+    1) and again after each section lands — a died run must leave a resumable branch.
+  - `devbox run ci` must stay green and `devbox run scan-secrets` clean before the PR.
+  - Open the PR un-armed (the launcher enforces it), body leading with the Verdict counts line.
+    This PR waits for the operator — never enable auto-merge.
+
+prompt: |
+  Work the comparison mission in issue #{{ issue }}, following the instructions exactly: derive
+  your assigned arm from $AGENT_TASK, read that arm's specs/ tree in isolation, enumerate the
+  builder questions, and open the un-armed PR. When done, report: the arm slug, the four counts
+  (blockers / judgment / minors / answered-by-⚖), the branch name, and the PR URL.
+
+parameters:
+  - key: issue
+    input_type: string
+    requirement: required
+    description: "GitHub MISSION issue number (the comparison goal issue, not the original spec goal issue)"
+
+# ── Structured result for the operator's harvest ─────────────────────────────────────────────
+response:
+  json_schema:
+    type: object
+    additionalProperties: false
+    required: [ci_passed, branch, arm, blockers]
+    properties:
+      arm:            { type: string, description: "Arm slug this run judged." }
+      blockers:       { type: number }
+      judgment_calls: { type: number }
+      minors:         { type: number }
+      answered_by_ambiguity: { type: number, description: "Questions the spec pre-answered with an ⚖ recommendation." }
+      ci_passed:      { type: boolean }
+      branch:         { type: string }
+      pr_url:         { type: string }
+
+settings:
+  goose_provider: "openrouter"
+  temperature: 0.2
