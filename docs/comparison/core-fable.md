@@ -223,4 +223,202 @@ while `kimi` (68 requirements) ties `opus` (64) — and `deepseek`'s 24 ⚖ entr
 buy it 18 misses, because several of deepseek's ⚖s are filed on questions the goal already
 answers or that its own tree then declines to encode.
 
-<!-- PHASE 3 APPENDED BELOW -->
+## Per-arm scorecard
+
+| metric | opus | kimi-k3 | deepseek-v4-flash-0731 | mimo-v2.5-pro |
+|---|---|---|---|---|
+| recall vs the 54-point checklist | 52 (96%) | 52 (96%) | 36 (67%) | 37 (69%) |
+| unique finds (in no other arm) | 10 | 10 | 4 | 5 |
+| false-⚖ (open on something the goal decides, or ⚖ that isn't a fork) | 0 | 0 | 3 | 0 |
+| ⚖ whose recommendation the tree never encodes | 0 | 0 | 3 | 0 |
+| defective rulings (encoded answer is wrong) | 0 | 0 | 1 | 4 |
+| fabricated citations (repo/goal artifacts that don't say that) | 0 | 0 | 1 | 2 |
+| testability spot-check (10 sampled rows writable as-is) | 8/10 | 9/10 | 5/10 | 6/10 |
+| id-grammar compliance | pass | pass | pass | **fail** |
+| verified-ness never declared (DP-54) | pass | pass | pass | pass |
+| glossary one-definition-per-term | inherited breach | inherited breach + 0 new | inherited + 1 new | inherited + 2 new |
+| overreach (premature P2 depth) | 1, self-limited | 3 | 0 (under-reach) | 2 |
+| restatement ratio | very low | very low | moderate | moderate-high |
+
+**Testability spot-check method.** Ten rows sampled per arm across data/render/process; a row
+passes if a test could be written from the text alone, using the fixture person as data.
+
+- `opus` — 8/10. The two that fail are browser-dependent (`print without the user changing
+  settings`; `labels never overlap` with no config pinned). Notably opus *itself* flags this
+  class as unevidenceable under the ruled tiers (`CIR-PROC-BROWSER-EVIDENCE`).
+- `kimi-k3` — 9/10. Row slugs make citation mechanical, and
+  `CIR-RENDER-COLOR-PALETTE#palette-luminance-ladder` is the single most testable requirement in
+  the fan-out: a pure unit test computing luminance from the shipped CSS. The failure is
+  `envelope-at-limit` → "renders legibly", which names no observable.
+- `deepseek` — 5/10. Several requirements are one normative sentence with no table
+  (`CIR-RENDER-A4-PRINT`, `CIR-RENDER-KEYBOARD`), and tables assert unquantified adjectives
+  ("distinct from background", "is the priority read").
+- `mimo` — 6/10, and **two of the ten are wrong as written**: a test built from
+  `CIR-DATA-FRESHNESS-SOURCE#single file exists` fails against the committed fixture (repo-root
+  resolution), and one built from `CIR-RENDER-ARC-START#two children with share 0.5` would assert
+  Nova on the left, which its own clockwise-from-noon rule puts on the right.
+
+**Convention compliance — the one hard failure.** `mimo` never edited
+`specs/data/circles-yaml.md` (byte-identical to the seed stub) while adding
+`specs/data/status-resolution.md` under the **same anchor** `CIR-DATA-STATUS-RESOLUTION`. One
+requirement now has two anchors on two pages carrying two different tables — a direct breach of
+"one requirement, one anchor; IDs are never renamed or reused". It also mints `CIR-PROCESS-*`
+where every other arm uses `CIR-PROC-*`, and declares no area vocabulary.
+
+**Cost context** (from the mission issue; feeds $/unique-find, not merit): `kimi-k3` $4.33 —
+10 unique finds; `mimo` and `deepseek` under the $2 ESCALATE cap — 5 and 4 unique finds
+respectively; `opus` rode the subscription and is not comparable. Per dollar, `mimo` and `kimi`
+are close; `deepseek` is the weakest of the metered three.
+
+## Per-page cherry-pick map
+
+Union of every `specs/` page across the four trees, canonicalised. **Structural mismatch warning:
+the arms do not agree on the page split** — `deepseek` folds geometry+layout into `geometry.md`
+and has no `data-json.md`/`adapters.md`/`phases.md`; `mimo` splits process into `bake.md` +
+`testing.md` with no `phases.md`; only `opus` has `open-questions.md` and `detail-page.md`; and
+`kimi`/`deepseek`/`mimo` fold the detail page into `interactions.md`. Picking per page therefore
+implies picking opus's 15-page split as the skeleton.
+
+| page | take from | why |
+|---|---|---|
+| `specs/README.md` | **opus** | Only arm enumerating the full area→page ownership table (the DP-52 fix). Graft kimi's row-slug linkage sentence; decide consciously whether to keep opus's added "dangerous-green" tie-breaker doctrine — it is load-bearing for the rest of opus's tree but is not in the goal. |
+| `specs/glossary.md` | **kimi-k3** | 110 lines, sectioned domain/adapter/page/process, defines `cell`, `sibling`, `half-arc`, and separates display words from `data.json` wire values. Fix the inherited `circle / ring` synonym on merge (no arm did). |
+| `specs/open-questions.md` | **opus** (sole) | The only ⚖ index in the fan-out, and its "three that most change the product" ranking *is* the operator's agenda. Must be re-keyed if ⚖s from other arms are grafted in. |
+| `specs/data/circles-yaml.md` | **opus** | `spec_version`, the `<ring>/<item>` ref grammar, id charset, timezone, closed schema. Graft **kimi's `CIR-DATA-SCHEMA-LINK`** (`javascript:`/`data:` rejection) — opus has no link-scheme rule at all. |
+| `specs/data/status-resolution.md` | **opus** | The config-error vs adapter-failure split is the page's whole value, plus "a failing adapter never inherits its last light" and the by-choice/by-failure grey reasons. kimi's failure algebra is a clean second. |
+| `specs/data/freshness.md` | **opus** (body) | DST rows, future-date handling, source-path sandboxing, ISO-substring rejection. **But its boundary ruling is the 1-of-4 minority** — see ⚖-R1 before merging; flipping it edits three rows. |
+| `specs/data/adapters.md` | **opus** | The only real interface contract (injected reference date, adapter-cannot-return-grey, failure isolation, minimal environment). Graft kimi's explicit trust sentence and its 30 s timeout if you want a ruled number now. |
+| `specs/data/data-json.md` | **opus** + kimi graft | opus for the artifact shape, stale-bake defence and `CIR-BAKE-EXPOSURE`; **kimi for `CIR-DATA-DATAJSON-VERSION` + `CIR-RENDER-LAYOUT-BOOT-ERROR`** (nobody else specs what the page does when its data is broken). Blocked on ⚖-R2 — the two arms disagree on inline-vs-fetch, and boot-error only exists under fetch. |
+| `specs/render/sunburst.md` | **opus** | `CIR-RENDER-RINGS-INDEPENDENT` (with the finding that Plotly structurally cannot draw this model), capacity, min-arc, label budget. **Graft kimi's `CIR-RENDER-GEOM-SIBLING-ORDER`** — opus specifies no start angle or sweep direction, which is a hole a builder hits on day one. Optionally graft kimi's 6×8 content envelope. |
+| `specs/render/layout.md` | **opus** | One-screen rows incl. phone/zoom/very-wide, A4 with the browser-header caveat, `NO-EGRESS` argued as privacy first, and an asset budget the gate enforces. Graft **mimo's `@page { margin: 10mm }`** — the only concrete margin spec in the fan-out. |
+| `specs/render/color.md` | **kimi-k3** | The luminance ladder with a ≥0.10 pairwise floor and a palette unit test as arbiter is the strongest single artifact anywhere in the fan-out — it turns "prints legibly in greyscale" into arithmetic. **Graft opus's `CIR-RENDER-PRINT-COLOR`** (the `print-color-adjust: economy` default, plus the belt-and-braces "still legible with fills stripped") and **opus's `CIR-RENDER-A11Y-TABLE`**, which serves screen-reader + no-JS + print-detail + sliver-labelling from one artifact. |
+| `specs/render/interaction.md` | **opus** | Three ways in / one detail string; keyboard; touch targets; no-JS. Two live conflicts: ⚖-R3 (click precedence) and ⚖-R4 (no-JS floor). |
+| `specs/render/detail-page.md` | **opus** (sole page) | Correctly shallow for a P2 surface, and "correlation is not asserted" is a real product rule nobody else states. Take kimi's events-table column contract **only if** you want P2 settled now — opus deliberately left it ⚖ (CIR-Q-31), and the goal says anticipate, don't overreach. |
+| `specs/process/testing.md` | **opus** | `CIR-PROC-GATE`'s three spec-tree checks (unique ids, resolving links, every ⚖ indexed) are the only gate a spec-only PR can be judged by *today*, and `CIR-PROC-BROWSER-EVIDENCE` names a real gate-capability gap. **Must-graft: kimi's `CIR-TEST-ROW-LINKAGE` row-slug grammar** — see the cost note below. Graft mimo's dangling-spec-reference gate row. |
+| `specs/process/phases.md` | **opus** | P0/P1/P2 boundaries, `CIR-PROC-DEPLOY-SEAM`, and `CIR-PROC-NOT-YET`. Graft kimi's "**Ships:** / **Must not build:**" framing (the crispest anti-overreach device here) and its ⚖ NIGHTLY-PUBLISH-PATH. `mimo/process/bake.md` has one taking: its P0-data-path ⚖. Do **not** take `CIR-PROCESS-BAKE-DEPLOY`. |
+
+**Two costs the map hides, both real:**
+
+1. **ID re-keying.** The arms mint incompatible area vocabularies — opus `DATA/ADAPT/BAKE/
+   RENDER/DETAIL/PROC`, kimi `DATA/RENDER/TEST/PHASE`, deepseek `DATA/RENDER/PROC`, mimo
+   `DATA/RENDER/PROCESS`. Every kimi graft into an opus skeleton needs its ID rewritten
+   (`CIR-RENDER-COLOR-PALETTE` → `CIR-RENDER-*` is fine; `CIR-TEST-*` and `CIR-PHASE-*` are not).
+   Since IDs are "never renamed or reused", **fix the vocabulary before the first cherry-pick**,
+   not after.
+2. **The row-slug convention is not a graft, it is a sweep.** Adopting kimi's
+   `CIR-<AREA>-<NAME>#<row-slug>` citation means rewriting the first column of every decision
+   table in the merged tree (~400 rows if the skeleton is opus). It is the right convention —
+   it makes coverage derivable rather than grep-guessed — but it is hours, not minutes.
+
+## Deduped ⚖ register (ratification agenda)
+
+Ordered by how much the answer changes downstream. "Split" shows how the four arms ruled; a
+split is itself evidence the goal left the question open.
+
+| # | question | split | note |
+|---|---|---|---|
+| ⚖-R1 | **Where does the private config live, and how does its output reach nginx?** | opus + kimi independently recommend the same: a private repo/job publishes an artifact the chart mounts; deepseek and mimo silent (mimo's answer bakes it into the public image) | Nothing here is deployable for its actual purpose until this is ruled. Two arms converged from opposite trees — strong signal. Ratify first. |
+| ⚖-R2 | **The P0 build seam**: "P0 has no bake" vs a page that renders from `data.json` | opus + mimo: a minimal bake exists at P0 (`manual:` only; other adapters ⚪ "not evaluated in this build"); kimi: P0 evaluates *everything* at image-build time; deepseek silent | Decides whether the fixture person is legal at P0 and whether P0→P1 is a migration or a no-op. opus's reading keeps every config valid across the boundary. |
+| ⚖-R3 | **The renderer**: is Plotly usable at all? | opus + kimi independently: **no** — Plotly's sunburst is hierarchical (sectors bound to a parent's arc) and circles' rings are independent; both recommend hand-rolled SVG. mimo: D3+SVG. deepseek: leave open | The goal names Plotly first, so this needs an explicit operator override. Every other render requirement (print path, focus order, ARIA, asset budget, no-JS) sits on top of it. |
+| ⚖-R4 | Inline the data in the page, or fetch `data.json`? | opus: inline + a sibling file (works from `file://`, survives being saved/mailed/printed); kimi: fetch, with a boot-error state and cache revalidation | Decides whether a boot-error state exists at all, whether the page is offline-viewable, and what "one self-contained HTML page" means when the goal also says "one asset + one `data.json`". |
+| ⚖-R5 | Detail view: a separate baked page per item, or an in-page overlay? | opus + kimi: separate baked file; **deepseek: in-page overlay**, explicitly framed as resolving the goal's own "detail page" vs "don't design a multi-page app" contradiction; mimo: unaddressed | A genuine contradiction in the goal. deepseek's is the only reading that keeps the single-asset claim literally true; opus's is the only one that keeps one-screen true. |
+| ⚖-R6 | Freshness boundary: is age == `yellow_after` still 🟢? | **opus alone says 🟢** (`age > threshold`); kimi, deepseek and mimo all say 🟡 (`age >= threshold`) | 3:1 against the recommended skeleton. Cheap to flip (three rows) but it must be flipped *before* the tests exist. opus's argument — "a person keeping an every-7-days habit on day 7 must not be shown 🟡" — is the better one; the operator should rule, not inherit. |
+| ⚖-R7 | Unknown keys in `circles.yaml` | opus: closed schema, any unknown key fails the bake (a tolerated typo is the cheapest route to dangerous-green); kimi: ignore + warn, **except** unknown `status:` adapter keys which fail | Direct conflict, and it decides whether forward-compatible configs are possible. Both reasoned; kimi's carve-out is the subtler answer. |
+| ⚖-R8 | Future-dated entries in a source | opus + kimi: ignore future dates, all-future ⇒ ⚪ + warning; **deepseek: treat as age 0 ⇒ 🟢 + warning**; mimo: unaddressed | Ratify ignore. deepseek's ruling makes a mistyped year pin an item green for a year — do not cherry-pick it. |
+| ⚖-R9 | Do rings roll up to a status; what fills the centre hole? | opus (⚖) + kimi (decided): **no rollup**; hole carries name/stamp/summary. deepseek + mimo: silent | Two arms converged. opus's reason is the keeper: a rollup is a fabricated status with no adapter behind it, and worst-wins trains the reader to ignore a permanently-red area. |
+| ⚖-R10 | Ring radial thickness | opus: non-increasing outward (inner bands thicker, because inside-out puts the most important ring at the smallest radius); kimi: equal thickness (outer rings compensate with arc length) | A real design disagreement with a legibility consequence at A4 size. Nobody else raised it. |
+| ⚖-R11 | Click precedence when an item has both `link:` and a detail page | opus: link wins, detail reachable from the overlay; kimi: detail page wins, link offered inside it; deepseek: the popover carries both; mimo: unaddressed | Three arms, three answers. Whatever is ruled, opus's constraint holds: the loser must stay reachable. |
+| ⚖-R12 | Mixed declared/undeclared `share` in one ring | opus: config error (all-or-nothing); kimi: undeclared = weight 1; mimo: undeclared split the remaining angle equally; deepseek: underdetermined | Four arms, three-and-a-half answers. opus's is the only rule with no silent resize of a sibling. |
+| ⚖-R13 | Empty ring / zero rings | opus: draw an empty band + warning ("a missing band reads as *no such area*"); kimi: validation error; deepseek: omit the ring; mimo: visible empty band | Four arms, three answers. |
+| ⚖-R14 | Where build warnings surface | opus + kimi: in `data.json` **and** on the page (count + reachable list); mimo: stderr only; deepseek: unaddressed | The goal mandates the warning and names no destination. Ratify the page surface — otherwise ⚪ is honest but unexplained. |
+| ⚖-R15 | Stale-bake banner | opus: banner + desaturation + hatch, threshold from the artifact, clock-skew handled; kimi: **stamp only in v0** — no threshold until P1 declares a cadence | Philosophical split, both defensible. opus's version is the product's own dangerous-green defence; kimi's avoids inventing an expectation P0 hasn't earned. |
+| ⚖-R16 | `link:` value space | opus: any url-or-path, relative resolved against the served page; kimi: `https`/root-relative only, `javascript:`/`data:`/`//…` rejected at bake time | Security-relevant. Recommend kimi's. |
+| ⚖-R17 | Item-id uniqueness scope | opus + kimi: unique per ring, ref is `<ring>/<item>`; deepseek: globally unique | Decides the ref grammar every test, warning and `data.json` key uses. |
+| ⚖-R18 | Timezone anchoring | opus, kimi, deepseek: a per-config `timezone:` (IANA), default UTC; **mimo: UTC-only, defer the field** | 3:1. Ratify the field. |
+| ⚖-R19 | `data.json` status wire values | opus + kimi: `green\|yellow\|red\|grey`; mimo: `ok\|attention\|act\|unmonitored` (display words as wire values) | Trivial, but it must be one, and kimi's glossary already separates the two vocabularies. |
+| ⚖-R20 | Detail line: baked string or composed at render time? | opus: baked (`detail_line` in the artifact, one string serving hover/table/print); kimi: structured fields only, composed page-side | Decides whether wording is frozen in a data file — matters for print vs screen. |
+| ⚖-R21 | `command:` timeout | opus: 5 s/item + 5 min bake, values unruled; kimi: 30 s fixed, config knob deferred; mimo: 30 s configurable per adapter; deepseek: unaddressed | Pick a number now; all three proposals are compatible in shape. |
+| ⚖-R22 | **Requirement-ID area vocabulary** | opus `DATA/ADAPT/BAKE/RENDER/DETAIL/PROC`; kimi `DATA/RENDER/TEST/PHASE`; deepseek `DATA/RENDER/PROC`; mimo `DATA/RENDER/PROCESS` | Not a product question, but it blocks the cherry-pick: IDs are "never renamed or reused", so the vocabulary must be fixed *before* the first page lands, not reconciled after. |
+
+## What all arms missed
+
+From the Phase-0 checklist, the items no arm covered — plus two errors visible only across arms.
+
+1. **The glossary violates the rule it sits under (DP-51).** `specs/README.md` mandates "one
+   definition per term, no synonyms"; `glossary.md`'s first entry is "**circle / ring**" — two
+   names, one definition — and issue #1 adds a third surface word, "cell". All four arms copied
+   the entry verbatim. Three then compounded it: kimi added `cell` and `sibling` (defensibly
+   distinct), deepseek added `status light` beside `status`, mimo added `traffic light` and
+   `bake job` beside `bake`. The spec pass whose stated purpose is finding contradictions missed
+   the one sitting in its own conventions file.
+2. **Nothing gates the fixture against the authored schema.** No arm proposed a CI check that
+   `fixtures/alex/circles.yaml` validates against the schema the specs describe, or that its
+   sources resolve. It is the cheapest possible guard against spec/fixture drift — and it would
+   have caught mimo's repo-root `source:` rule instantly, since every fixture freshness source
+   becomes unresolvable under it. opus came closest (`CIR-PROC-GATE` gates `data.json` against
+   its schema) but not the config side.
+3. **The fixture's own `◀ Nova` / `Kit ▶` glyphs encode a placement intent nobody reconciled.**
+   The arrows point outward-left and outward-right, i.e. Nova on the left half, Kit on the right.
+   Clockwise-from-12-o'clock — the convention kimi and mimo both rule — puts the *first* item in
+   the **right** half, i.e. Nova right, Kit left. kimi specified the convention without noticing
+   the fixture disagrees; mimo asserted the convention *and* "Nova = left half" in the same table;
+   opus and deepseek specified no start angle at all. Either the glyphs are decoration (say so)
+   or they are a requirement (then the sweep starts counter-clockwise, or at 6 o'clock).
+4. **The bake's runtime is already half-decided and nobody said so (DP-49).** `devbox.json` pins
+   `python@3.11` and `uv`, and `CLAUDE.md` says this repo owns the code the bake runs. Only mimo
+   mentions a runtime at all (an aside about "pytest/jest"). A spec tree that specifies an
+   adapter interface without naming the language it is an interface *in* leaves the first
+   implementation PR to decide it by accident.
+
+Two near-misses worth recording: `CIR-BAKE-EXPOSURE`-class reasoning (what a public URL leaks)
+exists only in opus, and the "does a content change force an image rebuild" question (DP-43)
+exists in full only in kimi — each is a single point of failure in the merged tree.
+
+## Confidence & method notes
+
+**What was verified.** Arm trees were read from `origin/research/issue-1-*` via `git archive`
+into a scratch directory; no arm branch was checked out over the working tree and no arm branch
+was modified. Requirement counts, ⚖ counts, page counts, `✓/🚧` compliance and area vocabularies
+were produced by grep over the trees, not taken from PR bodies. The scope check ("only `specs/`
+touched") was recomputed against each arm's **own merge base** after the naive
+`diff master..arm` produced false `.agents/` hits.
+
+**Fabrication checks I actually ran.** deepseek's ⚖ DATA-5 claim that the goal "explicitly lists"
+cross-ring items was tested against the issue body (`grep -i 'several rings|belong|cross-ring'`
+→ no match). mimo's repo-root `source:`/cwd rules were tested against
+`fixtures/alex/circles.yaml` + the real paths of `notes/sleep-log.md` and `plants-status.sh`.
+mimo's "kind available via devbox in this environment" was checked against this ride's platform
+card (kind is in `devbox.json`; there is **no docker daemon in the ride**, so the claim is a
+binary-present/unusable overclaim — kimi, deepseek and opus each record the CI-only fact
+correctly). mimo's labs age arithmetic ("201 days from 2026-08-03") is off by one — 2026-01-15 to
+2026-08-03 is 200 days; immaterial to the ruling, recorded for completeness.
+
+**What I could not verify.**
+- Every arm's external-knowledge claims — Plotly's hierarchical sunburst model, ECharts'
+  multi-series-pie workaround, `print-color-adjust: economy` defaults, WCAG luminance formulae,
+  library payload sizes — are reasoned from training knowledge on my side too. I did not fetch
+  docs to adjudicate them. Two arms (opus, kimi) label these claims as provenance; kimi does so
+  per page. Where opus and kimi *independently* reach the same conclusion (Plotly cannot express
+  independent rings) I treat convergence as evidence, not proof.
+- kimi's pinned hexes were not recomputed against the WCAG relative-luminance formula. Its own
+  requirement makes the test the arbiter, which is the right structure; the ≈ values are the
+  author's hand computation and remain unchecked.
+- No requirement was executed. Testability is a reading judgment over a 10-row sample per arm,
+  not a measured result, and the sample is small enough that ±1 is noise.
+- Recall is measured against **my** 54-point checklist, not an objective ground truth. A
+  different judge's Phase-0 would shift the denominator; the *ordering* of the arms is more
+  robust than the percentages, and the two ~96% arms are tied within the method's resolution.
+
+**Blinding caveat.** Branch names embed model slugs, so this was never blind. Every score above
+was computed from the trees before any PR body was opened, and no PR body was read at any point
+during scoring — but I knew which arm was which while reading, and the arm identities appear in
+the mission issue's arm table. Treat arm identity as an appendix fact. The one place it could
+have leaked is the tie at the top: `opus` and `kimi-k3` land at the same recall, and the map
+leans on opus as the skeleton mainly because its 15-page split is the superset the other trees
+fit into — a structural argument, not a quality verdict. A defensible alternative is a kimi
+skeleton with opus grafts; it would produce the same merged content with more re-keying.
+
+**One thing this report is not.** It is not a ranking, and the two low-recall arms are not
+discardable: `deepseek`'s in-page-overlay reading of the detail-page contradiction and its
+per-requirement `Phase:` tag, and `mimo`'s P0-data-path ⚖, stroke-width greyscale channel and
+`@page` margin are all things the two strong arms do not have.
