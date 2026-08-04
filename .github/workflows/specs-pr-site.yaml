@@ -1,0 +1,61 @@
+# specs-pr-site.yaml — lifecycle of the per-PR specs sites (ADR-092 subdomain delegation).
+#
+# open/reopen  → circles-iac PR adding the HTTPRoute for https://specs-<N>.circles.teststuff.net
+#                (auto-merge on ci-green; ArgoCD syncs it in minutes). The site content itself is
+#                published by ci.yaml's `Publish specs site` step into the pr-<N>/ bucket prefix.
+# close        → circles-iac PR removing the route + purge of the pr-<N>/ prefix.
+#
+# Same THIN-workflow convention as ci.yaml/deploy.yaml: logic lives in scripts/specs-pr-route.sh,
+# tools come from devbox, cross-repo auth is the short-lived deploy-app token (deploy.yaml
+# pattern). Mechanical, like deploy bumps — no human gate on the iac side.
+name: specs-pr-site
+
+on:
+  pull_request:
+    types: [opened, reopened, closed]
+
+concurrency:
+  group: specs-pr-site-${{ github.event.number }}
+  cancel-in-progress: false # create then close must both run, in order
+
+jobs:
+  route:
+    runs-on: homelab-ephemeral
+    steps:
+      - uses: actions/checkout@v4
+
+      # No toolchain install: the ARC runner image bakes single-user Nix + devbox + the LAN
+      # nix substituter (homelab docker/arc-runner/, FU-015).
+      - name: Mint circles-iac token
+        id: iac
+        uses: actions/create-github-app-token@v1
+        with:
+          app-id: ${{ secrets.DEPLOY_APP_ID }}
+          private-key: ${{ secrets.DEPLOY_APP_PRIVATE_KEY }}
+          owner: teststuffstash
+          repositories: circles-iac
+
+      - name: Create route (open/reopen)
+        if: github.event.action != 'closed'
+        env:
+          GH_TOKEN: ${{ steps.iac.outputs.token }}
+        run: devbox run -- bash scripts/specs-pr-route.sh create "${{ github.event.number }}"
+
+      - name: Remove route (close)
+        if: github.event.action == 'closed'
+        env:
+          GH_TOKEN: ${{ steps.iac.outputs.token }}
+        run: devbox run -- bash scripts/specs-pr-route.sh delete "${{ github.event.number }}"
+
+      - name: Purge pr-prefix from the specs bucket (close)
+        if: github.event.action == 'closed'
+        env:
+          SPECS_S3_ENDPOINT: http://garage.garage.svc.cluster.local:3900
+          SPECS_S3_ACCESS_KEY_ID: ${{ secrets.SPECS_S3_ACCESS_KEY_ID }}
+          SPECS_S3_SECRET_ACCESS_KEY: ${{ secrets.SPECS_S3_SECRET_ACCESS_KEY }}
+        run: |
+          devbox run -- bash -c '
+            mc alias set specs "$SPECS_S3_ENDPOINT" "$SPECS_S3_ACCESS_KEY_ID" "$SPECS_S3_SECRET_ACCESS_KEY" >/dev/null
+            mc rm --recursive --force "specs/circles-specs/pr-${{ github.event.number }}/" \
+              || echo "prefix pr-${{ github.event.number }}/ already absent"
+          '

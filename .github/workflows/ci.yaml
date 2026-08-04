@@ -30,3 +30,31 @@ jobs:
 
       - name: Secret scan (devbox run scan-secrets)
         run: devbox run scan-secrets
+
+      # ── specs-site preview (ADR-092) ─────────────────────────────────────────────────────
+      # PR runs render the specs site into the pr-<N>/ bucket prefix →
+      # https://specs-<N>.circles.teststuff.net (route lifecycle: specs-pr-site.yaml). The
+      # master site is published by specs-site.yaml on merge — never from here. `if: always()`
+      # so a red gate still publishes the render (seeing the failing spec tree is the point).
+      # specs-publish.sh soft-skips when the SPECS_S3_* secrets are absent.
+      - name: Site identity
+        id: site
+        if: github.event_name == 'pull_request'
+        run: echo "prefix=pr-${{ github.event.number }}" >> "$GITHUB_OUTPUT"
+
+      - name: Publish specs site (PR preview)
+        if: always() && github.event_name == 'pull_request'
+        env:
+          SPECS_S3_ENDPOINT: http://garage.garage.svc.cluster.local:3900
+          SPECS_S3_ACCESS_KEY_ID: ${{ secrets.SPECS_S3_ACCESS_KEY_ID }}
+          SPECS_S3_SECRET_ACCESS_KEY: ${{ secrets.SPECS_S3_SECRET_ACCESS_KEY }}
+          SITE_PREFIX: ${{ steps.site.outputs.prefix }}
+        run: devbox run specs-publish
+
+      # The preview's front door: a sticky comment on the PR with its specs-site URL
+      # (edited in place on reruns — never a comment per run).
+      - name: Link the specs preview on the PR
+        if: always() && github.event_name == 'pull_request'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: devbox run -- bash scripts/specs-preview-comment.sh "${{ github.event.number }}"

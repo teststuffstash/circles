@@ -1,0 +1,36 @@
+# specs-site.yaml — publish the MASTER specs site (ADR-092): render specs/ + docs/ and mirror
+# to the circles-specs bucket root → https://specs.circles.teststuff.net.
+#
+# A separate thin workflow (not a deploy.yaml step) because deploy.yaml is paths-filtered to
+# app artifacts (public/chart/Dockerfile) — a specs-only merge must still republish the site.
+# PR previews are ci.yaml's job (SITE_PREFIX=pr-<N>); this is the master half.
+name: specs-site
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - "specs/**"
+      - "docs/**"
+      - "mkdocs.yml"
+      - "scripts/specs-*.sh"
+      - "scripts/lib/s3-publish.sh"
+      - ".github/workflows/specs-site.yaml"
+  workflow_dispatch: {} # manual re-publish of current master
+
+concurrency:
+  group: specs-site-master
+  cancel-in-progress: true # newest master state wins
+
+jobs:
+  publish:
+    runs-on: homelab-ephemeral
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Publish specs site (master)
+        env:
+          SPECS_S3_ENDPOINT: http://garage.garage.svc.cluster.local:3900
+          SPECS_S3_ACCESS_KEY_ID: ${{ secrets.SPECS_S3_ACCESS_KEY_ID }}
+          SPECS_S3_SECRET_ACCESS_KEY: ${{ secrets.SPECS_S3_SECRET_ACCESS_KEY }}
+        run: devbox run specs-publish
