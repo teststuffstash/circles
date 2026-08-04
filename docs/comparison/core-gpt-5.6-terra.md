@@ -74,3 +74,48 @@ Requirements: `CIR-DATA-SCHEMA/-VALIDATION/-ITEM-UNIQUENESS/-SHARE-WEIGHTS/-SIBL
 Requirements: `CIR-DATA-ADAPTERS/-ADAPTER-INTERFACE/-ADAPTER-CONTRIBUTION`, `CIR-DATA-STATUS-RESOLUTION`, `CIR-DATA-FRESHNESS-WINDOW/-THRESHOLDS/-DATE-EXTRACTION/-SOURCE` adapter/data Y; `CIR-RENDER-SUNBURST/-RING-ORDER/-ARC-WEIGHT/-ARC-START/-TECHNOLOGY`, `-ONE-SCREEN/-A4-PRINT/-SCALING`, `-COLORS/-COLORS-UNMONITORED/-CONTRAST/-PRINT/-CVD/-LABELS`, `-HOVER/-HOVER-CONTENT/-CLICK/-DETAIL/-DETAIL-EXAMPLES/-DETAIL-METRIC/-A11Y` render Y; `CIR-PROCESS-BAKE/-P0/-SCHEMA/-GENERATED-AT/-WARNINGS/-DEPLOY`, `CIR-PROCESS-TESTING/-UNIT/-SYSTEM/-E2E/-LINKAGE/-FIXTURES/-CI` process Y.
 
 ⚖: partial/mixed shares; arc start/direction; renderer; minimum arc; A4 orientation/margins; link navigation; metric parsing; P0 data path; generated-at format; green contrast; greyscale/CVD palette; label truncation; timezone; threshold inclusivity; command timeout/cwd; date-dependent tests — N. False-⚖: CVD-friendly *blue/orange* alternative reopens the goal’s fixed green/yellow/red traffic-light statuses; freshness threshold inclusivity is useful but should be a direct requirement after ratification, not simultaneously described as settled table behavior.
+
+## Master decision-point matrix
+
+Legend: **C** covered by a testable requirement/table; **⚖** genuine ambiguity with options/recommendation; **M** missed; **F⚖** false ambiguity (the arm presents a goal-decided fact as open). Matrix rows are the deduped Phase-0 rubric; nested details are not rewarded merely because an arm has more prose.
+
+| DP | Decision point | opus | kimi-k3 | deepseek | mimo-v2.5-pro |
+|---|---|---:|---:|---:|---:|
+| 01 | Config shape/keys/IDs | C | C | C | M |
+| 02 | Cardinality/identity | C | C | C | M |
+| 03 | Relative config/source/command paths | C | C | M | C |
+| 04 | Link safety/target | C | C | M | M |
+| 05 | Exactly-one adapter/errors | C | C | C | C |
+| 06 | Status token vocabulary | C | C | C | M |
+| 07 | Failure/status warning algebra | C | C | C | C |
+| 08 | Date extraction/newest selection | C | C | C | C |
+| 09 | Age boundaries/timezone/DST | C | C | C | C |
+| 10 | Globs/missing/unreadable sources | C | C | M | C |
+| 11 | Command execution/output/security | C | C | C | C |
+| 12 | Share domain/default/normalization | C | C | C | ⚖ |
+| 13 | Sibling ordering/orientation | C | C | C | C |
+| 14 | Ring/arc geometry | C | C | C | C |
+| 15 | Inward triage/order semantics | C | C | C | C |
+| 16 | Empty/no-data rendering | C | ⚖ | C | M |
+| 17 | `data.json` schema/version/identity | C | C | ⚖ | C |
+| 18 | P0 config→baked-data path | C | C | M | ⚖ |
+| 19 | Static asset/load/cache behavior | C | C | C | M |
+| 20 | Palette/grey/non-color/contrast | C | C | C | C |
+| 21 | Hover/focus/touch/detail contents | C | C | C | C |
+| 22 | Click priority/keyboard/unavailable | C | ⚖ | ⚖ | ⚖ |
+| 23 | One-screen viewport/overflow | ⚖ | ⚖ | ⚖ | M |
+| 24 | A4 print box/colors/margins | ⚖ | C | ⚖ | ⚖ |
+| 25 | Label/density collision behavior | C | C | M | ⚖ |
+| 26 | Accessibility baseline | C | C | ⚖ | C |
+| 27 | Detail route/data contract P2 boundary | ⚖ | C | ⚖ | M |
+| 28 | Series/events grammar/no-data P2 boundary | ⚖ | ⚖ | M | M |
+| 29 | Later built-in adapter seam | ⚖ | C | C | C |
+| 30 | Nightly bake determinism/publish/error | C | ⚖ | M | C |
+| 31 | Deploy seam grounded in current platform | ⚖ | ⚖ | M | F⚖ |
+| 32 | Ruled test tiers/row linkage | C | C | C | C |
+| 33 | Fixture/public-data doctrine | C | C | C | C |
+| 34 | CIR IDs/row grammar/no verification claim | C | C | C | C |
+| 35 | Glossary one-definition discipline | C | C | M | M |
+| 36 | Genuine, non-false ambiguity discipline | C | C | C | F⚖ |
+
+Counts from matrix: opus **27 C / 8 ⚖ / 1 M**; kimi-k3 **27 C / 7 ⚖ / 2 M**; deepseek **22 C / 9 ⚖ / 5 M**; mimo-v2.5-pro **17 C / 9 ⚖ / 8 M / 2 F⚖**. “Recall” below is `(C + genuine ⚖) / 36`: an honest unresolved choice is coverage, but false ⚖ is separately penalized. Unique finds are decision points materially covered (C or ⚖) by only that arm: opus 0, kimi-k3 1, deepseek 0, mimo-v2.5-pro 0. Kimi’s unique find is explicit safe link scheme/path validation (DP-04); its cache stipulation is not unique (opus also defines no-runtime-egress) and is therefore not counted.
