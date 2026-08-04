@@ -36,6 +36,15 @@ issue has failed.
   is the evidence join key: spec row → test case id → report story fragment → rendered back
   under this heading. A row whose id changes orphans its evidence; renames follow the same
   discipline as requirement IDs.
+  **Ids are correlational, never semantic** (ruled 2026-08-04): a table must read complete
+  with the id column deleted — the label may compress what the cells say, never add to it.
+  The double edge this defuses: a legible label is the cheapest thing to read, so it becomes
+  the ONLY thing read, and the row's judgment stops being contested (the author thought;
+  nobody after has to). Review therefore verifies rows **label-blind**: a verification pass
+  takes the table with ids stripped, re-derives each row's intent from `inputs || expected`
+  alone, and diffs against the author's label — a mismatch is the named defect class
+  **label laundering** (the fan-out's "defective rulings" were exactly this, caught by judges
+  that recounted instead of reading labels).
 - **Every table names its world.** Expected behavior is a function of (system, world); a table
   that doesn't name its fixture set lies by omission. v0 has ONE world — the fixture person
   `alex` (`fixtures/`) — declared once per page ("World: alex") until a second world exists;
