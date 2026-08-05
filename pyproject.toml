@@ -1,0 +1,19 @@
+[project]
+name = "circles-bake"
+version = "0.1.0"
+description = "The circles bake: circles.yaml -> the baked data.json render artifact"
+requires-python = ">=3.11"
+dependencies = [
+    "PyYAML>=6.0",
+]
+
+[project.scripts]
+circles-bake = "bake.cli:main"
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
