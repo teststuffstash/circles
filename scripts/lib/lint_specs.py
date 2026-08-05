@@ -126,7 +126,15 @@ def check_page(path: Path, repo: Path, f: Findings, seen_ids: dict[str, Path]) -
         if EVIDENCE_LINE not in joined and "<details>" not in joined:
             f.error(path, f"{req_id}: missing evidence line ({EVIDENCE_LINE!r}) "
                           f"or an evidence <details> block")
-        if re.search(r"[✓🚧]", joined):
+        # A coverage claim is a cell that *leads* with the marker (the ✓ column pattern).
+        # Prose mentioning the marker — process/testing.md states the prohibition, and
+        # open-questions.md discusses it — is not itself a violation.
+        if any(
+            cell.strip().startswith(("✓", "🚧"))
+            for line in body
+            if line.lstrip().startswith("|")
+            for cell in line.strip().strip("|").split("|")
+        ):
             f.error(path, f"{req_id}: declares verified-ness (✓/🚧 marker) — "
                           f"coverage is derived from evidence, never declared")
 

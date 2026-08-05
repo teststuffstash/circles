@@ -11,3 +11,20 @@ synthetic tables, never production data). The fixture person "Alex" exists so th
 
 Layout: one directory per fixture person (`alex/` today) — `circles.yaml` plus whatever fake
 source files their adapters read (`notes/`).
+
+## The fixture reference date — 2026-08-03
+
+**Every dated example here is read relative to this date, never relative to today's calendar**
+(⚖-R24, `CIR-PROC-TEST-FIXTURES`). The dates in `alex/notes/` are committed constants, so the
+lights they produce would otherwise drift as the calendar advances: `notes/sleep-log.md`'s newest
+entry is 2026-08-01 with `yellow_after: 7`, which is the key example for "freshness inside window
+→ 🟢" and would silently become 🟡 a week later, then 🔴.
+
+So a claim like "sleep is 🟢" is never a claim about now. It is a claim about
+*(these source dates, this reference date)* — a complete, time-independent fact that a test
+reproduces by injecting the reference date into the bake (`CIR-ADAPT-REFERENCE-DATE`). The
+committed dates stay fixed and readable; nothing rewrites them at test time.
+
+When the fixture gains dated rows, they are chosen relative to this date. Moving the reference
+date is a fixture change like any other: it changes which lights the examples produce, so the
+spec rows that cite them move with it.

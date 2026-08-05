@@ -111,6 +111,13 @@ own adapters; the model defines **no linkage, mirroring, or propagation** betwee
 | same-id-different-rings | `self/sleep` and `wider/sleep` | valid; two independent cells |
 | same-concern-two-rings | `exercise` in `self` (manual green) and in `wider` (no adapter) | two cells: 🟢 in `self`, ⚪ in `wider`; no cross-effect |
 
+**⚖-R17 — is an item id unique per ring or globally?** Options: (a) unique within its ring, with
+the ref `<ring>/<item>`; (b) globally unique across the file. **Ruled: (a).** Three of four arms
+converged here, and it decides the ref grammar every test, warning and artifact key uses — a
+person should be able to have `exercise` under both *self* and *wider life* without inventing
+`exercise-2`. The cost is that the ref is a pair rather than a single token, which is why the
+slash is excluded from the id charset above.
+
 **⚖-R26 — a concern that genuinely belongs to two rings.** Today `self/sleep` and
 `partner/sleep` are two independent items resolved twice — two adapter runs that can disagree,
 which is worse than either answer alone. Options: (a) status quo, duplication is the person's
@@ -150,6 +157,14 @@ loudly at bake time, not silently at click time.
 | link-data-scheme | `link: data:text/html,…` | config error, bake fails |
 | link-scheme-relative | `link: //example.test/x` | config error, bake fails |
 | link-bare-relative | `link: details/sleep.html` | config error, bake fails (page-relative vs source-relative is ambiguous, so it is rejected rather than guessed) |
+
+**⚖-R16 — the `link:` value space.** Options: (a) any url-or-path, relative resolved against the
+served page; (b) `https?` and root-relative only, with `javascript:`, `data:` and `//…` rejected
+at bake time. **Ruled: (b).** The two arms that specified this at all disagreed, and (b) is the
+security-relevant answer: the page is static HTML built from a config file, so a dangerous scheme
+must fail where a human is watching (the bake) rather than where nobody is (the click). Bare
+relative paths are rejected rather than resolved because "relative to what" has two plausible
+answers here — the served page, or the config directory that every other path is relative to.
 
 _Evidence: none yet — unverified._
 
