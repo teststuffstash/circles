@@ -14,7 +14,13 @@ name: CI
 
 on:
   pull_request:
-    branches: [master]
+    # `goal/**` = a goal's INTEGRATION branch (homelab FU-090 leg (c)): a stacked base that a
+    # goal's child PRs merge INTO before the goal itself reaches master. It carries the SAME
+    # ruleset as master (required-checks + required-approval), and a required check is only real
+    # if the workflow producing it TRIGGERS on that branch — otherwise the PR waits forever on a
+    # check that can never report. Found exactly that way: circles#24 sat APPROVED + armed and
+    # permanently BLOCKED, because `ci` was required on goal/** and this trigger said master only.
+    branches: [master, 'goal/**']
   workflow_dispatch: {}
 
 jobs:
