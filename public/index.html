@@ -1,3 +1,319 @@
-<!doctype html><title>circles</title>
-<h1>circles — vanilla bootstrap</h1>
-<p>The circles stack's deploy pipeline works. The real page arrives via specs.</p>
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Alex Example — circles</title>
+<style>
+html,body{height:100%;overflow:hidden;margin:0}
+body{display:flex;flex-direction:column;height:100vh;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;font-size:14px;color:#222;background:#fff}
+*{box-sizing:border-box}
+header{display:flex;justify-content:space-between;align-items:baseline;padding:8px 16px;border-bottom:1px solid #ddd;flex-shrink:0}
+header h1{font-size:17px;margin:0}
+.stamp{font-size:11px;color:#777}
+main{flex:1;display:flex;min-height:0}
+.chart-pane{flex:1;display:flex;align-items:center;justify-content:center;min-width:0}
+#sunburst-svg{max-width:100%;max-height:100%;width:auto;height:auto}
+.sidebar{width:230px;flex-shrink:0;overflow:hidden;border-left:1px solid #ddd;padding:10px 14px;display:flex;flex-direction:column;gap:12px;font-size:13px}
+.sidebar h2{font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:#888;margin:0 0 4px}
+.ring-key{list-style:none;margin:0;padding:0}
+.ring-key li{padding:1px 0}
+.legend-item{display:flex;align-items:center;gap:7px;margin:2px 0}
+.legend-swatch{width:14px;height:14px;border-radius:3px;border:1px solid rgba(0,0,0,.15);flex-shrink:0}
+.summary{font-size:12px;line-height:1.5;color:#444}
+.warnings-banner{background:#fff8e1;border-bottom:1px solid #e6c852;padding:4px 16px;font-size:12px;flex-shrink:0}
+.warnings-banner summary{cursor:pointer;font-weight:600;color:#7a5c00}
+.warn-list{margin:4px 0 0 18px;padding:0}
+.warn-list li{margin:1px 0}
+.detail-strip{border-top:1px solid #ddd;padding:7px 16px;font-size:13px;color:#555;flex-shrink:0;min-height:32px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.a11y-section{flex-shrink:0;border-top:1px solid #eee}
+.a11y-section summary{cursor:pointer;padding:6px 16px;font-size:12px;color:#666;user-select:none}
+.a11y-section .table-wrap{max-height:150px;overflow:auto;border-top:1px solid #eee}
+table{border-collapse:collapse;width:100%;font-size:11px}
+th,td{text-align:left;padding:3px 10px;border-bottom:1px solid #eee;white-space:nowrap}
+th{background:#fafafa;position:sticky;top:0}
+.boot-failure{padding:40px;text-align:center}
+.boot-failure h2{color:#b22222;margin:0 0 12px}
+.boot-failure p{color:#555}
+.cell{outline:none}
+.cell:focus{stroke:#111;stroke-width:3}
+.cell:hover{stroke:#111;stroke-width:2.5}
+</style>
+</head>
+<body>
+<script id="circles-data" type="application/json">{
+  "version": 1,
+  "spec_version": 0,
+  "person": "Alex Example",
+  "generated_at": "2026-08-05T11:19:47Z",
+  "reference_date": "2026-08-03",
+  "timezone": "UTC",
+  "stale_after_hours": null,
+  "rings": [
+    {
+      "id": "self",
+      "label": "① Self",
+      "items": [
+        {
+          "id": "sleep",
+          "label": "Sleep",
+          "status": "grey",
+          "grey_reason": "by-failure",
+          "guardrail": "Lights out by 23:00 on weeknights",
+          "note": null,
+          "link": null,
+          "share": 1.0,
+          "last_data_date": null,
+          "detail_line": "Lights out by 23:00 on weeknights · unmonitored · not evaluated in this build (freshness adapter)",
+          "detail_page": null
+        },
+        {
+          "id": "labs",
+          "label": "Quarterly labs",
+          "status": "grey",
+          "grey_reason": "by-failure",
+          "guardrail": "Blood panel every 90 days",
+          "note": null,
+          "link": null,
+          "share": 1.0,
+          "last_data_date": null,
+          "detail_line": "Blood panel every 90 days · unmonitored · not evaluated in this build (freshness adapter)",
+          "detail_page": null
+        },
+        {
+          "id": "exercise",
+          "label": "Exercise",
+          "status": "grey",
+          "grey_reason": "by-choice",
+          "guardrail": null,
+          "note": null,
+          "link": null,
+          "share": 1.0,
+          "last_data_date": null,
+          "detail_line": "not monitored",
+          "detail_page": null
+        }
+      ]
+    },
+    {
+      "id": "partner",
+      "label": "② Partner",
+      "items": [
+        {
+          "id": "date-night",
+          "label": "Date night",
+          "status": "yellow",
+          "grey_reason": null,
+          "guardrail": "Protected evening, twice a month",
+          "note": null,
+          "link": null,
+          "share": 1.0,
+          "last_data_date": null,
+          "detail_line": "Protected evening, twice a month · attention",
+          "detail_page": null
+        }
+      ]
+    },
+    {
+      "id": "children",
+      "label": "③ Children",
+      "items": [
+        {
+          "id": "nova",
+          "label": "◀ Nova",
+          "status": "green",
+          "grey_reason": null,
+          "guardrail": null,
+          "note": null,
+          "link": null,
+          "share": 0.5,
+          "last_data_date": null,
+          "detail_line": "ok",
+          "detail_page": null
+        },
+        {
+          "id": "kit",
+          "label": "Kit ▶",
+          "status": "green",
+          "grey_reason": null,
+          "guardrail": null,
+          "note": null,
+          "link": null,
+          "share": 0.5,
+          "last_data_date": null,
+          "detail_line": "ok",
+          "detail_page": null
+        }
+      ]
+    },
+    {
+      "id": "wider",
+      "label": "④ Wider life",
+      "items": [
+        {
+          "id": "friends",
+          "label": "Friends",
+          "status": "red",
+          "grey_reason": null,
+          "guardrail": null,
+          "note": null,
+          "link": null,
+          "share": 1.0,
+          "last_data_date": null,
+          "detail_line": "act",
+          "detail_page": null
+        },
+        {
+          "id": "plants",
+          "label": "Plants",
+          "status": "grey",
+          "grey_reason": "by-failure",
+          "guardrail": null,
+          "note": null,
+          "link": null,
+          "share": 1.0,
+          "last_data_date": null,
+          "detail_line": "unmonitored · not evaluated in this build (command adapter)",
+          "detail_page": null
+        }
+      ]
+    }
+  ],
+  "warnings": [
+    {
+      "item": "self/sleep",
+      "message": "freshness adapter not evaluated in this build — ⚪"
+    },
+    {
+      "item": "self/labs",
+      "message": "freshness adapter not evaluated in this build — ⚪"
+    },
+    {
+      "item": "wider/plants",
+      "message": "command adapter not evaluated in this build — ⚪"
+    }
+  ]
+}</script>
+<header>
+<h1>Alex Example</h1>
+<span class="stamp" id="stamp">built 2026-08-05T11:19:47Z</span>
+</header>
+<div class="warnings-banner visible" id="warnings-banner"><details open><summary>3 warnings</summary><ul class="warn-list"><li>[self/sleep] freshness adapter not evaluated in this build — ⚪</li><li>[self/labs] freshness adapter not evaluated in this build — ⚪</li><li>[wider/plants] command adapter not evaluated in this build — ⚪</li></ul></details></div>
+<main>
+<div class="chart-pane">
+<svg id="sunburst-svg" viewBox="0 0 400 400" preserveAspectRatio="xMidYMid meet" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="circles chart for Alex Example">
+<path class="cell" data-ring="self" data-item="sleep" d="M200.00,160.00 L200.00,125.50 A74.50,74.50 0 0 1 265.47,235.55 L235.15,219.09 A40.00,40.00 0 0 0 200.00,160.00 Z" fill="#9E9E9E" stroke="#fff" stroke-width="1.5" tabindex="0" aria-label="Sleep, unmonitored, ring ① Self"/><text x="249.2" y="170.7" text-anchor="middle" dominant-baseline="central" font-size="9.5" fill="#000000" pointer-events="none" data-mid-angle="59.2">Sleep</text><path class="cell" data-ring="self" data-item="labs" d="M234.64,220.00 L264.52,237.25 A74.50,74.50 0 0 1 136.48,238.93 L165.89,220.90 A40.00,40.00 0 0 0 234.64,220.00 Z" fill="#9E9E9E" stroke="#fff" stroke-width="1.5" tabindex="0" aria-label="Quarterly labs, unmonitored, ring ① Self"/><text x="199.3" y="142.8" text-anchor="middle" dominant-baseline="central" font-size="9.5" fill="#000000" pointer-events="none" data-mid-angle="179.2">Quarterl…</text><path class="cell" data-ring="self" data-item="exercise" d="M165.36,220.00 L135.48,237.25 A74.50,74.50 0 0 1 198.05,125.53 L198.95,160.01 A40.00,40.00 0 0 0 165.36,220.00 Z" fill="#9E9E9E" stroke="#fff" stroke-width="1.5" tabindex="0" aria-label="Exercise, unmonitored, ring ① Self"/><text x="150.0" y="172.0" text-anchor="middle" dominant-baseline="central" font-size="9.5" fill="#000000" pointer-events="none" data-mid-angle="299.2">Exercise</text><path class="cell" data-ring="partner" data-item="date-night" d="M200.00,125.50 L200.00,94.80 A105.20,105.20 0 1 1 200.00,94.80 L200.00,125.50 A74.50,74.50 0 1 0 200.00,125.50 Z" fill="#F2B300" stroke="#fff" stroke-width="1.5" tabindex="0" aria-label="Date night, attention, ring ② Partner"/><text x="200.0" y="110.2" text-anchor="middle" dominant-baseline="central" font-size="9.5" fill="#000000" pointer-events="none" data-mid-angle="180.0">Date night</text><path class="cell" data-ring="children" data-item="nova" d="M200.00,94.80 L200.00,68.00 A132.00,132.00 0 0 1 203.46,331.95 L202.75,305.16 A105.20,105.20 0 0 0 200.00,94.80 Z" fill="#008F68" stroke="#fff" stroke-width="1.5" tabindex="0" aria-label="◀ Nova, ok, ring ③ Children"/><text x="318.6" y="198.4" text-anchor="middle" dominant-baseline="central" font-size="9.5" fill="#ffffff" pointer-events="none" data-mid-angle="89.2">◀ Nova</text><path class="cell" data-ring="children" data-item="kit" d="M200.00,305.20 L200.00,332.00 A132.00,132.00 0 0 1 196.54,68.05 L197.25,94.84 A105.20,105.20 0 0 0 200.00,305.20 Z" fill="#008F68" stroke="#fff" stroke-width="1.5" tabindex="0" aria-label="Kit ▶, ok, ring ③ Children"/><text x="318.6" y="198.4" text-anchor="middle" dominant-baseline="central" font-size="9.5" fill="#ffffff" pointer-events="none" data-mid-angle="269.2">Kit ▶</text><path class="cell" data-ring="wider" data-item="friends" d="M200.00,68.00 L200.00,45.00 A155.00,155.00 0 0 1 204.06,354.95 L203.46,331.95 A132.00,132.00 0 0 0 200.00,68.00 Z" fill="#B22222" stroke="#fff" stroke-width="1.5" tabindex="0" aria-label="Friends, act, ring ④ Wider life"/><text x="343.5" y="198.1" text-anchor="middle" dominant-baseline="central" font-size="9.5" fill="#ffffff" pointer-events="none" data-mid-angle="89.2">Friends</text><path class="cell" data-ring="wider" data-item="plants" d="M200.00,332.00 L200.00,355.00 A155.00,155.00 0 0 1 195.94,45.05 L196.54,68.05 A132.00,132.00 0 0 0 200.00,332.00 Z" fill="#9E9E9E" stroke="#fff" stroke-width="1.5" tabindex="0" aria-label="Plants, unmonitored, ring ④ Wider life"/><text x="343.5" y="198.1" text-anchor="middle" dominant-baseline="central" font-size="9.5" fill="#000000" pointer-events="none" data-mid-angle="269.2">Plants</text><circle cx="200.0" cy="200.0" r="40.0" fill="#f8f8f8" stroke="#dddddd"/><text x="200.0" y="194.0" text-anchor="middle" dominant-baseline="auto" font-size="12" font-weight="600" fill="#333">Alex Example</text><text x="200.0" y="210.0" text-anchor="middle" dominant-baseline="hanging" font-size="8.5" fill="#666">2 ok · 1 attention · 1 act · 1 unmonitored · 3 not evaluated</text>
+</svg>
+</div>
+<aside class="sidebar">
+<section>
+<h2>Rings</h2>
+<ul class="ring-key" id="ring-key"><li>① Self</li>
+<li>② Partner</li>
+<li>③ Children</li>
+<li>④ Wider life</li></ul>
+</section>
+<section>
+<h2>Legend</h2>
+<div class="legend-item"><span class="legend-swatch" style="background:#008F68"></span><span>ok</span></div>
+<div class="legend-item"><span class="legend-swatch" style="background:#F2B300"></span><span>attention</span></div>
+<div class="legend-item"><span class="legend-swatch" style="background:#B22222"></span><span>act</span></div>
+<div class="legend-item"><span class="legend-swatch" style="background:#9E9E9E"></span><span>unmonitored</span></div>
+</section>
+<section>
+<h2>Summary</h2>
+<div class="summary" id="summary-text">2 ok · 1 attention · 1 act · 1 unmonitored · 3 not evaluated</div>
+</section>
+</aside>
+</main>
+<div class="detail-strip" id="detail-strip" aria-live="polite">Hover or focus a cell to see its detail</div>
+<details class="a11y-section">
+<summary>Accessibility table — every item, ring-ordered</summary>
+<div class="table-wrap">
+<table>
+<thead><tr><th>Ring</th><th>Item</th><th>Status</th><th>Guardrail</th><th>Note</th><th>Link</th></tr></thead>
+<tbody id="a11y-body"><tr><td>① Self</td><td>Sleep</td><td>unmonitored</td><td>Lights out by 23:00 on weeknights</td><td>—</td><td>—</td></tr>
+<tr><td>① Self</td><td>Quarterly labs</td><td>unmonitored</td><td>Blood panel every 90 days</td><td>—</td><td>—</td></tr>
+<tr><td>① Self</td><td>Exercise</td><td>unmonitored</td><td>—</td><td>—</td><td>—</td></tr>
+<tr><td>② Partner</td><td>Date night</td><td>attention</td><td>Protected evening, twice a month</td><td>—</td><td>—</td></tr>
+<tr><td>③ Children</td><td>◀ Nova</td><td>ok</td><td>—</td><td>—</td><td>—</td></tr>
+<tr><td>③ Children</td><td>Kit ▶</td><td>ok</td><td>—</td><td>—</td><td>—</td></tr>
+<tr><td>④ Wider life</td><td>Friends</td><td>act</td><td>—</td><td>—</td><td>—</td></tr>
+<tr><td>④ Wider life</td><td>Plants</td><td>unmonitored</td><td>—</td><td>—</td><td>—</td></tr></tbody>
+</table>
+</div>
+</details>
+<script>
+(function () {
+'use strict';
+var DATA;
+try {
+  var el = document.getElementById('circles-data');
+  if (!el || !el.textContent) throw new Error('payload absent');
+  DATA = JSON.parse(el.textContent);
+  if (!DATA || typeof DATA !== 'object') throw new Error('payload is not an object');
+  if (DATA.version !== 1) throw new Error('unrecognized artifact version: ' + DATA.version);
+  if (!Array.isArray(DATA.rings)) throw new Error('rings key missing or not an array');
+  if (DATA.rings.length === 0) throw new Error('rings is empty');
+} catch (e) {
+  var app = document.querySelector('main');
+  if (app) {
+    app.innerHTML = '<div class="boot-failure"><h2>circles — boot failure</h2>' +
+      '<p>' + String(e.message || e) + '</p>' +
+      '<p>The inlined artifact is absent, malformed, or from a version this page does not understand. No cells are drawn.</p></div>';
+  }
+  return;
+}
+
+var RINGS = DATA.rings;
+var STATUS_WORD = {green:'ok', yellow:'attention', red:'act', grey:'unmonitored'};
+
+var strip = document.getElementById('detail-strip');
+var IDLE = 'Hover or focus a cell to see its detail';
+
+function findItem(ringId, itemId) {
+  for (var i = 0; i < RINGS.length; i++) {
+    var items = RINGS[i].items || [];
+    for (var j = 0; j < items.length; j++) {
+      if (RINGS[i].id === ringId && items[j].id === itemId) return items[j];
+    }
+  }
+  return null;
+}
+
+var svg = document.getElementById('sunburst-svg');
+if (svg) {
+  svg.addEventListener('mouseover', function (ev) {
+    var cell = ev.target.closest ? ev.target.closest('.cell') : null;
+    if (cell && strip) showDetail(cell);
+  });
+  svg.addEventListener('mouseout', function (ev) {
+    var cell = ev.target.closest ? ev.target.closest('.cell') : null;
+    if (cell && strip) strip.textContent = IDLE;
+  });
+  svg.addEventListener('focusin', function (ev) {
+    var cell = ev.target.closest ? ev.target.closest('.cell') : null;
+    if (cell && strip) showDetail(cell);
+  });
+  svg.addEventListener('focusout', function (ev) {
+    var cell = ev.target.closest ? ev.target.closest('.cell') : null;
+    if (cell && strip) strip.textContent = IDLE;
+  });
+  svg.addEventListener('click', function (ev) {
+    var cell = ev.target.closest ? ev.target.closest('.cell') : null;
+    if (!cell) return;
+    var item = findItem(cell.getAttribute('data-ring'), cell.getAttribute('data-item'));
+    if (item && item.link) window.open(item.link, '_blank', 'noopener');
+  });
+}
+
+function showDetail(cell) {
+  var item = findItem(cell.getAttribute('data-ring'), cell.getAttribute('data-item'));
+  if (item && strip) {
+    strip.textContent = item.detail_line || (item.label + ' — ' + (STATUS_WORD[item.status] || '?'));
+  }
+}
+})();
+</script>
+</body>
+</html>
