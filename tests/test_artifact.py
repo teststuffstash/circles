@@ -212,3 +212,33 @@ def test_page_contains_no_adapter_code():
     assert "yellow_after" not in html
     assert "red_after" not in html
     assert "command" not in html or "data-command" not in html
+
+
+# ── CIR-RENDER-ONE-SCREEN / CIR-RENDER-ASSET-BUDGET ──────────────────────────
+
+
+def test_one_screen_layout_structural():
+    """CIR-RENDER-ONE-SCREEN#one-screen-reference — structural no-scroll gates.
+
+    The page must fit one screen at the reference viewport (1280×800). The layout
+    achieves this by construction: body is 100vh with overflow:hidden, the chart
+    pane is flex:1 and the SVG scales via viewBox + preserveAspectRatio, so the
+    whole picture fits without scrolling. (A real headless-browser pass is the
+    browser-path issue's job; this is the structural gate that can run here.)
+    """
+    from bake.page import render_page
+
+    html = render_page(_bake())
+    assert "height:100vh" in html, "body must be 100vh so the page fills one screen"
+    assert "overflow:hidden" in html, "body must clip nothing — flex layout fits everything"
+    assert "flex:1" in html, "chart pane must be flex so it scales to available space"
+    assert "preserveAspectRatio=\"xMidYMid meet\"" in html, "SVG must scale to fit"
+    assert "viewBox=\"0 0 400 400\"" in html, "SVG must have a fixed viewBox for scaling"
+
+
+def test_asset_budget_built_page_is_small():
+    """CIR-RENDER-ASSET-BUDGET#budget-built-page-is-small"""
+    from bake.page import render_page
+
+    html = render_page(_bake())
+    assert len(html) < 250_000, f"index.html is {len(html)} bytes — over the 250 KB budget"
