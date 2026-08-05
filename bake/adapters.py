@@ -59,7 +59,7 @@ def resolve_freshness_p0(adapter_value: Any) -> AdapterResult:
     At P0, freshness items are not evaluated. Returns ⚪ + "not evaluated" warning.
     """
     return AdapterResult(
-        failure_reason="adapter not evaluated in this build (freshness evaluation is P1+)"
+        failure_reason="adapter not evaluated in this build"
     )
 
 
@@ -69,7 +69,7 @@ def resolve_command_p0(adapter_value: Any) -> AdapterResult:
     At P0, command items are not evaluated. Returns ⚪ + "not evaluated" warning.
     """
     return AdapterResult(
-        failure_reason="adapter not evaluated in this build (command evaluation is P1+)"
+        failure_reason="adapter not evaluated in this build"
     )
 
 
@@ -182,5 +182,5 @@ def resolve_adapter_p0(
         return resolve_manual(adapter_value)
 
     return AdapterResult(
-        failure_reason=f"adapter not evaluated in this build ({adapter_key} evaluation is P1+)"
+        failure_reason="adapter not evaluated in this build"
     )

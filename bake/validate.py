@@ -192,18 +192,18 @@ def _validate_item(
             f"ring '{ring_id}': item missing 'id' (CIR-DATA-IDENTITY#id-missing)"
         )
 
-    # id-character-set
-    if not SLUG_RE.match(item_id):
-        raise ConfigError(
-            f"ring '{ring_id}/item '{item_id}': id must match {SLUG_RE.pattern} "
-            f"(CIR-DATA-IDENTITY#id-character-set)"
-        )
-
     # id-with-space-or-slash
     if "/" in item_id or " " in item_id:
         raise ConfigError(
             f"ring '{ring_id}/item '{item_id}': id contains '/' or space — "
             f"the slash is the ref separator (CIR-DATA-IDENTITY#id-with-space-or-slash)"
+        )
+
+    # id-character-set
+    if not SLUG_RE.match(item_id):
+        raise ConfigError(
+            f"ring '{ring_id}/item '{item_id}': id must match {SLUG_RE.pattern} "
+            f"(CIR-DATA-IDENTITY#id-character-set)"
         )
 
     # item-id-duplicate-in-ring
