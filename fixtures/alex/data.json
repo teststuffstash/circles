@@ -1,0 +1,153 @@
+{
+  "version": 1,
+  "spec_version": 0,
+  "person": "Alex Example",
+  "generated_at": "2026-08-05T17:14:47Z",
+  "reference_date": "2026-08-03",
+  "timezone": "UTC",
+  "stale_after_hours": null,
+  "rings": [
+    {
+      "id": "self",
+      "label": "① Self",
+      "items": [
+        {
+          "id": "sleep",
+          "label": "Sleep",
+          "status": "grey",
+          "grey_reason": "by-failure",
+          "guardrail": "Lights out by 23:00 on weeknights",
+          "note": null,
+          "link": null,
+          "share": 1,
+          "last_data_date": null,
+          "detail_line": "Lights out by 23:00 on weeknights · unmonitored · adapter not evaluated in this build",
+          "detail_page": null
+        },
+        {
+          "id": "labs",
+          "label": "Quarterly labs",
+          "status": "grey",
+          "grey_reason": "by-failure",
+          "guardrail": "Blood panel every 90 days",
+          "note": null,
+          "link": null,
+          "share": 1,
+          "last_data_date": null,
+          "detail_line": "Blood panel every 90 days · unmonitored · adapter not evaluated in this build",
+          "detail_page": null
+        },
+        {
+          "id": "exercise",
+          "label": "Exercise",
+          "status": "grey",
+          "grey_reason": "by-choice",
+          "guardrail": null,
+          "note": null,
+          "link": null,
+          "share": 1,
+          "last_data_date": null,
+          "detail_line": "not monitored",
+          "detail_page": null
+        }
+      ]
+    },
+    {
+      "id": "partner",
+      "label": "② Partner",
+      "items": [
+        {
+          "id": "date-night",
+          "label": "Date night",
+          "status": "yellow",
+          "grey_reason": null,
+          "guardrail": "Protected evening, twice a month",
+          "note": null,
+          "link": null,
+          "share": 1,
+          "last_data_date": null,
+          "detail_line": "Protected evening, twice a month · attention",
+          "detail_page": null
+        }
+      ]
+    },
+    {
+      "id": "children",
+      "label": "③ Children",
+      "items": [
+        {
+          "id": "nova",
+          "label": "◀ Nova",
+          "status": "green",
+          "grey_reason": null,
+          "guardrail": null,
+          "note": null,
+          "link": null,
+          "share": 0.5,
+          "last_data_date": null,
+          "detail_line": "ok",
+          "detail_page": null
+        },
+        {
+          "id": "kit",
+          "label": "Kit ▶",
+          "status": "green",
+          "grey_reason": null,
+          "guardrail": null,
+          "note": null,
+          "link": null,
+          "share": 0.5,
+          "last_data_date": null,
+          "detail_line": "ok",
+          "detail_page": null
+        }
+      ]
+    },
+    {
+      "id": "wider",
+      "label": "④ Wider life",
+      "items": [
+        {
+          "id": "friends",
+          "label": "Friends",
+          "status": "red",
+          "grey_reason": null,
+          "guardrail": null,
+          "note": null,
+          "link": null,
+          "share": 1,
+          "last_data_date": null,
+          "detail_line": "act",
+          "detail_page": null
+        },
+        {
+          "id": "plants",
+          "label": "Plants",
+          "status": "grey",
+          "grey_reason": "by-failure",
+          "guardrail": null,
+          "note": null,
+          "link": null,
+          "share": 1,
+          "last_data_date": null,
+          "detail_line": "unmonitored · adapter not evaluated in this build",
+          "detail_page": null
+        }
+      ]
+    }
+  ],
+  "warnings": [
+    {
+      "item": "self/sleep",
+      "message": "adapter not evaluated in this build"
+    },
+    {
+      "item": "self/labs",
+      "message": "adapter not evaluated in this build"
+    },
+    {
+      "item": "wider/plants",
+      "message": "adapter not evaluated in this build"
+    }
+  ]
+}
