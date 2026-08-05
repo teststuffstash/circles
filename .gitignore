@@ -1,15 +1,3 @@
-*.tfvars
-*.sops.yaml
-secrets/
-.idea/
-.claude/settings.local.json
-.openrouter.env
-.devbox/
-crash.log
-
-# chart packaging output (package-chart.sh runs from the repo root)
-circles-*.tgz
-
-# specs-site build outputs (scripts/specs-build.sh)
-.site-src/
-specs-site/
+__pycache__/
+*.pyc
+.venv/
