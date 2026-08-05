@@ -26,7 +26,12 @@ name: update-pr-branch
 
 on:
   push:
-    branches: [master]           # something merged → the next head-of-line PR is now behind
+    # master: something merged → the next head-of-line PR is now behind.
+    # goal/**: a CHILD merged into a goal's integration branch (homelab FU-090 leg (c)) → that
+    # goal's NEXT child is now behind. Same head-of-line logic one level down, and event-driven
+    # rather than waiting for the sweeper: without it a sibling waits up to 15 min (or 30, on the
+    # coordinator scan's nudge) for an update it could have had immediately.
+    branches: [master, 'goal/**']
   workflow_run:
     workflows: [CI]              # a PR went green while behind → it just became eligible
     types: [completed]
@@ -62,7 +67,11 @@ jobs:
         uses: adRise/update-pr-branch@v0.10
         with:
           token: ${{ steps.app-token.outputs.token }}
-          base: master
+          # The branch that just moved IS the base to update against: master for a master push,
+          # goal/<issue>-<slug> for a child merging into a goal branch. Any non-push trigger
+          # (schedule sweeper, workflow_run) stays on master — the coordinator scan's FU-124 nudge
+          # is the backstop that sweeps goal branches, at its own slower cadence.
+          base: ${{ (github.event_name == 'push' && github.ref_name) || 'master' }}
           required_approval_count: 0        # update BEFORE review — see header
           require_passed_checks: true       # only update green PRs (don't churn a red branch)
           require_auto_merge_enabled: true  # only PRs that are actually queued to land
