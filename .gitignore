@@ -10,6 +10,13 @@ crash.log
 # chart packaging output (package-chart.sh runs from the repo root)
 circles-*.tgz
 
+# Python bytecode
+__pycache__/
+*.pyc
+
+# Virtual environment
+.venv/
+
 # specs-site build outputs (scripts/specs-build.sh)
 .site-src/
 specs-site/
