@@ -10,22 +10,69 @@ issue has failed.
 
 - `README.md` — this file: structure + conventions.
 - `glossary.md` — every domain term, one definition each.
-- `data/` — the data model: `circles.yaml` schema, status resolution, freshness semantics.
-- `render/` — the page: sunburst geometry, one-screen/A4 constraint, interactions.
-- `process/testing.md` — the ruled test-tier terminology + how requirements link to tests.
+- [open-questions.md](open-questions.md) — the index of every ⚖ AMBIGUITY in the tree, one row
+  each, with the ruling the specs currently encode. **Read it first** to see what is settled by
+  judgment rather than by the goal, and what a different answer would change.
+- `data/` — the data model:
+  - [data/circles-yaml.md](data/circles-yaml.md) — the person's configuration schema: rings,
+    items, adapters, identity, link safety, validation.
+  - [data/status-resolution.md](data/status-resolution.md) — how an item's light is resolved;
+    the failure algebra (tooling failure ⇒ ⚪ + warning, never 🔴); config error vs adapter
+    failure.
+  - [data/freshness.md](data/freshness.md) — the freshness adapter: sources, date parsing, the
+    two windows, edge cases (empty/missing/future dates, timezone anchoring).
+  - [data/adapters.md](data/adapters.md) — the adapter interface contract and the v0 taxonomy
+    (`manual:` / `freshness:` / `command:`), plus the plug-in seam for later built-ins.
+  - [data/data-json.md](data/data-json.md) — the baked render input the page consumes
+    (statuses, detail lines, generated-at stamp, warnings) and the bake that writes it.
+- `render/` — the page:
+  - [render/sunburst.md](render/sunburst.md) — sunburst geometry: ring order, the independent
+    ring partition, arc subdivision and shares, labels, capacity.
+  - [render/layout.md](render/layout.md) — the one-screen / A4 constraints as testable
+    requirements; asset self-containment; boot-failure behavior.
+  - [render/colors.md](render/colors.md) — the status palette, ⚪ visibility, the greyscale
+    luminance ladder, print survival, the legend.
+  - [render/interactions.md](render/interactions.md) — hover/focus/tap detail, click targets,
+    keyboard and screen-reader paths over baked data.
+  - [render/detail-page.md](render/detail-page.md) — the generic annotated timeseries
+    (metric × dated events). P2 boundary only.
+- `process/` — how the contract is kept:
+  - [process/testing.md](process/testing.md) — the ruled test-tier terminology, how
+    decision-table rows link to tests, and the spec-tree gate.
+  - [process/phases.md](process/phases.md) — what P0/P1/P2 each own, and what a phase may not
+    assume.
 
-(The tree grows per area; this seed fixes only the conventions.)
+## Requirement IDs
+
+Stable anchors `CIR-<AREA>-<NAME>` (e.g. `CIR-DATA-FRESHNESS-WINDOW`) — one requirement, one
+anchor; tests and issues reference the ID verbatim. **IDs are never renamed or reused**; a
+requirement may move between pages (the ID follows it, the old page keeps a pointer), and a
+requirement that changes meaning gets a new ID with the old one marked superseded in place.
+
+The area vocabulary is **closed** — ruled once (⚖-R22) so parallel authors cannot mint
+divergent areas and stop IDs being stable anchors. A new area is a spec change, not an
+authoring choice:
+
+| area | owns | pages |
+|---|---|---|
+| `CIR-DATA-*` | `circles.yaml` schema, identity, validation, status resolution, freshness | `data/circles-yaml.md`, `data/status-resolution.md`, `data/freshness.md` |
+| `CIR-ADAPT-*` | the adapter interface every status source implements, and the v0 taxonomy | `data/adapters.md` |
+| `CIR-BAKE-*` | the bake step and the `data.json` artifact it writes | `data/data-json.md` |
+| `CIR-RENDER-*` | geometry, layout, colour, interaction of the one page | `render/sunburst.md`, `render/layout.md`, `render/colors.md`, `render/interactions.md` |
+| `CIR-DETAIL-*` | the annotated-timeseries detail view | `render/detail-page.md` |
+| `CIR-PROC-*` | test tiers, the spec gate, phase boundaries | `process/testing.md`, `process/phases.md` |
 
 ## Conventions
 
-- **Requirement IDs**: stable anchors `CIR-<AREA>-<NAME>` (e.g. `CIR-DATA-FRESHNESS-WINDOW`) —
-  one requirement, one anchor; tests and issues reference the ID verbatim. IDs are never
-  renamed or reused.
 - **Decision tables over prose** wherever behavior branches: visible `inputs || expected` rows,
   each row's description usable as a test id verbatim. The synthetic fixture person under
   `fixtures/` supplies the key examples — spec rows and fixture rows are the same doctrine.
 - **⚖ AMBIGUITY entries are first-class**: a judgment call is recorded with its options and a
-  recommendation, never silently decided.
+  recommendation, never silently decided. Each carries an id `⚖-R<NN>` so the index in
+  [open-questions.md](open-questions.md), a follow-up issue, and a review comment can name the
+  same thing. The **ruling is what the surrounding requirement already encodes** — a
+  requirement is never left blank pending an answer; the ⚖ records what would change if the
+  answer differs.
 - **Verified-ness is derived, never declared**: no ✓/🚧 markers claiming coverage — a
   requirement without a linked test is simply unevidenced.
 - **Synthetic data only**: this repo is public; every example, fixture row, and spec value is
@@ -35,7 +82,7 @@ issue has failed.
   (kebab or short intent phrase — `palette-luminance-ladder`, `"missing challenge"`). That id
   is the evidence join key: spec row → test case id → report story fragment → rendered back
   under this heading. A row whose id changes orphans its evidence; renames follow the same
-  discipline as requirement IDs.
+  discipline as requirement IDs. A test cites its row as `CIR-<AREA>-<NAME>#<row-id>` verbatim.
   **Ids are correlational by default; a meaning-bearing label is a judgment call, not a sin**
   (ruled 2026-08-04): prefer tables that read complete with the id column deleted, but when
   reasoning a row out of its columns is disproportionate effort, the label may carry meaning —
@@ -64,6 +111,18 @@ issue has failed.
   `External: MUST — <spec/section or URL>`. A claim from training knowledge that no ride
   verified is marked as such (provenance notes) — never presented as checked.
 
+## The tie-breaker: dangerous-green
+
+**Any path by which an item shows 🟢 while its data is absent, stale, unparsed, mistyped, or
+never evaluated is a defect class, not a trade-off.** Every rule in this tree that could tip
+either way tips away from green — toward ⚪ or 🟡 plus a visible warning. Where two readings of
+the goal issue are otherwise equally defensible, this is what decides.
+
+This is a derivation, not an invention: the goal fixes "grey is *honest and visible* — the
+unmonitored surface must be readable at a glance, never hidden or defaulted to green", and
+fixes tooling failure as ⚪ + warning rather than 🔴. Dangerous-green is that doctrine stated
+once, at the top, so the rest of the tree can appeal to it instead of re-deriving it per page.
+
 ## Evidence — the contract, with the format deliberately unpinned
 
 Every requirement section is born evidence-ready and honestly unverified:
@@ -88,24 +147,3 @@ Every requirement section is born evidence-ready and honestly unverified:
 Circles is the cheap rehearsal of this exact chain before the IdP runs it for real
 (rule → intent row → named world → fragment → digest-stamped report — the auditor's
 traceability chain).
-
-## Seeding state (2026-08-04) — TRANSIENT, delete this section when the weave lands
-
-The first real tree is being merged from the FU-126 four-model fan-out (issue #1, arms on
-PRs #2–#5) using the comparison mission (issue #6): downstream-proxy reports PRs #7–#10,
-judge reports PRs #11 (nemotron) / #12 (terra) / #13 (fable), all under `docs/comparison/`
-on their branches. Rendered arm previews: `specs-<PR>.circles.teststuff.net` (2–5), master
-site `specs.circles.teststuff.net`.
-
-**Ruling: kimi-k3 chassis + opus doctrine grafts.** Per-page: start from terra's map
-(#12 `core-gpt-5.6-terra.md`) for which body to take; apply fable's graft list
-(#13 `core-fable.md`) for what must survive from the other arm — the two maps agree on every
-best-in-fan-out artifact and differ only on warp vs weft. While weaving, retrofit the three
-conventions above (row-id normalization on grafted opus tables, world declaration per page,
-doctrine slots for opus's invariant prose) so the tree lands on the final genre instead of
-migrating later.
-
-Next session start: branch `research/issue-1-weave` → weave page-by-page (its PR gets a
-rendered preview automatically) → consolidate the deduped ⚖ register (fable's ⚖-R1–R4 name
-the live cross-arm conflicts needing an operator ruling) → land through the human gate →
-close arms #2–#5 → delete this section.
