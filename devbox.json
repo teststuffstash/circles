@@ -6,6 +6,7 @@
     "uv@latest",
     "gitleaks@latest",
     "kubernetes-helm@latest",
+    "kubernetes-helmPlugins.helm-unittest@latest",
     "kubeconform@latest",
     "goose-cli@latest",
     "gh@latest",
