@@ -395,6 +395,44 @@
         }
       }
     },
+    "kubernetes-helmPlugins.helm-unittest@latest": {
+      "last_modified": "2026-08-01T16:34:20Z",
+      "resolved": "github:NixOS/nixpkgs/a5cbcfe954791221bfffe2307f7d1a1bf61a871e#kubernetes-helmPlugins.helm-unittest",
+      "source": "devbox-search",
+      "version": "1.1.2",
+      "systems": {
+        "aarch64-darwin": {
+          "outputs": [
+            {
+              "name": "out",
+              "path": "/nix/store/95cyjvh30i3vkya6mfqwqaslskqb04js-helm-unittest-1.1.2",
+              "default": true
+            }
+          ],
+          "store_path": "/nix/store/95cyjvh30i3vkya6mfqwqaslskqb04js-helm-unittest-1.1.2"
+        },
+        "aarch64-linux": {
+          "outputs": [
+            {
+              "name": "out",
+              "path": "/nix/store/s0n946yzpmmjy5zgg6gvflklkpl3rly5-helm-unittest-1.1.2",
+              "default": true
+            }
+          ],
+          "store_path": "/nix/store/s0n946yzpmmjy5zgg6gvflklkpl3rly5-helm-unittest-1.1.2"
+        },
+        "x86_64-linux": {
+          "outputs": [
+            {
+              "name": "out",
+              "path": "/nix/store/ar90lhvphz65b77wf6s3s8rdz5a7jhrg-helm-unittest-1.1.2",
+              "default": true
+            }
+          ],
+          "store_path": "/nix/store/ar90lhvphz65b77wf6s3s8rdz5a7jhrg-helm-unittest-1.1.2"
+        }
+      }
+    },
     "minio-client@latest": {
       "last_modified": "2026-08-01T16:34:20Z",
       "resolved": "github:NixOS/nixpkgs/a5cbcfe954791221bfffe2307f7d1a1bf61a871e#minio-client",
