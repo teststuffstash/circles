@@ -16,3 +16,7 @@ set -euo pipefail
 bash scripts/lint-specs.sh
 bash scripts/validate-chart.sh
 bash scripts/test-chart.sh
+
+# ── bake resolution + validation unit tests ─────────────────────────────────
+echo "==> bake unit tests (pytest)"
+uv run python -m pytest tests/ -q --tb=short
