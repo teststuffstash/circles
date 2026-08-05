@@ -21,9 +21,14 @@ adapter reads all matched files and takes the newest date across the union.
 | source-glob-union | `source: notes/lab-*.md` matches 3 files | newest date across all 3 files wins |
 | source-glob-no-match | glob matches zero files | ⚪ + build warning (missing source) |
 | source-path-missing | path does not exist | ⚪ + build warning (missing source) |
-| source-parent-traversal | `source: ../../etc/hosts` | config error, bake fails |
-| source-absolute-path | `source: /etc/hosts` | config error, bake fails |
+| source-parent-traversal | `source: ../../etc/hosts` | config error, bake fails — the escape message |
+| source-absolute-path | `source: /etc/hosts` | config error, bake fails — the absolute-path message, decided syntactically before any resolution (⚖-R52) |
 | source-unreadable | file exists, permission denied | ⚪ + build warning |
+
+The two escape rows overlap — an absolute path is also outside the config directory. Per
+⚖-R52 ([`CIR-DATA-IDENTITY`](circles-yaml.md)) the more specific check runs first:
+absoluteness is a syntactic property tested before resolution, so each row's message is
+independently triggerable.
 
 _Evidence: none yet — unverified._
 

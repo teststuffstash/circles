@@ -94,7 +94,10 @@ sweep runs counter-clockwise; (c) they are a requirement, so the sweep starts at
 ([`CIR-DATA-SCHEMA-RING`](../data/circles-yaml.md)), and a label's *content* must never
 influence geometry — that would make every future person's label text load-bearing. The glyphs
 stay in the fixture because they exercise Unicode passthrough, and this entry exists so nobody
-later reads them as a placement rule.
+later reads them as a placement rule. The P0 build confirmed the ruling holds in practice:
+labels rendered as opaque text with no geometric effect, Nova landed on the right half, and the
+arrows visibly point "wrong" on the rendered page — that is the accepted cost of never letting
+label content drive geometry.
 
 **⚖-R36 — sibling ordering itself.** Options: (a) config order, clockwise from 12 o'clock;
 (b) config order, counter-clockwise; (c) sorted by status, worst first. **Ruled: (a).** Config
@@ -186,13 +189,15 @@ _Evidence: none yet — unverified._
 
 ## CIR-RENDER-SUMMARY — the count that survives everything
 
-The page carries a one-line summary of its own statuses — greens, yellows, reds, unmonitored by
-choice, unmonitored by failure — taken verbatim from the artifact.
+The page carries a one-line summary of its own statuses — greens, yellows, reds, and the grey
+reasons counted separately: unmonitored by choice, adapter failing, not evaluated — taken
+verbatim from the artifact. The wording is reason-accurate by construction: it derives from
+`grey_reason` (⚖-R50), so a phase that evaluates nothing never reads as a page full of failures.
 
 | row id | inputs | expected |
 |---|---|---|
 | summary-matches-the-picture | 9 items | counts equal the drawn arcs |
-| summary-separates-grey-reasons | 1 by-choice, 1 by-failure | "1 unmonitored · 1 adapter failing", never "2 unmonitored" ([`CIR-DATA-GREY-REASON`](../data/status-resolution.md)) |
+| summary-separates-grey-reasons | 1 by-choice, 1 by-failure, 1 not-evaluated (P0 `command:` item) | "1 unmonitored · 1 adapter failing · 1 not evaluated", never "3 unmonitored" ([`CIR-DATA-GREY-REASON`](../data/status-resolution.md)) |
 | summary-survives-print | printed page | present in the printed output |
 | summary-is-not-a-rollup | any config | no ring and no page is assigned a colour |
 

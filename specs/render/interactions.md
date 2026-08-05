@@ -12,13 +12,16 @@ P0/P1 page leaves the right seams.
 
 Hovering, focusing or tapping a cell fills the detail strip ([`CIR-RENDER-CHROME`](layout.md))
 with the item's **detail line**, taken verbatim from the artifact
-([`CIR-BAKE-DETAIL-FIELDS`](../data/data-json.md)) — the page does not compose it. Three ways in,
-one string out: hover, focus and tap all produce exactly the same text, which is also what
-prints and what a screen reader announces.
+([`CIR-BAKE-DETAIL-FIELDS`](../data/data-json.md)) — the page does not compose it. The strip's
+format is `<label> — <detail_line>`: the label is chrome, and everything after the em-dash is
+the baked string **verbatim, in its baked order** (⚖-R20 — an earlier draft of this row
+reordered the segments, which would have made the strip a second composition of the same
+sentence). Three ways in, one string out: hover, focus and tap all produce exactly the same
+text, which is also what prints and what a screen reader announces.
 
 | row id | inputs | expected |
 |---|---|---|
-| hover-full-line | `self/sleep` (guardrail + last-data date) | `Sleep — ok · Lights out by 23:00 on weeknights · last data 2026-08-01` |
+| hover-full-line | `self/sleep` (guardrail + last-data date) | `Sleep — Lights out by 23:00 on weeknights · ok · last data 2026-08-01` |
 | hover-no-guardrail | item without `guardrail:` | segment omitted, no dangling separator |
 | hover-no-date | a `manual:` item | no `last data` segment |
 | hover-grey-unmonitored | item with no adapter | `Exercise — unmonitored` |

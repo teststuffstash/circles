@@ -128,6 +128,14 @@ named gap in the ruled taxonomy, not an oversight.
 | no-render-claim-from-source-alone | print colour | grepping for `print-color-adjust` is not evidence that fills print |
 | screenshots-are-not-the-assertion | any visual requirement | the assertion is a measurable property — no scroll, page count, computed contrast — never an image someone eyeballs |
 
+**P0 note — proxies must say they are proxies.** Both P0 experiment arms shipped before any
+browser harness existed, and the acceptance's 1280×800 no-scroll check ran as a static
+viewBox/overflow-geometry assertion (one arm added a single manual headless-Chromium run). Under
+this requirement that is a **proxy, not evidence** — useful as a fast regression tripwire, never
+as satisfaction of `render-requirements-state-their-path`. Until the browser harness lands (its
+own issue: which browser image, how it installs, how it wires into `devbox`), a proxy check must
+be labelled as such in its test id or docstring, so the evidence chain cannot silently count it.
+
 **⚖-R48 — where do browser checks live in the ruled tiers?** Options: (a) call them *unit* tests
 over a headless browser, since no cluster is involved — which stretches "pure logic" past
 usefulness; (b) call them *system testing*, since a real component (the browser) renders a real

@@ -6,8 +6,9 @@ at bake time. The page never resolves ([`CIR-BAKE-PAGE-DOES-NOT-RESOLVE`](data-j
 The traffic-light semantics are **fixed product doctrine**:
 
 - 🟢 ok · 🟡 attention · 🔴 act — per item, from its adapter;
-- ⚪ unmonitored — an item with **no adapter**, or an item whose tooling failed. Grey is honest
-  and visible: never hidden, never defaulted to green;
+- ⚪ unmonitored — an item with **no adapter**, an item whose tooling failed, or an item whose
+  adapter the current phase deliberately does not evaluate (⚖-R2). Grey is honest and visible:
+  never hidden, never defaulted to green;
 - **tooling failure is ⚪ + a build warning, never 🔴** — red means "act on your life", not
   "the tooling broke".
 
@@ -39,7 +40,7 @@ The difference is whether a human can fix it *before* anyone looks at a wrong pa
 | command-bad-stdout | `command:` prints `orange` | ⚪ + build warning naming the word |
 | command-empty-stdout | empty stdout, exit 0 | ⚪ + build warning |
 | command-timeout | `command:` exceeds its deadline | ⚪ + build warning (`CIR-ADAPT-COMMAND`) |
-| adapter-not-evaluated-this-phase | `command:` under a P0 bake | ⚪ + warning "adapter not evaluated in this build" (⚖-R2) |
+| adapter-not-evaluated-this-phase | `command:` under a P0 bake | ⚪ + warning "adapter not evaluated in this build", reason `not-evaluated` (⚖-R2, ⚖-R50) |
 | two-adapters-on-one-item | `manual:` and `freshness:` both present | config error — resolution must not choose |
 | empty-status-block | `status: {}` | config error (write no `status:` instead) |
 | manual-unknown-word | `manual: amber` | config error — a typo here is dangerous-green, so it must not degrade to ⚪ |
@@ -89,19 +90,28 @@ rots. Yesterday's answer is available in yesterday's artifact; it is not a statu
 
 _Evidence: none yet — unverified._
 
-## CIR-DATA-GREY-REASON — one grey light, two reasons
+## CIR-DATA-GREY-REASON — one grey light, three reasons
 
-⚪ has two roads, and conflating them hides broken tooling behind deliberate silence. The light
-is the same (the glossary fixes four statuses, not five); the **reason** rides in the artifact,
-shows in the detail line, and is counted separately in the page summary
-([`CIR-RENDER-SUMMARY`](../render/sunburst.md)).
+⚪ has three roads, and conflating them hides broken tooling behind deliberate silence — or
+dresses a phase boundary up as a failure. The light is the same (the glossary fixes four
+statuses, not five); the **reason** rides in the artifact, shows in the detail line, and is
+counted separately in the page summary ([`CIR-RENDER-SUMMARY`](../render/sunburst.md)):
+
+- `by-choice` — no adapter declared; the silence is the person's decision;
+- `by-failure` — an adapter was declared and could not answer;
+- `not-evaluated` — an adapter was declared and the current phase deliberately does not run it
+  (⚖-R2, ⚖-R50). Neither a choice nor a failure: a build honestly reporting its own boundary.
+
+In every grey detail line the status word is the display word `unmonitored` — the same word the
+legend teaches — with the reason as its own following segment (⚖-R51).
 
 | row id | inputs | expected |
 |---|---|---|
-| unmonitored-by-choice | no `status:` block | reason `by-choice`; detail line "not monitored", plus `note:` if present |
-| unmonitored-by-failure | adapter declared, adapter failed | reason `by-failure`; detail line names the failure |
-| summary-separates-the-two | 3 items with no adapter, 1 failing adapter | summary reads "3 unmonitored · 1 adapter failing", never "4 unmonitored" |
-| by-failure-visually-distinguishable | one of each on the page | the two are distinguishable without hovering ([`CIR-RENDER-GREY-VISIBLE`](../render/colors.md)) |
+| unmonitored-by-choice | no `status:` block | reason `by-choice`; detail line "unmonitored", plus `note:` if present |
+| unmonitored-by-failure | adapter declared, adapter failed | reason `by-failure`; detail line "unmonitored · <the failure cause>" |
+| unmonitored-not-evaluated | `freshness:` or `command:` under a P0 bake | reason `not-evaluated`; detail line "unmonitored · not evaluated in this build" |
+| summary-separates-all-three | 3 items with no adapter, 1 failing adapter, 2 P0 `command:` items | summary reads "3 unmonitored · 1 adapter failing · 2 not evaluated", never "6 unmonitored" |
+| by-failure-visually-distinguishable | one `by-choice` cell and one tooling-caused (`by-failure` / `not-evaluated`) cell | chosen silence and tooling-caused grey are distinguishable without hovering ([`CIR-RENDER-GREY-VISIBLE`](../render/colors.md)) |
 
 **⚖-R30 — should "deliberately unmonitored" be declarable rather than inferred?** Today
 absence-of-adapter means by-choice, so *forgetting* to add an adapter is indistinguishable from
@@ -111,6 +121,24 @@ warning; (c) a config-level `strict_coverage: true` that turns any adapterless i
 warning. **Ruled: (a) now, (c) as a one-line addition when a person's config grows past the
 size where they can eyeball it.** Under (b) the fixture's `self/exercise` row becomes a config
 error — a fixture change, hence the ⚖ rather than a silent decision.
+
+**⚖-R50 — the wire value for the phase road.** ⚖-R2 mints a third reason a light can be grey —
+the build deliberately did not evaluate the adapter — and the artifact vocabulary had no word for
+it: both P0 experiment arms mapped it to `by-failure` plus a warning, which lies in the wire data
+("the tooling broke" for items whose tooling was never run). Options: (a) keep two values and
+document the mapping; (b) add `not-evaluated` as a third `grey_reason`. **Ruled: (b).** The
+summary must count a phase gap differently from a tooling failure, and under (a) that distinction
+can only be recovered by matching warning prose — making display text load-bearing, which
+⚖-R19 exists to prevent. The cost is a wire-vocabulary addition that P1 will mostly retire;
+acceptable while `version` is 1 and no external consumer exists.
+
+**⚖-R51 — one word for grey in every detail line.** As woven, the by-choice detail line read
+"not monitored" while the legend and status word are "unmonitored" — two display words for one
+status, never reconciled (found by the one-shot arm). Options: (a) keep both; (b) the detail
+line's status word is always the display word `unmonitored`, with the reason as its own
+following segment. **Ruled: (b).** The reader matches the detail line against the legend, and
+the glossary's one-definition-no-synonyms rule applies with extra force to strings a reader must
+visually join.
 
 _Evidence: none yet — unverified._
 

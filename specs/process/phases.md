@@ -21,7 +21,7 @@ metric adapters, no multi-person switching.
 |---|---|---|
 | p0-manual-end-to-end | fixture-style config, all `manual:` | the image serves the page and the artifact with those statuses |
 | p0-page-replaces-placeholder | the deployed image | the vanilla bootstrap page is gone |
-| p0-unevaluated-adapters-are-grey | the fixture's `freshness:` and `command:` items | ⚪ + warning "adapter not evaluated in this build" |
+| p0-unevaluated-adapters-are-grey | the fixture's `freshness:` and `command:` items | ⚪ + warning "adapter not evaluated in this build", `grey_reason: not-evaluated` (⚖-R50) |
 | p0-config-stays-valid | the fixture config unchanged | validates at P0 and at P1; no migration between them |
 | p0-stamp-is-build-day-truth | an image built days ago | the generated-at stamp shows the build day ([`CIR-RENDER-GENERATED-AT`](../render/layout.md)) |
 

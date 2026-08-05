@@ -106,10 +106,20 @@ own adapters; the model defines **no linkage, mirroring, or propagation** betwee
 | row id | inputs | expected |
 |---|---|---|
 | id-character-set | id matching `^[a-z0-9][a-z0-9-]*$` | valid |
-| id-with-space-or-slash | `id: date night`, `id: a/b` | config error (the slash is the ref separator) |
+| id-with-space-or-slash | `id: date night`, `id: a/b` | config error naming the specific rule (the slash is the ref separator; spaces are not allowed) — not the generic pattern message (⚖-R52) |
 | id-missing | item with `label:` only | config error — ids are how tests and warnings name rows |
 | same-id-different-rings | `self/sleep` and `wider/sleep` | valid; two independent cells |
 | same-concern-two-rings | `exercise` in `self` (manual green) and in `wider` (no adapter) | two cells: 🟢 in `self`, ⚪ in `wider`; no cross-effect |
+
+**⚖-R52 — overlapping validation checks report the most specific error.** The charset regex
+already rejects spaces and slashes, so as woven, `id-with-space-or-slash` could never fire on
+its own — the P0 bake builds hit exactly this and reordered silently (both here and in
+[`CIR-DATA-SOURCE-PATH`](freshness.md), where an absolute path also trips the escape check).
+Options: (a) leave check order unspecified — implementations pick, and some spec rows become
+unreachable; (b) specific-before-general: when two rows match one input, the more specific
+check runs first and its message wins, so every row is independently triggerable.
+**Ruled: (b).** A row that cannot fire cannot be evidenced, and the actionable message ("the
+slash is the ref separator") is the entire value of having the specific row.
 
 **⚖-R17 — is an item id unique per ring or globally?** Options: (a) unique within its ring, with
 the ref `<ring>/<item>`; (b) globally unique across the file. **Ruled: (a).** Three of four arms

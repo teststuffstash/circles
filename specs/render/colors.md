@@ -11,14 +11,17 @@ readable for colourblind readers and on greyscale print. Status *semantics* live
 
 | status | word | fill | approx. relative luminance |
 |---|---|---|---|
-| 🟢 ok | `ok` | `#008F68` (bluish green) | ≈ 0.21 |
+| 🟢 ok | `ok` | `#00916A` (bluish green) | ≈ 0.21 |
 | 🟡 attention | `attention` | `#F2B300` (amber) | ≈ 0.51 |
 | 🔴 act | `act` | `#B22222` (deep red) | ≈ 0.11 |
 | ⚪ unmonitored | `unmonitored` | `#9E9E9E` (neutral grey) | ≈ 0.34 |
 
 The hexes are normative, but the **constraints below are the requirement** — a palette unit test
 computes luminances from the shipped CSS and asserts them. The ≈ values above are the author's
-hand computation; the test is the arbiter.
+hand computation; the test is the arbiter. That arbitration has already fired once: the
+originally pinned green `#008F68` fails the ladder (green↔red gap 0.0992, below the 0.10 floor —
+found and independently recomputed during the P0 build); `#00916A` passes at 0.1057 with every
+other constraint intact.
 
 1. **Luminance ladder** — the fills form a strict greyscale ordering, lightest to darkest:
    amber > grey > green > red, with **pairwise relative-luminance difference ≥ 0.10** (WCAG
@@ -69,7 +72,7 @@ styling that reads as decoration. A fully grey ring renders as a solid grey band
 | grey-distinct-from-statuses | a ring containing all four statuses | ⚪ distinguishable from each at a glance, on screen and in greyscale print |
 | grey-not-deemphasized | any ⚪ cell | same opacity, stroke and label treatment as coloured cells |
 | grey-surface-proportion | the fixture's `self/exercise` item | the grey arc occupies its full share of the ring — its size is its honesty |
-| grey-reason-distinguishable | one `by-choice` and one `by-failure` cell | the two are distinguishable without hovering ([`CIR-DATA-GREY-REASON`](../data/status-resolution.md)) |
+| grey-reason-distinguishable | one `by-choice` cell and one tooling-caused (`by-failure` / `not-evaluated`) cell | chosen silence and tooling-caused grey are distinguishable without hovering ([`CIR-DATA-GREY-REASON`](../data/status-resolution.md)) |
 
 _Evidence: none yet — unverified._
 

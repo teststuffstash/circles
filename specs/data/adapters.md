@@ -50,11 +50,17 @@ Every adapter resolves against a single reference date, injected by the bake, so
 mixes two clocks and a test can freeze it. An adapter that calls the system clock itself is a
 defect: it makes the artifact non-reproducible and puts a date-dependent test beyond control.
 
+The injection point is the bake's own invocation (a flag or argument). Production omits it and
+gets today — computed in the config's `timezone:`, never the host's local zone. Fixture bakes
+and tests always inject the fixture reference date (`fixtures/README.md`, ⚖-R24).
+
 | row id | inputs | expected |
 |---|---|---|
 | reference-date-shared | two freshness items in one bake | both age against the same reference date |
 | reference-date-injectable | test supplies a fixed reference date | ages are deterministic and reproducible |
 | reference-date-crosses-midnight | bake starts 23:59:59 and runs past midnight | every item uses the reference date captured at bake start |
+| reference-date-default-is-config-timezone | bake invoked with no injected date | today derived from the current instant in the config's `timezone:` — the host's local zone must not leak ([`CIR-BAKE-DETERMINISM`](data-json.md)) |
+| reference-date-fixture-pinned | any bake or test over `fixtures/alex` | injected `2026-08-03`, never the running day's calendar (⚖-R24) |
 
 _Evidence: none yet — unverified._
 

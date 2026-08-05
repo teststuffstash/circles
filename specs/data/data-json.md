@@ -62,7 +62,7 @@ The page's consumption-side requirements live in [../render/layout.md](../render
 | `person` | always | display name from `circles.yaml` |
 | `rings[]` | always | config order preserved (inside-out); ring/item ids and labels pass through |
 | `items[].status` | always | one of `green` / `yellow` / `red` / `grey` |
-| `items[].grey_reason` | nullable | `by-choice` \| `by-failure` when status is `grey`, else `null` ([`CIR-DATA-GREY-REASON`](status-resolution.md)) |
+| `items[].grey_reason` | nullable | `by-choice` \| `by-failure` \| `not-evaluated` when status is `grey`, else `null` ([`CIR-DATA-GREY-REASON`](status-resolution.md), ⚖-R50) |
 | `items[].guardrail`, `.note`, `.link` | nullable | `null` when absent in config — no placeholder strings |
 | `items[].share` | always | the effective weight (default 1 made explicit) |
 | `items[].last_data_date` | nullable | ISO date, present only when the adapter observed one |

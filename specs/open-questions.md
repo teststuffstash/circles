@@ -6,8 +6,9 @@ is never left blank pending an answer. This page is the operator's agenda: to ov
 ruling, change it here and in the requirement that encodes it.
 
 Numbering follows the FU-126 comparison register (⚖-R1…R22 keep the numbers the judge reports
-used, so a review comment naming ⚖-R6 means the same thing across repos and reports); R23 and
-above were minted during the weave.
+used, so a review comment naming ⚖-R6 means the same thing across repos and reports); R23–R49
+were minted during the weave; R50 and above during the P0 build harvest (issue #27), where the
+first implementations put the contract under load.
 
 ## Read these first
 
@@ -76,6 +77,9 @@ goal issue or the majority of the fan-out. They are where review attention is wo
 | ⚖-R47 | the events-table contract | deliberately unruled; specified at P2 kickoff | [`CIR-DETAIL-EVENTS`](render/detail-page.md) |
 | ⚖-R48 | where browser checks live in the ruled tiers | system testing | [`CIR-PROC-BROWSER-EVIDENCE`](process/testing.md) |
 | ⚖-R49 | the bake's implementation language | Python, as `devbox.json` already pins | [`CIR-PROC-BAKE-ONE-PATH`](process/phases.md) |
+| ⚖-R50 | the wire value for phase-unevaluated adapters | `grey_reason: not-evaluated`, a third value | [`CIR-DATA-GREY-REASON`](data/status-resolution.md) |
+| ⚖-R51 | the grey status word in detail lines | always `unmonitored`; the reason follows as its own segment | [`CIR-DATA-GREY-REASON`](data/status-resolution.md) |
+| ⚖-R52 | overlapping validation checks | most-specific error wins; every row independently triggerable | [`CIR-DATA-IDENTITY`](data/circles-yaml.md) |
 
 ## What the fan-out missed entirely
 
@@ -97,3 +101,10 @@ This register is the deduped output of the FU-126 arm comparison (issue #6): the
 `docs/comparison/core-gpt-5.6-terra.md` and `docs/comparison/core-fable.md` supplied the
 cross-arm splits, and the four downstream-proxy reports supplied the builder-facing gaps. Where
 this page says "the fan-out split 3:1", that count is from those reports, not re-derived here.
+
+R50–R52 and the amendments beside them (the palette green, the hover-row format, the
+reference-date defaults, the browser-proxy note) are the harvest of the P0 build experiment
+(issue #27): the one-shot arm (PR #21) and the fan-out arm (PRs #24/#26) each built the P0 MVP
+against this tree, and their PR bodies and reviews supplied the findings. Both implementations
+were deliberately discarded — the findings folded back here are the experiment's yield, and this
+tree is what the next build starts from.
