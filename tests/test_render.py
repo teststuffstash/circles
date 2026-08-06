@@ -709,7 +709,10 @@ class TestRenderCapacity:
 
     def test_min_arc_exceeded_by_ring(self) -> None:
         """CIR-RENDER-MIN-ARC#min-arc-exceeded-by-ring —
-        many items in one ring triggers a min-arc build warning."""
+        many items in one ring triggers a min-arc build warning AND every
+        rendered arc angle respects MIN_ARC_DEG."""
+        import math
+        import re as _re
         import yaml
         import tempfile
 
@@ -739,6 +742,74 @@ class TestRenderCapacity:
             warnings = artifact.get("warnings", [])
             min_arc_warnings = [w for w in warnings if "minimum arc" in w.get("message", "").lower()]
             assert len(min_arc_warnings) >= 1, f"Expected min-arc warning, got: {warnings}"
+
+            # Verify every rendered arc angle >= MIN_ARC_DEG by parsing the
+            # SVG path elements' outer-arc endpoints back into angles.
+            #
+            # Each arc path looks like:
+            #   M x1o y1o A r r 0 l 1 x2o y2o L x2i y2i A r r 0 l 0 x1i y1i Z
+            # The outer arc endpoint (x2o, y2o) encodes end_angle.
+            # The inner arc start point (x1i, y1i) encodes start_angle.
+            # We use the OUTER arc endpoint since it has larger resolution.
+            #
+            # Angles in _arc_path are clockwise from 12 o'clock. In SVG coords
+            # (y-down), angle from centre: atan2(dx, -dy) where dx,dy from centre.
+            CX = 400.0
+            CY = 400.0
+
+            # Extract all paths that belong to cells (not the centre circle)
+            # by finding path elements that follow a 'data-item=' attribute
+            cell_paths = _re.findall(
+                r'data-item="[^"]*"[^>]*>\s*<path d="([^"]+)"',
+                html,
+            )
+
+            # The centre circle path is also a <path> but has no data-item; that's fine.
+            # We have exactly 120 cell paths
+            assert len(cell_paths) == 120, \
+                f"Expected 120 cell paths, got {len(cell_paths)}"
+
+            # Parse each path to extract start and end angles
+            prev_end_angle = -90.0  # First arc starts at 12 o'clock
+            for path_d in cell_paths:
+                # Extract the two outer arc points from the path
+                # Pattern: M x1 y1 A r r ... 1 x2 y2 L ...
+                m = _re.match(
+                    r'M\s+([\d.-]+)\s+([\d.-]+)\s+A\s+[\d.]+\s+[\d.]+\s+\d\s+\d\s+1\s+([\d.-]+)\s+([\d.-]+)',
+                    path_d,
+                )
+                assert m is not None, f"Could not parse path: {path_d}"
+                x1o, y1o, x2o, y2o = map(float, m.groups())
+
+                # Convert endpoints back to angles (clockwise from 12 o'clock)
+                def _point_to_angle(x: float, y: float) -> float:
+                    dx = x - CX
+                    dy = CY - y  # flip y (SVG y-down → Cartesian y-up)
+                    return math.degrees(math.atan2(dx, dy)) % 360
+
+                start_angle = _point_to_angle(x1o, y1o) % 360
+                end_angle = _point_to_angle(x2o, y2o) % 360
+
+                # Handle crossing the 0°/360° boundary
+                arc_deg = (end_angle - start_angle) % 360
+
+                # The arc should be at least MIN_ARC_DEG (allow 0.05° fp tolerance)
+                assert arc_deg >= 2.95, \
+                    f"Arc angle {arc_deg:.3f}° is below MIN_ARC_DEG (3.0°) for path: {path_d[:80]}..."
+
+                # The arc should start where previous ended (plus cell gap)
+                # Allow for floating point
+                if prev_end_angle != -90.0:
+                    expected_start = (prev_end_angle + 2.0) % 360  # CELL_GAP_DEG = 2.0
+                    actual_start = start_angle % 360
+                    # Allow small tolerance
+                    assert abs(actual_start - expected_start) < 1.0 or \
+                           abs(actual_start - expected_start - 360) < 1.0 or \
+                           abs(actual_start - expected_start + 360) < 1.0, \
+                        f"Arc gap mismatch: expected start {expected_start:.1f}°, got {actual_start:.1f}°"
+
+                prev_end_angle = end_angle
+
         finally:
             tmp_path.unlink()
 

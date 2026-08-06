@@ -232,20 +232,47 @@ def _render_svg(artifact: dict) -> str:
         total_share = sum(item.get("share", 1.0) for item in items)
         total_deg = 360.0 - CELL_GAP_DEG * len(items)
 
-        # Compute raw arc angles first, floor at MIN_ARC_DEG, then rebalance
-        # so the sum never overshoots 360° (CIR-RENDER-MIN-ARC).
-        raw_arcs: list[float] = []
-        for item in items:
-            share = item.get("share", 1.0)
-            arc_deg = total_deg * share / total_share
-            raw_arcs.append(max(arc_deg, MIN_ARC_DEG))
+        # Compute natural arc angles, then iteratively floor-and-redistribute
+        # so floored arcs keep MIN_ARC_DEG and remaining arcs absorb the
+        # reduction proportionally (CIR-RENDER-MIN-ARC).
+        # A naive proportional rescale after flooring is self-defeating:
+        # when every arc floors, rescaling pushes them all back below MIN_ARC_DEG.
+        raw_arcs = [total_deg * item.get("share", 1.0) / total_share for item in items]
 
-        sum_arcs = sum(raw_arcs)
-        # If floored arcs exceed the available degrees, scale them proportionally
-        # so they fit within total_deg.
-        if sum_arcs > total_deg and total_deg > 0:
-            scale = total_deg / sum_arcs
-            raw_arcs = [a * scale for a in raw_arcs]
+        while True:
+            floored = [i for i, a in enumerate(raw_arcs) if a < MIN_ARC_DEG]
+            natural = [i for i, a in enumerate(raw_arcs) if a >= MIN_ARC_DEG]
+
+            floored_sum = len(floored) * MIN_ARC_DEG
+
+            if floored_sum > total_deg:
+                # Even floored arcs alone overflow — all get MIN_ARC_DEG.
+                # The capacity warning already fires in this case.
+                raw_arcs = [MIN_ARC_DEG] * len(raw_arcs)
+                break
+
+            if not natural:
+                # All arcs floored and they fit within total_deg.
+                for i in floored:
+                    raw_arcs[i] = MIN_ARC_DEG
+                break
+
+            remaining_deg = total_deg - floored_sum
+            natural_total = sum(raw_arcs[i] for i in natural)
+
+            # Rescale natural arcs to fill remaining space
+            for i in natural:
+                raw_arcs[i] = remaining_deg * raw_arcs[i] / natural_total
+
+            # Apply floor to floored arcs
+            for i in floored:
+                raw_arcs[i] = MIN_ARC_DEG
+
+            # Check if any rescaled natural arc fell below MIN_ARC_DEG
+            new_floored = [i for i in natural if raw_arcs[i] < MIN_ARC_DEG]
+            if not new_floored:
+                break
+            # Continue loop — newly floored arcs will be handled next iteration
 
         current_angle = -90.0  # 12 o'clock
 
