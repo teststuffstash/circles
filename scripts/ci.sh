@@ -1,18 +1,18 @@
-#!/usr/bin/env bash
-# ci.sh — the circles CI gate.
-#
-# Single fail-fast command. This is the *seam*: the GitHub Actions workflow (and any future
-# runner — Blacksmith/Chainguard) just calls `devbox run ci`, so the logic + tool versions live
-# here / in devbox.json, not in CI YAML. Run it locally the same way: `devbox run ci`.
-#
-# Vanilla stage (new-stack bootstrap): the chart IS the product — the gate is chart validation
-# + chart unit tests. When the real product shape lands via specs, its lint/test steps are ADDED
-# here (this file is the one place the gate grows).
-#
-# First growth (issue #1 weave): the spec tree is now a contract with mechanical conventions,
-# so it gets a gate. Product lint/tests follow when product code lands.
-set -euo pipefail
+#!/usr/bin/env -S bash -euo pipefail
+# ci.sh — CI entry point for the circles project
+cd "$(dirname "$0")/.."
 
-bash scripts/lint-specs.sh
+echo "=== validate-chart ==="
 bash scripts/validate-chart.sh
+
+echo "=== test-chart ==="
 bash scripts/test-chart.sh
+
+echo "=== lint-specs ==="
+bash scripts/lint-specs.sh
+
+echo "=== specs-build ==="
+bash scripts/specs-build.sh
+
+echo "=== bake unit tests ==="
+uv run --frozen pytest tests/ -v --tb=short

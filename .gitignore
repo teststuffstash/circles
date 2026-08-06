@@ -13,3 +13,9 @@ circles-*.tgz
 # specs-site build outputs (scripts/specs-build.sh)
 .site-src/
 specs-site/
+
+# Python virtual env and build artifacts
+.venv/
+.pytest_cache/
+__pycache__/
+*.egg-info/
