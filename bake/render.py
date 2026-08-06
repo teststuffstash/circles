@@ -232,11 +232,24 @@ def _render_svg(artifact: dict) -> str:
         total_share = sum(item.get("share", 1.0) for item in items)
         total_deg = 360.0 - CELL_GAP_DEG * len(items)
 
-        current_angle = -90.0  # 12 o'clock
-
+        # Compute raw arc angles first, floor at MIN_ARC_DEG, then rebalance
+        # so the sum never overshoots 360° (CIR-RENDER-MIN-ARC).
+        raw_arcs: list[float] = []
         for item in items:
             share = item.get("share", 1.0)
-            arc_deg = max(total_deg * share / total_share, MIN_ARC_DEG)
+            arc_deg = total_deg * share / total_share
+            raw_arcs.append(max(arc_deg, MIN_ARC_DEG))
+
+        sum_arcs = sum(raw_arcs)
+        # If floored arcs exceed the available degrees, scale them proportionally
+        # so they fit within total_deg.
+        if sum_arcs > total_deg and total_deg > 0:
+            scale = total_deg / sum_arcs
+            raw_arcs = [a * scale for a in raw_arcs]
+
+        current_angle = -90.0  # 12 o'clock
+
+        for item, arc_deg in zip(items, raw_arcs):
             start_angle = current_angle
             end_angle = current_angle + arc_deg
 
@@ -460,6 +473,74 @@ def _render_script() -> str:
 # ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
+
+
+def _add_capacity_warnings(artifact: dict) -> list[dict]:
+    """Check capacity envelope and return any additional warnings.
+
+    CIR-RENDER-CAPACITY: ≤6 rings, ≤8 items/ring for legibility.
+    CIR-RENDER-MIN-ARC: warn when many items force tiny arcs.
+    """
+    warnings: list[dict] = []
+    rings = artifact.get("rings", [])
+
+    num_rings = len(rings)
+    if num_rings > 6:
+        warnings.append({
+            "item": None,
+            "message": f"Page has {num_rings} rings — exceeds legibility envelope of 6. "
+                       f"Labels may be elided and cells may be smaller than the minimum "
+                       f"hover/focus target.",
+        })
+
+    for ring in rings:
+        ring_id = ring.get("id", "")
+        ring_label = ring.get("label", "")
+        items = ring.get("items", [])
+        num_items = len(items)
+
+        if num_items == 0:
+            warnings.append({
+                "item": f"{ring_id}",
+                "message": f"Ring \"{ring_label}\" ({ring_id}) has no items — "
+                           f"rendered as unmonitored band.",
+            })
+        elif num_items > 8:
+            warnings.append({
+                "item": f"{ring_id}",
+                "message": f"Ring \"{ring_label}\" ({ring_id}) has {num_items} items — "
+                           f"exceeds legibility envelope of 8 per ring. "
+                           f"Labels may be elided and cells below minimum hover target.",
+            })
+
+        # CIR-RENDER-MIN-ARC: check if items per ring would squeeze arcs below minimum
+        if num_items > 0:
+            available_deg = 360.0 - CELL_GAP_DEG * num_items
+            max_items_at_min = int(available_deg / MIN_ARC_DEG)
+            if num_items > max_items_at_min:
+                warnings.append({
+                    "item": f"{ring_id}",
+                    "message": f"Ring \"{ring_label}\" ({ring_id}) has {num_items} items — "
+                               f"exceeds {max_items_at_min} items at {MIN_ARC_DEG}° minimum arc. "
+                               f"Arcs are scaled proportionally to fit within 360°.",
+                })
+
+    return warnings
+
+
+def add_capacity_warnings(artifact: dict) -> dict:
+    """Add capacity/min-arc warnings to the artifact (CIR-RENDER-CAPACITY, CIR-RENDER-MIN-ARC).
+
+    Returns a new dict with the warnings appended. Call this between resolve()
+    and both write_artifact()/render_page() so both data.json and index.html
+    carry the same warnings (CIR-BAKE-SELF-CONTAINED#inlined-data-equals-the-file).
+    """
+    capacity_warnings = _add_capacity_warnings(artifact)
+    if not capacity_warnings:
+        return artifact
+    result = dict(artifact)
+    result["warnings"] = artifact.get("warnings", []) + capacity_warnings
+    return result
 
 
 def render_page(artifact: dict) -> str:

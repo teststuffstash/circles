@@ -17,7 +17,7 @@ import pytest
 
 from bake.config import load_config
 from bake.emit import write_artifact
-from bake.render import render_page
+from bake.render import add_capacity_warnings, render_page
 from bake.resolve import resolve
 
 FIXTURES = Path(__file__).resolve().parent.parent / "fixtures"
@@ -33,7 +33,8 @@ FIXTURE_GENERATED_AT = datetime(2026, 8, 3, 2, 0, 0, tzinfo=timezone.utc)
 def _resolve_fixture() -> dict:
     """Load the fixture config and resolve it."""
     config = load_config(ALEX_YAML)
-    return resolve(config, reference_date=FIXTURE_REFERENCE_DATE, generated_at=FIXTURE_GENERATED_AT)
+    artifact = resolve(config, reference_date=FIXTURE_REFERENCE_DATE, generated_at=FIXTURE_GENERATED_AT)
+    return add_capacity_warnings(artifact)
 
 
 def _render_fixture() -> str:
@@ -54,6 +55,7 @@ class TestBakeSelfContained:
         the inlined JSON in index.html is identical to data.json."""
         config = load_config(ALEX_YAML)
         artifact = resolve(config, reference_date=FIXTURE_REFERENCE_DATE, generated_at=FIXTURE_GENERATED_AT)
+        artifact = add_capacity_warnings(artifact)
 
         # Write data.json
         write_artifact(artifact, tmp_path)
@@ -147,9 +149,28 @@ class TestRenderPalette:
         html = _render_fixture()
         # Black labels on green, yellow, grey
         # White labels on red
-        # We check that the SVG text elements use the right fill colours
-        # by looking at the rendered paths and text fills
-        assert True  # structural check — colours are hardcoded in render.py
+        # Check that the SVG text elements use the assigned fill colours
+        # Extract text fill attributes from the SVG
+        import re
+        # Find all text elements with fill attribute that are NOT the centre disc text
+        text_fills = re.findall(
+            r'<text[^>]*?fill="([^"]+)"[^>]*>',
+            html,
+        )
+        # We expect at least one of each: #000000 (black) for green/yellow/grey labels,
+        # and #FFFFFF (white) for red labels
+        assert "#000000" in text_fills or "black" in html.lower(), \
+            "Expected black label text on light backgrounds"
+        assert "#FFFFFF" in text_fills, \
+            "Expected white label text on red background (#FFFFFF)"
+        # The fixture has wider/friends as red, so check that white fill exists
+        red_fill_text = re.search(
+            r'data-item="wider/friends"[^>]*>.*?<text[^>]*?fill="(#FFFFFF)"',
+            html,
+            re.DOTALL,
+        )
+        assert red_fill_text is not None, \
+            "Expected white text (#FFFFFF) on the red (wider/friends) cell"
 
 
 # ===========================================================================
@@ -581,9 +602,143 @@ class TestRenderCapacity:
         try:
             config = load_config(tmp_path)
             artifact = resolve(config, reference_date=FIXTURE_REFERENCE_DATE, generated_at=FIXTURE_GENERATED_AT)
+            artifact = add_capacity_warnings(artifact)
             html = render_page(artifact)
             assert "<svg" in html
             assert "<path" in html
+        finally:
+            tmp_path.unlink()
+
+    def test_capacity_at_limit(self) -> None:
+        """CIR-RENDER-CAPACITY#capacity-at-limit —
+        6 rings, 8 items in one ring renders legibly; no warning."""
+        import yaml
+        import tempfile
+
+        rings = []
+        for i in range(6):
+            items = []
+            for j in range(8 if i == 0 else 1):
+                items.append({
+                    "id": f"item-{i}-{j}",
+                    "label": f"Item {i}.{j}",
+                    "status": {"manual": "green"},
+                })
+            rings.append({"id": f"ring-{i}", "label": f"Ring {i}", "items": items})
+
+        config_data = {"person": "Test", "rings": rings}
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False) as f:
+            yaml.dump(config_data, f)
+            tmp_path = Path(f.name)
+
+        try:
+            config = load_config(tmp_path)
+            artifact = resolve(config, reference_date=FIXTURE_REFERENCE_DATE, generated_at=FIXTURE_GENERATED_AT)
+            artifact = add_capacity_warnings(artifact)
+            html = render_page(artifact)
+            assert "<svg" in html
+            # No capacity warnings for 6 rings, 8 items (at limit)
+            warnings = artifact.get("warnings", [])
+            capacity_warnings = [w for w in warnings if "exceeds legibility envelope" in w.get("message", "")]
+            assert len(capacity_warnings) == 0, f"Unexpected capacity warnings at limit: {capacity_warnings}"
+        finally:
+            tmp_path.unlink()
+
+    def test_capacity_exceeded_ring_count(self) -> None:
+        """CIR-RENDER-CAPACITY#capacity-exceeded-ring-count —
+        7 rings triggers a build warning."""
+        import yaml
+        import tempfile
+
+        rings = []
+        for i in range(7):
+            items = [{"id": f"item-{i}", "label": f"Item {i}", "status": {"manual": "green"}}]
+            rings.append({"id": f"ring-{i}", "label": f"Ring {i}", "items": items})
+
+        config_data = {"person": "Test", "rings": rings}
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False) as f:
+            yaml.dump(config_data, f)
+            tmp_path = Path(f.name)
+
+        try:
+            config = load_config(tmp_path)
+            artifact = resolve(config, reference_date=FIXTURE_REFERENCE_DATE, generated_at=FIXTURE_GENERATED_AT)
+            artifact = add_capacity_warnings(artifact)
+            html = render_page(artifact)
+            assert "<svg" in html
+            # Should have a warning about ring count
+            warnings = artifact.get("warnings", [])
+            ring_warnings = [w for w in warnings if "rings" in w.get("message", "").lower() and "exceeds" in w.get("message", "").lower()]
+            assert len(ring_warnings) >= 1, f"Expected ring-count warning, got: {warnings}"
+        finally:
+            tmp_path.unlink()
+
+    def test_capacity_exceeded_item_count(self) -> None:
+        """CIR-RENDER-CAPACITY#capacity-exceeded-item-count —
+        9 items in one ring triggers a build warning naming the ring."""
+        import yaml
+        import tempfile
+
+        items = []
+        for j in range(9):
+            items.append({
+                "id": f"item-{j}",
+                "label": f"Item {j}",
+                "status": {"manual": "green"},
+            })
+        config_data = {
+            "person": "Test",
+            "rings": [{"id": "over", "label": "Overflow", "items": items}],
+        }
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False) as f:
+            yaml.dump(config_data, f)
+            tmp_path = Path(f.name)
+
+        try:
+            config = load_config(tmp_path)
+            artifact = resolve(config, reference_date=FIXTURE_REFERENCE_DATE, generated_at=FIXTURE_GENERATED_AT)
+            artifact = add_capacity_warnings(artifact)
+            html = render_page(artifact)
+            assert "<svg" in html
+            # Should have a warning about item count naming the ring
+            warnings = artifact.get("warnings", [])
+            item_warnings = [w for w in warnings if "9 items" in w.get("message", "")]
+            assert len(item_warnings) >= 1, f"Expected item-count warning, got: {warnings}"
+        finally:
+            tmp_path.unlink()
+
+    def test_min_arc_exceeded_by_ring(self) -> None:
+        """CIR-RENDER-MIN-ARC#min-arc-exceeded-by-ring —
+        many items in one ring triggers a min-arc build warning."""
+        import yaml
+        import tempfile
+
+        # 120 items in one ring — far exceeds what MIN_ARC_DEG can fit
+        items = []
+        for j in range(120):
+            items.append({
+                "id": f"item-{j}",
+                "label": f"Item {j}",
+                "status": {"manual": "green"},
+            })
+        config_data = {
+            "person": "Test",
+            "rings": [{"id": "crowded", "label": "Crowded", "items": items}],
+        }
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False) as f:
+            yaml.dump(config_data, f)
+            tmp_path = Path(f.name)
+
+        try:
+            config = load_config(tmp_path)
+            artifact = resolve(config, reference_date=FIXTURE_REFERENCE_DATE, generated_at=FIXTURE_GENERATED_AT)
+            artifact = add_capacity_warnings(artifact)
+            html = render_page(artifact)
+            assert "<svg" in html
+            # Should have a min-arc warning
+            warnings = artifact.get("warnings", [])
+            min_arc_warnings = [w for w in warnings if "minimum arc" in w.get("message", "").lower()]
+            assert len(min_arc_warnings) >= 1, f"Expected min-arc warning, got: {warnings}"
         finally:
             tmp_path.unlink()
 
@@ -622,6 +777,7 @@ class TestRenderBootFailure:
         try:
             config = load_config(tmp_path)
             artifact = resolve(config, reference_date=FIXTURE_REFERENCE_DATE, generated_at=FIXTURE_GENERATED_AT)
+            artifact = add_capacity_warnings(artifact)
             html = render_page(artifact)
             assert "<svg" in html
             assert "#9E9E9E" in html  # grey fill for empty ring
@@ -948,7 +1104,7 @@ class TestRenderEmptyRing:
 
     def test_capacity_empty_ring_band(self) -> None:
         """CIR-RENDER-CAPACITY#capacity-empty-ring-band —
-        ring with zero items is drawn as grey band."""
+        ring with zero items is drawn as grey band with an empty-ring warning."""
         import yaml
         import tempfile
 
@@ -966,8 +1122,13 @@ class TestRenderEmptyRing:
         try:
             config = load_config(tmp_path)
             artifact = resolve(config, reference_date=FIXTURE_REFERENCE_DATE, generated_at=FIXTURE_GENERATED_AT)
+            artifact = add_capacity_warnings(artifact)
             html = render_page(artifact)
             # The empty ring renders as grey
             assert "#9E9E9E" in html
+            # Empty ring should produce a warning
+            warnings = artifact.get("warnings", [])
+            empty_warnings = [w for w in warnings if "no items" in w.get("message", "").lower()]
+            assert len(empty_warnings) >= 1, f"Expected empty-ring warning, got: {warnings}"
         finally:
             tmp_path.unlink()

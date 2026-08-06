@@ -20,7 +20,7 @@ from pathlib import Path
 
 from bake.config import ConfigError, load_config
 from bake.emit import write_artifact
-from bake.render import render_page
+from bake.render import add_capacity_warnings, render_page
 from bake.resolve import resolve
 
 
@@ -80,6 +80,9 @@ def main() -> None:
     except Exception as e:
         print(f"Resolution error: {e}", file=sys.stderr)
         sys.exit(1)
+
+    # Add capacity/min-arc warnings (CIR-RENDER-CAPACITY, CIR-RENDER-MIN-ARC)
+    artifact = add_capacity_warnings(artifact)
 
     # Emit data.json (CIR-BAKE-ATOMIC-WRITE)
     try:
