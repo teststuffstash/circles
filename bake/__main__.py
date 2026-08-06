@@ -20,6 +20,7 @@ from pathlib import Path
 
 from bake.config import ConfigError, load_config
 from bake.emit import write_artifact
+from bake.render import add_capacity_warnings, render_page
 from bake.resolve import resolve
 
 
@@ -80,10 +81,25 @@ def main() -> None:
         print(f"Resolution error: {e}", file=sys.stderr)
         sys.exit(1)
 
-    # Emit (CIR-BAKE-ATOMIC-WRITE)
+    # Add capacity/min-arc warnings (CIR-RENDER-CAPACITY, CIR-RENDER-MIN-ARC)
+    artifact = add_capacity_warnings(artifact)
+
+    # Emit data.json (CIR-BAKE-ATOMIC-WRITE)
     try:
-        out_path = write_artifact(artifact, args.out)
-        print(f"Wrote {out_path}")
+        data_path = write_artifact(artifact, args.out)
+        print(f"Wrote {data_path}")
+    except OSError as e:
+        print(f"Write error: {e}", file=sys.stderr)
+        sys.exit(1)
+
+    # Emit index.html from the SAME in-memory artifact (CIR-BAKE-SELF-CONTAINED)
+    try:
+        html_content = render_page(artifact)
+        out_dir = args.out.resolve()
+        out_dir.mkdir(parents=True, exist_ok=True)
+        html_path = out_dir / "index.html"
+        html_path.write_text(html_content, encoding="utf-8")
+        print(f"Wrote {html_path}")
     except OSError as e:
         print(f"Write error: {e}", file=sys.stderr)
         sys.exit(1)
