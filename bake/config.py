@@ -10,8 +10,9 @@ command: blocks validate at P0 and evaluate at P1, with no config migration in b
 
 from __future__ import annotations
 
+import os
 import re
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Literal
 
@@ -179,7 +180,7 @@ def _validate_freshness(raw: dict, path: str) -> None:
                           f"strictly less than red_after ({red})")
 
 
-def _validate_command(raw: dict, path: str) -> None:
+def _validate_command(raw: dict, path: str, config_dir: Path) -> None:
     """Validate a command adapter block (CIR-ADAPT-COMMAND — config-error rows only)."""
     command = raw.get("command")
     if command is None:
@@ -197,11 +198,23 @@ def _validate_command(raw: dict, path: str) -> None:
             raise ConfigError(f"{path}.status.command[{i}]: each argument must be a string, "
                               f"got {type(arg).__name__}")
 
-    # argv[0] executable existence and executable bit are validated at P1 runtime
-    # (they require filesystem access, which is outside this module's boundary)
+    # argv[0] executable existence and executable bit at validation
+    # (CIR-ADAPT-COMMAND#command-executable-exists-at-validation,
+    #  CIR-ADAPT-COMMAND#command-executable-bit-at-validation)
+    # These are filesystem stats, not evaluation — they are config-error rows in scope for P0.
+    executable = Path(command[0])
+    if not executable.is_absolute():
+        executable = config_dir / executable
+
+    if not executable.exists():
+        raise ConfigError(f"{path}.status.command[0]: executable '{command[0]}' not found — "
+                          f"resolved to '{executable}'")
+    if not os.access(executable, os.X_OK):
+        raise ConfigError(f"{path}.status.command[0]: executable '{command[0]}' is not "
+                          f"executable — resolved to '{executable}'")
 
 
-def _validate_status(raw: dict, path: str) -> AdapterSpec | None:
+def _validate_status(raw: dict, path: str, config_dir: Path | None = None) -> AdapterSpec | None:
     """Validate a status block. Returns an AdapterSpec or None if absent."""
     status = raw.get("status")
     if status is None:
@@ -238,12 +251,14 @@ def _validate_status(raw: dict, path: str) -> AdapterSpec | None:
     elif kind == "freshness":
         _validate_freshness(status, path)
     elif kind == "command":
-        _validate_command(status, path)
+        if config_dir is None:
+            raise ConfigError(f"{path}.status.command: config_dir is required for command validation")
+        _validate_command(status, path, config_dir)
 
     return AdapterSpec(kind=kind, raw=status)  # type: ignore[arg-type]
 
 
-def _validate_item(raw: dict, ring_id: str, index: int) -> tuple[Item, list[Warning]]:
+def _validate_item(raw: dict, ring_id: str, index: int, config_dir: Path) -> tuple[Item, list[Warning]]:
     """Validate and build an Item from raw dict. Returns (Item, list_of_warnings)."""
     path = f"rings[{ring_id}].items[{index}]"
     item_warnings: list[Warning] = []
@@ -294,7 +309,7 @@ def _validate_item(raw: dict, ring_id: str, index: int) -> tuple[Item, list[Warn
     if link is not None:
         _validate_link(link, path)
 
-    adapter = _validate_status(raw, path)
+    adapter = _validate_status(raw, path, config_dir)
 
     return Item(
         id=item_id,
@@ -307,7 +322,7 @@ def _validate_item(raw: dict, ring_id: str, index: int) -> tuple[Item, list[Warn
     ), item_warnings
 
 
-def _validate_ring(raw: dict, index: int) -> tuple[Ring, list[Warning]]:
+def _validate_ring(raw: dict, index: int, config_dir: Path) -> tuple[Ring, list[Warning]]:
     """Validate and build a Ring from raw dict."""
     path = f"rings[{index}]"
 
@@ -340,7 +355,7 @@ def _validate_ring(raw: dict, index: int) -> tuple[Ring, list[Warning]]:
         if not isinstance(raw_item, dict):
             raise ConfigError(f"{path}.items[{i}]: must be a mapping, "
                               f"got {type(raw_item).__name__}")
-        item, item_warnings = _validate_item(raw_item, ring_id, i)
+        item, item_warnings = _validate_item(raw_item, ring_id, i, config_dir)
         ring_warnings.extend(item_warnings)
         if item.id in seen_ids:
             raise ConfigError(f"{path}.items: duplicate item id '{item.id}' in ring '{ring_id}'")
@@ -412,13 +427,15 @@ def load_config(path: Path) -> Config:
     if len(raw_rings) == 0:
         raise ConfigError("top-level.rings: must have at least one ring (nothing to draw)")
 
+    config_dir = path.resolve().parent
+
     rings: list[Ring] = []
     seen_ring_ids: set[str] = set()
     for i, raw_ring in enumerate(raw_rings):
         if not isinstance(raw_ring, dict):
             raise ConfigError(f"rings[{i}]: must be a mapping, "
                               f"got {type(raw_ring).__name__}")
-        ring, ring_warnings = _validate_ring(raw_ring, i)
+        ring, ring_warnings = _validate_ring(raw_ring, i, config_dir)
         warnings.extend(ring_warnings)
         if ring.id in seen_ring_ids:
             raise ConfigError(f"rings: duplicate ring id '{ring.id}'")

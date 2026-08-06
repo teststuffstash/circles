@@ -715,6 +715,43 @@ class TestAdaptCommand:
         with pytest.raises(ConfigError, match="at least one"):
             _write_and_load(tmp_path, data)
 
+    def test_command_executable_not_found(self, tmp_path: Path) -> None:
+        """CIR-ADAPT-COMMAND#command-executable-exists-at-validation —
+        argv[0] missing → config error."""
+        data = {
+            "person": "Test",
+            "rings": [{
+                "id": "a", "label": "A",
+                "items": [{
+                    "id": "x", "label": "X",
+                    "status": {"command": ["./nonexistent.sh"]},
+                }],
+            }],
+        }
+        with pytest.raises(ConfigError, match="not found"):
+            _write_and_load(tmp_path, data)
+
+    def test_command_executable_not_executable(self, tmp_path: Path) -> None:
+        """CIR-ADAPT-COMMAND#command-executable-bit-at-validation —
+        argv[0] without exec bit → config error."""
+        # Create a non-executable script file
+        script = tmp_path / "noexec.sh"
+        script.write_text("#!/bin/sh\necho green\n")
+        # Do NOT set executable bit
+
+        data = {
+            "person": "Test",
+            "rings": [{
+                "id": "a", "label": "A",
+                "items": [{
+                    "id": "x", "label": "X",
+                    "status": {"command": ["./noexec.sh"]},
+                }],
+            }],
+        }
+        with pytest.raises(ConfigError, match="not.*executable"):
+            _write_and_load(tmp_path, data)
+
 
 # ===========================================================================
 # CIR-DATA-STATUS-MANUAL-VALUES — the manual adapter's vocabulary
