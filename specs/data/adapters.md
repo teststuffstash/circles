@@ -76,7 +76,20 @@ possible contributed built-in, never a hidden behavior of `manual:`.
 | manual-has-no-data-date | any manual item | detail line carries no "last data" segment |
 | manual-available-in-every-phase | any phase | implemented from P0 ([`CIR-PROC-PHASE-P0`](../process/phases.md)) |
 
-_Evidence: none yet — unverified._
+<details class="evidence-block">
+<summary>Evidence: 3 test case(s) — alex</summary>
+
+**Requirement:** CIR-ADAPT-MANUAL — **World:** alex
+
+| Case ID | Status | Detail |
+|---------|--------|--------|
+| `manual-available-in-every-phase` | PASS | — |
+| `manual-has-no-data-date` | PASS | — |
+| `manual-returns-declared-light` | PASS | — |
+
+[View full report](../../specs-site/evidence)
+
+</details>
 
 ## CIR-ADAPT-FRESHNESS — dates in files
 
@@ -124,7 +137,20 @@ lines (`date=2026-08-01`, `note=…`); (c) full JSON on stdout. **Ruled: (a) now
 compatible extension** — (b) is a superset of (a) and needs no config change, whereas (c) makes
 the escape hatch stop being a one-line shell script.
 
-_Evidence: none yet — unverified._
+<details class="evidence-block">
+<summary>Evidence: 3 test case(s) — alex</summary>
+
+**Requirement:** CIR-ADAPT-COMMAND — **World:** alex
+
+| Case ID | Status | Detail |
+|---------|--------|--------|
+| `command-argv-array-required` | PASS | — |
+| `command-executable-bit-at-validation` | PASS | — |
+| `command-executable-exists-at-validation` | PASS | — |
+
+[View full report](../../specs-site/evidence)
+
+</details>
 
 ## CIR-ADAPT-BUDGET — time and blast radius
 

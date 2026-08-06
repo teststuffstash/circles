@@ -26,7 +26,18 @@ compromises — tiny chart, aggressive elision — for a path the goal defers. P
 works through scale-to-fit (⚖-R38); it just is not the legibility gate. The exact number is a
 judgment call a human can override at merge time.
 
-_Evidence: none yet — unverified._
+<details class="evidence-block">
+<summary>Evidence: 1 test case(s) — alex</summary>
+
+**Requirement:** CIR-RENDER-REFERENCE-VIEWPORT — **World:** alex
+
+| Case ID | Status | Detail |
+|---------|--------|--------|
+| `viewport-gate-is-fixed` | PASS | — |
+
+[View full report](../../specs-site/evidence)
+
+</details>
 
 ## CIR-RENDER-ONE-SCREEN — no scrolling, ever
 
@@ -52,7 +63,18 @@ the multi-page-app smell the goal warns against. This is also the honest answer 
 phone-vs-desktop tension the goal leaves open: the phone gets a complete, smaller picture rather
 than a different one.
 
-_Evidence: none yet — unverified._
+<details class="evidence-block">
+<summary>Evidence: 1 test case(s) — alex</summary>
+
+**Requirement:** CIR-RENDER-ONE-SCREEN — **World:** alex
+
+| Case ID | Status | Detail |
+|---------|--------|--------|
+| `one-screen-proxy` | PASS | — |
+
+[View full report](../../specs-site/evidence)
+
+</details>
 
 ## CIR-RENDER-A4 — one sheet from the browser's print dialog
 
@@ -83,7 +105,19 @@ than left to the browser because browser defaults vary and the single-sheet gate
 reproducible. (c) makes the printed artifact depend on the window shape at print time, which is
 untestable in the way that matters.
 
-_Evidence: none yet — unverified._
+<details class="evidence-block">
+<summary>Evidence: 2 test case(s) — alex</summary>
+
+**Requirement:** CIR-RENDER-A4 — **World:** alex
+
+| Case ID | Status | Detail |
+|---------|--------|--------|
+| `print-interactive-affordances-hidden` | PASS | — |
+| `print-margins-are-declared` | PASS | — |
+
+[View full report](../../specs-site/evidence)
+
+</details>
 
 ## CIR-RENDER-RENDERER — what draws the rings
 
@@ -114,7 +148,19 @@ charting library would fight. Note the library claims are training-knowledge, un
 authoring ride (see Provenance); if Plotly *can* express independent rings, this ruling should
 be revisited rather than defended.
 
-_Evidence: none yet — unverified._
+<details class="evidence-block">
+<summary>Evidence: 2 test case(s) — alex</summary>
+
+**Requirement:** CIR-RENDER-RENDERER — **World:** alex
+
+| Case ID | Status | Detail |
+|---------|--------|--------|
+| `renderer-adds-no-runtime-egress` | PASS | — |
+| `renderer-draws-independent-rings` | PASS | — |
+
+[View full report](../../specs-site/evidence)
+
+</details>
 
 ## CIR-RENDER-CHROME — the page furniture
 
@@ -138,7 +184,20 @@ Everything on the page besides the chart, in this reading order:
 | chrome-banner-content | 3 warnings | count plus the first cause; the full list reachable without leaving the page |
 | chrome-idle-detail-strip | nothing hovered | a neutral idle line, never a stale cell's content |
 
-_Evidence: none yet — unverified._
+<details class="evidence-block">
+<summary>Evidence: 3 test case(s) — alex</summary>
+
+**Requirement:** CIR-RENDER-CHROME — **World:** alex
+
+| Case ID | Status | Detail |
+|---------|--------|--------|
+| `chrome-banner-hidden-when-clean` | PASS | — |
+| `chrome-idle-detail-strip` | PASS | — |
+| `chrome-ring-key-order` | PASS | — |
+
+[View full report](../../specs-site/evidence)
+
+</details>
 
 ## CIR-RENDER-GENERATED-AT — the honesty stamp on screen
 
@@ -152,7 +211,19 @@ print.
 | stamp-no-localization | viewer in a UTC+14 zone | still the baked UTC string, unconverted |
 | stamp-on-print | browser print | present on the A4 page |
 
-_Evidence: none yet — unverified._
+<details class="evidence-block">
+<summary>Evidence: 2 test case(s) — alex</summary>
+
+**Requirement:** CIR-RENDER-GENERATED-AT — **World:** alex
+
+| Case ID | Status | Detail |
+|---------|--------|--------|
+| `stamp-on-screen` | PASS | — |
+| `stamp-verbatim` | PASS | — |
+
+[View full report](../../specs-site/evidence)
+
+</details>
 
 ## CIR-RENDER-BOOT-FAILURE — failure is visible, never blank
 
@@ -171,7 +242,19 @@ chart, and never a page of default-coloured cells.
 | boot-failure-empty-rings | `rings: []` (hand-edited; the bake would never emit it) | boot-failure state |
 | boot-failure-is-not-green | any boot failure | no cell is drawn in any status colour |
 
-_Evidence: none yet — unverified._
+<details class="evidence-block">
+<summary>Evidence: 2 test case(s) — alex</summary>
+
+**Requirement:** CIR-RENDER-BOOT-FAILURE — **World:** alex
+
+| Case ID | Status | Detail |
+|---------|--------|--------|
+| `boot-failure-empty-rings` | PASS | — |
+| `boot-failure-payload-absent` | PASS | — |
+
+[View full report](../../specs-site/evidence)
+
+</details>
 
 ## CIR-RENDER-NO-EGRESS — the page talks to nobody
 
@@ -188,7 +271,21 @@ tomorrow because a CDN changed.
 | page-works-from-file-url | saved copy opened locally | full render |
 | page-works-with-no-js | JS disabled | the text alternative renders with all statuses ([`CIR-RENDER-A11Y-TABLE`](colors.md)) |
 
-_Evidence: none yet — unverified._
+<details class="evidence-block">
+<summary>Evidence: 4 test case(s) — alex</summary>
+
+**Requirement:** CIR-RENDER-NO-EGRESS — **World:** alex
+
+| Case ID | Status | Detail |
+|---------|--------|--------|
+| `fonts-are-system-or-inlined` | PASS | — |
+| `no-external-requests-at-runtime` | PASS | — |
+| `no-third-party-origins-in-markup` | PASS | — |
+| `page-works-from-file-url` | PASS | — |
+
+[View full report](../../specs-site/evidence)
+
+</details>
 
 ## CIR-RENDER-ASSET-BUDGET — small enough to be one file
 
@@ -202,7 +299,19 @@ the enforcement mechanism behind ⚖-R3.
 | budget-enforced-by-the-gate | a build exceeding it | CI failure, not a silent regression ([`CIR-PROC-TEST-TIERS`](../process/testing.md)) |
 | budget-growth-is-linear | 9 → 18 items | growth is linear in items, not in libraries |
 
-_Evidence: none yet — unverified._
+<details class="evidence-block">
+<summary>Evidence: 2 test case(s) — alex</summary>
+
+**Requirement:** CIR-RENDER-ASSET-BUDGET — **World:** alex
+
+| Case ID | Status | Detail |
+|---------|--------|--------|
+| `budget-built-page-is-small` | PASS | — |
+| `budget-growth-is-linear` | PASS | — |
+
+[View full report](../../specs-site/evidence)
+
+</details>
 
 ## Provenance
 

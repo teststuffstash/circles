@@ -16,6 +16,7 @@ include = ["bake*"]
 
 [dependency-groups]
 dev = [
+    "allure-pytest>=2.16.0",
     "pytest>=8.0",
 ]
 

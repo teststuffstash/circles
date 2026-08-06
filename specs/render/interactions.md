@@ -29,7 +29,19 @@ text, which is also what prints and what a screen reader announces.
 | hover-leave-resets | pointer leaves the chart | the strip returns to idle text, never stale content |
 | hover-focus-tap-agree | the same cell reached three ways | identical string in all three |
 
-_Evidence: none yet — unverified._
+<details class="evidence-block">
+<summary>Evidence: 2 test case(s) — alex</summary>
+
+**Requirement:** CIR-RENDER-HOVER — **World:** alex
+
+| Case ID | Status | Detail |
+|---------|--------|--------|
+| `hover-full-line` | PASS | — |
+| `hover-leave-resets` | PASS | — |
+
+[View full report](../../specs-site/evidence)
+
+</details>
 
 ## CIR-RENDER-CLICK — where a cell leads
 
@@ -58,7 +70,18 @@ cell would silently change where it goes the day P2 ships, breaking the muscle m
 person who uses this page every day. The loser staying reachable is what makes this cheap either
 way.
 
-_Evidence: none yet — unverified._
+<details class="evidence-block">
+<summary>Evidence: 1 test case(s) — alex</summary>
+
+**Requirement:** CIR-RENDER-CLICK — **World:** alex
+
+| Case ID | Status | Detail |
+|---------|--------|--------|
+| `click-no-destination` | PASS | — |
+
+[View full report](../../specs-site/evidence)
+
+</details>
 
 ## CIR-RENDER-KEYBOARD — the whole page without a mouse
 
@@ -76,7 +99,21 @@ accident. Focus shows the detail line exactly as hover does, plus a visible focu
 | keyboard-accessible-name | a cell's computed name | `<label>, <status word>, ring <ring label>` |
 | keyboard-no-trap | tabbing past the last cell | focus leaves the chart normally |
 
-_Evidence: none yet — unverified._
+<details class="evidence-block">
+<summary>Evidence: 4 test case(s) — alex</summary>
+
+**Requirement:** CIR-RENDER-KEYBOARD — **World:** alex
+
+| Case ID | Status | Detail |
+|---------|--------|--------|
+| `keyboard-accessible-name` | PASS | — |
+| `keyboard-focus-shows-detail` | PASS | — |
+| `keyboard-focus-visible` | PASS | — |
+| `keyboard-tab-order` | PASS | — |
+
+[View full report](../../specs-site/evidence)
+
+</details>
 
 ## CIR-RENDER-TOUCH — no hover on glass
 
@@ -97,7 +134,18 @@ purpose. (b) hides navigation behind an undiscoverable gesture; (c) costs a seco
 read, which is the common case. Phone viewing is a later exposure path, but this ruling costs P0
 nothing and must not be retrofitted differently later.
 
-_Evidence: none yet — unverified._
+<details class="evidence-block">
+<summary>Evidence: 1 test case(s) — alex</summary>
+
+**Requirement:** CIR-RENDER-TOUCH — **World:** alex
+
+| Case ID | Status | Detail |
+|---------|--------|--------|
+| `touch-target-size` | PASS | — |
+
+[View full report](../../specs-site/evidence)
+
+</details>
 
 ## CIR-RENDER-NO-JS — the page still says something
 
@@ -120,4 +168,17 @@ makes the no-JS page the *same* picture rather than a degraded one — but only 
 pass. (c) is rejected: a page whose entire purpose is being glanced at and printed must not
 depend on a script executing.
 
-_Evidence: none yet — unverified._
+<details class="evidence-block">
+<summary>Evidence: 3 test case(s) — alex</summary>
+
+**Requirement:** CIR-RENDER-NO-JS — **World:** alex
+
+| Case ID | Status | Detail |
+|---------|--------|--------|
+| `no-js-detail-lines-present` | PASS | — |
+| `no-js-is-not-blank` | PASS | — |
+| `no-js-text-alternative-renders` | PASS | — |
+
+[View full report](../../specs-site/evidence)
+
+</details>

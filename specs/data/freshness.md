@@ -30,7 +30,19 @@ The two escape rows overlap — an absolute path is also outside the config dire
 absoluteness is a syntactic property tested before resolution, so each row's message is
 independently triggerable.
 
-_Evidence: none yet — unverified._
+<details class="evidence-block">
+<summary>Evidence: 2 test case(s) — alex</summary>
+
+**Requirement:** CIR-DATA-SOURCE-PATH — **World:** alex
+
+| Case ID | Status | Detail |
+|---------|--------|--------|
+| `source-absolute-path` | PASS | — |
+| `source-parent-traversal` | PASS | — |
+
+[View full report](../../specs-site/evidence)
+
+</details>
 
 ## CIR-DATA-DATE-PARSE — which date tokens count
 
@@ -118,7 +130,24 @@ light. This is a deliberate 1-of-4 minority ruling and it is cheap to flip (thre
 plus the glossary entry), but it must be flipped *before* tests exist, because row ids are
 evidence join keys.
 
-_Evidence: none yet — unverified._
+<details class="evidence-block">
+<summary>Evidence: 7 test case(s) — alex</summary>
+
+**Requirement:** CIR-DATA-FRESHNESS-WINDOW — **World:** alex
+
+| Case ID | Status | Detail |
+|---------|--------|--------|
+| `window-inside` | PASS | — |
+| `window-at-red-boundary` | PASS | — |
+| `window-at-yellow-boundary` | PASS | — |
+| `window-just-past-red` | PASS | — |
+| `window-mid` | PASS | — |
+| `window-just-past-yellow` | PASS | — |
+| `window-far-past-red` | PASS | — |
+
+[View full report](../../specs-site/evidence)
+
+</details>
 
 ## CIR-DATA-FRESHNESS-THRESHOLDS — threshold validity
 
@@ -134,7 +163,23 @@ Violations are config errors — a config whose yellow can never show is a typo,
 | threshold-fractional | `yellow_after: 3.5` | config error, bake fails |
 | threshold-missing | `freshness:` with `source:` only | config error, bake fails |
 
-_Evidence: none yet — unverified._
+<details class="evidence-block">
+<summary>Evidence: 6 test case(s) — alex</summary>
+
+**Requirement:** CIR-DATA-FRESHNESS-THRESHOLDS — **World:** alex
+
+| Case ID | Status | Detail |
+|---------|--------|--------|
+| `threshold-fractional` | PASS | — |
+| `threshold-missing` | PASS | — |
+| `threshold-zero` | PASS | — |
+| `thresholds-equal` | PASS | — |
+| `thresholds-inverted` | PASS | — |
+| `thresholds-valid` | PASS | — |
+
+[View full report](../../specs-site/evidence)
+
+</details>
 
 ## CIR-DATA-FRESHNESS-EMPTY — a source with no usable dates
 

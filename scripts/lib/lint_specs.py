@@ -123,20 +123,28 @@ def check_page(path: Path, repo: Path, f: Findings, seen_ids: dict[str, Path]) -
 
         # --- evidence line: verified-ness is derived, never declared ------------
         joined = "\n".join(body)
-        if EVIDENCE_LINE not in joined and "<details>" not in joined:
+        if EVIDENCE_LINE not in joined and "<details" not in joined:
             f.error(path, f"{req_id}: missing evidence line ({EVIDENCE_LINE!r}) "
                           f"or an evidence <details> block")
         # A coverage claim is a cell that *leads* with the marker (the ✓ column pattern).
         # Prose mentioning the marker — process/testing.md states the prohibition, and
         # open-questions.md discusses it — is not itself a violation.
-        if any(
-            cell.strip().startswith(("✓", "🚧"))
-            for line in body
-            if line.lstrip().startswith("|")
-            for cell in line.strip().strip("|").split("|")
-        ):
-            f.error(path, f"{req_id}: declares verified-ness (✓/🚧 marker) — "
-                          f"coverage is derived from evidence, never declared")
+        # Evidence blocks inside <details> are exempt — they report test results, not
+        # declare coverage.
+        in_details = False
+        for line in body:
+            if "<details" in line:
+                in_details = True
+            if "</details>" in line:
+                in_details = False
+            if in_details:
+                continue
+            if line.lstrip().startswith("|"):
+                for cell in line.strip().strip("|").split("|"):
+                    if cell.strip().startswith(("✓", "🚧")):
+                        f.error(path, f"{req_id}: declares verified-ness (✓/🚧 marker) — "
+                                      f"coverage is derived from evidence, never declared")
+                        break
 
         # --- row ids are join keys: unique within their table -------------------
         for table in tables_in(body):
@@ -164,6 +172,67 @@ def check_ambiguity_index(repo: Path, refs: set[int], f: Findings) -> None:
     indexed = {int(n) for n in AMBIGUITY_REF.findall(text)}
     for ref in sorted(refs - indexed):
         f.error(index, f"⚖-R{ref} is referenced in the tree but not indexed here")
+
+
+def check_evidence_join(repo: Path, f: Findings) -> None:
+    """Check the evidence join: every evidence fragment cites valid row ids,
+    and every requirement with evidence has a corresponding report entry.
+
+    Reads the evidence-manifest.json written by generate-evidence.py and
+    cross-references it against the spec pages' decision tables.
+
+    CIR-PROC-GATE#gate-no-dangling-spec-reference
+    """
+    manifest_path = repo / "specs" / "evidence-manifest.json"
+    if not manifest_path.exists():
+        # No evidence manifest yet — early in the pipeline, skip the check
+        return
+
+    import json
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    requirements = manifest.get("requirements", {})
+
+    # Build a map of requirement id → set of row ids from the spec pages
+    spec_row_ids: dict[str, set[str]] = {}
+    for page in sorted((repo / "specs").rglob("*.md")):
+        text = page.read_text(encoding="utf-8")
+        sections = split_sections(text.splitlines())
+        for req_id, _line_no, body in sections:
+            if req_id not in spec_row_ids:
+                spec_row_ids[req_id] = set()
+            for table in tables_in(body):
+                if len(table) < 3:
+                    continue
+                for rid in row_ids(table):
+                    spec_row_ids[req_id].add(rid)
+
+    # Check 1: every evidence-cited case id exists as a row id in the spec
+    for req_id, case_ids in requirements.items():
+        if req_id not in spec_row_ids:
+            f.error(manifest_path, f"evidence cites {req_id} but no such requirement exists in specs")
+            continue
+        for case_id in case_ids:
+            if case_id not in spec_row_ids[req_id]:
+                f.error(
+                    manifest_path,
+                    f"evidence for {req_id} cites case id {case_id!r} "
+                    f"but no such row id exists in the spec table "
+                    f"(known row ids: {sorted(spec_row_ids[req_id])})",
+                )
+
+    # Check 2: every requirement with a <details> evidence block has a manifest entry
+    for page in sorted((repo / "specs").rglob("*.md")):
+        text = page.read_text(encoding="utf-8")
+        sections = split_sections(text.splitlines())
+        for req_id, _line_no, body in sections:
+            joined = "\n".join(body)
+            if "<details" in joined:
+                if req_id not in requirements:
+                    f.error(
+                        page,
+                        f"{req_id}: has an evidence <details> block but no entry "
+                        f"in evidence-manifest.json — the block may be stale",
+                    )
 
 
 def check_fixture(repo: Path, f: Findings) -> None:
@@ -224,6 +293,7 @@ def main() -> int:
         all_refs |= check_page(page, repo, f, seen_ids)
 
     check_ambiguity_index(repo, all_refs, f)
+    check_evidence_join(repo, f)
     check_fixture(repo, f)
 
     if f.errors:

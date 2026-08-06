@@ -75,7 +75,19 @@ The page's consumption-side requirements live in [../render/layout.md](../render
 | artifact-fixture-roundtrip | bake over `fixtures/alex/circles.yaml` | rings/items preserve config order and ids; `self/exercise` has `status: grey`, `grey_reason: by-choice`, `share: 1`, nulls for absent fields |
 | warnings-empty-array | fully healthy bake | `warnings: []` present, never omitted |
 
-_Evidence: none yet — unverified._
+<details class="evidence-block">
+<summary>Evidence: 2 test case(s) — alex</summary>
+
+**Requirement:** CIR-BAKE-ARTIFACT — **World:** alex
+
+| Case ID | Status | Detail |
+|---------|--------|--------|
+| `artifact-fixture-roundtrip` | PASS | — |
+| `warnings-empty-array` | PASS | — |
+
+[View full report](../../specs-site/evidence)
+
+</details>
 
 ## CIR-BAKE-STATUS-VALUES — wire values are not display words
 
@@ -92,7 +104,20 @@ the display words are a presentation choice that may be reworded or localized, w
 value is a stable key that tests and future consumers join on. Keeping them distinct means a
 copy edit can never become a schema change.
 
-_Evidence: none yet — unverified._
+<details class="evidence-block">
+<summary>Evidence: 3 test case(s) — alex</summary>
+
+**Requirement:** CIR-BAKE-STATUS-VALUES — **World:** alex
+
+| Case ID | Status | Detail |
+|---------|--------|--------|
+| `status-never-display-words` | PASS | — |
+| `status-never-emoji` | PASS | — |
+| `status-wire-vocabulary` | PASS | — |
+
+[View full report](../../specs-site/evidence)
+
+</details>
 
 ## CIR-BAKE-SELF-CONTAINED — one file that works alone, plus one that machines read
 
@@ -117,7 +142,20 @@ one duplication of a small payload. The sibling file keeps the goal's "one asset
 would be about network errors; under (a) it is about a malformed embedded payload, which is why
 [`CIR-RENDER-BOOT-FAILURE`](../render/layout.md) is written the way it is.
 
-_Evidence: none yet — unverified._
+<details class="evidence-block">
+<summary>Evidence: 3 test case(s) — alex</summary>
+
+**Requirement:** CIR-BAKE-SELF-CONTAINED — **World:** alex
+
+| Case ID | Status | Detail |
+|---------|--------|--------|
+| `inlined-data-equals-the-file` | PASS | — |
+| `page-has-both-artifacts` | PASS | — |
+| `page-renders-with-no-network` | PASS | — |
+
+[View full report](../../specs-site/evidence)
+
+</details>
 
 ## CIR-BAKE-VERSION — artifact versioning
 
@@ -132,7 +170,18 @@ Additive fields within a version are ignored by older pages.
 | version-from-the-future | `version: 2`, page understands 1 | boot failure state, no chart drawn |
 | version-additive-field | `version: 1` plus an unknown field | rendered normally, unknown field ignored |
 
-_Evidence: none yet — unverified._
+<details class="evidence-block">
+<summary>Evidence: 1 test case(s) — alex</summary>
+
+**Requirement:** CIR-BAKE-VERSION — **World:** alex
+
+| Case ID | Status | Detail |
+|---------|--------|--------|
+| `version-recognized` | PASS | — |
+
+[View full report](../../specs-site/evidence)
+
+</details>
 
 ## CIR-BAKE-GENERATED-AT — the honesty stamp
 
@@ -169,7 +218,19 @@ invent an expectation the product has not earned, and the field is `null`, which
 as "no banner". (a) alone leaves the product's own dangerous-green undefended once a nightly
 bake exists; (b) puts a number in the page that only the pipeline knows.
 
-_Evidence: none yet — unverified._
+<details class="evidence-block">
+<summary>Evidence: 2 test case(s) — alex</summary>
+
+**Requirement:** CIR-BAKE-STALE-SELF — **World:** alex
+
+| Case ID | Status | Detail |
+|---------|--------|--------|
+| `TestBakeStaleAfterHours#test_stale_after_hours_null` | PASS | — |
+| `no-threshold-no-banner` | PASS | — |
+
+[View full report](../../specs-site/evidence)
+
+</details>
 
 ## CIR-BAKE-WARNINGS — where build warnings surface
 
@@ -189,7 +250,19 @@ artifact but no page surface. **Ruled: (b).** The honest-and-visible doctrine fo
 its cause — otherwise grey is honest but unexplained, and the person's trusted circle reads the
 page, not CI logs. Exposure is bounded by `CIR-BAKE-EXPOSURE`.
 
-_Evidence: none yet — unverified._
+<details class="evidence-block">
+<summary>Evidence: 2 test case(s) — alex</summary>
+
+**Requirement:** CIR-BAKE-WARNINGS — **World:** alex
+
+| Case ID | Status | Detail |
+|---------|--------|--------|
+| `config-level-warning-has-null-item` | PASS | — |
+| `warning-carries-cell-ref` | PASS | — |
+
+[View full report](../../specs-site/evidence)
+
+</details>
 
 ## CIR-BAKE-DETAIL-FIELDS — structured fields *and* one composed line
 
@@ -212,7 +285,19 @@ re-formatting need the parts; what they must not do is *re-compose* a second ver
 line. The cost is that wording is frozen in a data file until the next bake, which is
 acceptable for a file that is rewritten nightly.
 
-_Evidence: none yet — unverified._
+<details class="evidence-block">
+<summary>Evidence: 2 test case(s) — alex</summary>
+
+**Requirement:** CIR-BAKE-DETAIL-FIELDS — **World:** alex
+
+| Case ID | Status | Detail |
+|---------|--------|--------|
+| `detail-line-is-baked` | PASS | — |
+| `structured-fields-also-present` | PASS | — |
+
+[View full report](../../specs-site/evidence)
+
+</details>
 
 ## CIR-BAKE-ATOMIC-WRITE — publishing discipline
 
@@ -235,7 +320,19 @@ _Evidence: none yet — unverified._
 | host-locale-does-not-leak | bake under a non-English locale | identical output |
 | host-timezone-does-not-leak | bake under a non-UTC `TZ` | identical output; the config's `timezone:` governs |
 
-_Evidence: none yet — unverified._
+<details class="evidence-block">
+<summary>Evidence: 2 test case(s) — alex</summary>
+
+**Requirement:** CIR-BAKE-DETERMINISM — **World:** alex
+
+| Case ID | Status | Detail |
+|---------|--------|--------|
+| `ordering-is-stable` | PASS | — |
+| `two-bakes-agree` | PASS | — |
+
+[View full report](../../specs-site/evidence)
+
+</details>
 
 ## CIR-BAKE-EXPOSURE — everything in the artifact is public
 
@@ -250,7 +347,18 @@ anything the UI merely does not display**.
 | warning-text-is-bounded | command prints 10 MB to stderr | truncated at a fixed cap |
 | no-source-content-in-the-artifact | freshness source with private notes | only the date is carried, never the surrounding text |
 
-_Evidence: none yet — unverified._
+<details class="evidence-block">
+<summary>Evidence: 1 test case(s) — alex</summary>
+
+**Requirement:** CIR-BAKE-EXPOSURE — **World:** alex
+
+| Case ID | Status | Detail |
+|---------|--------|--------|
+| `no-absolute-host-paths` | PASS | — |
+
+[View full report](../../specs-site/evidence)
+
+</details>
 
 ## CIR-BAKE-PAGE-DOES-NOT-RESOLVE — the page renders, it never decides
 
@@ -259,7 +367,18 @@ _Evidence: none yet — unverified._
 | page-contains-no-adapter-code | any build | no date parsing, no threshold arithmetic, no command execution in the page |
 | page-recomputes-nothing-on-load | artifact says 🟡 | 🟡, whatever the viewer's clock says |
 
-_Evidence: none yet — unverified._
+<details class="evidence-block">
+<summary>Evidence: 1 test case(s) — alex</summary>
+
+**Requirement:** CIR-BAKE-PAGE-DOES-NOT-RESOLVE — **World:** alex
+
+| Case ID | Status | Detail |
+|---------|--------|--------|
+| `page-contains-no-adapter-code` | PASS | — |
+
+[View full report](../../specs-site/evidence)
+
+</details>
 
 ## CIR-BAKE-DETAIL-FILES — per-item detail payloads (P2 boundary)
 
