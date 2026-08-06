@@ -1,6 +1,10 @@
 # The synthetic fixture person (see fixtures/README.md — everything invented).
 # Rows here double as the specs' key examples: each item exercises one adapter/status case
-# from specs/data/circles-yaml.md §Status resolution.
+# from specs/data/status-resolution.md.
+#
+# Dated examples below are relative to the FIXTURE REFERENCE DATE 2026-08-03 (⚖-R24), never to
+# today's calendar — the lights named in the comments are what this config resolves to when the
+# bake is given that reference date (CIR-ADAPT-REFERENCE-DATE).
 person: Alex Example
 rings:
   - id: self
@@ -10,7 +14,7 @@ rings:
         label: Sleep
         guardrail: "Lights out by 23:00 on weeknights"
         status:
-          freshness: # key example: freshness inside window (🟢 when data is recent)
+          freshness: # key example: freshness inside window (🟢 at the reference date — age 2, yellow_after 7)
             source: notes/sleep-log.md
             yellow_after: 7
             red_after: 30
@@ -18,7 +22,7 @@ rings:
         label: Quarterly labs
         guardrail: "Blood panel every 90 days"
         status:
-          freshness: # key example: freshness very stale (🔴 with an old date)
+          freshness: # key example: freshness very stale (🔴 at the reference date — age 200, red_after 190)
             source: notes/labs.md
             yellow_after: 100
             red_after: 190
