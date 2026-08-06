@@ -1,0 +1,10 @@
+# Approved intent + agent behavior are human-gated: a MASTER-targeted PR touching these paths
+# requires a code-owner review before merge (agents propose freely; a human reads the diff).
+# Enforcement is the required-approval ruleset's require_code_owner_review flag
+# (homelab tofu/github/ — master-targeted only after the 2026-08-06 split), so child PRs
+# merging into goal/** integration branches stay bot-approved: the fan-out must not
+# serialise on a human. The goal→master assembly PR always touches /specs/ (the provenance
+# requirement) and therefore always waits for the code owner.
+/specs/     @RasmusSoot
+/.agents/   @RasmusSoot
+/CODEOWNERS @RasmusSoot
