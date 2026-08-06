@@ -19,3 +19,6 @@ specs-site/
 .pytest_cache/
 __pycache__/
 *.egg-info/
+
+# Bake output (the artifact is built, never committed — CIR-BAKE-ATOMIC-WRITE)
+dist/
