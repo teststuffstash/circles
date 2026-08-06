@@ -599,7 +599,10 @@ def render_page(artifact: dict) -> str:
     script = _render_script()
 
     # Inline the artifact as JSON for testability (CIR-BAKE-SELF-CONTAINED)
-    artifact_json = json.dumps(artifact, indent=2, ensure_ascii=False)
+    # Escape </script> sequences in string content to prevent premature script tag
+    # closure (CIR-BAKE-SELF-CONTAINED#script-escape).  \/ is a valid JSON escape
+    # sequence equivalent to /, so the JSON data round-trips correctly.
+    artifact_json = json.dumps(artifact, indent=2, ensure_ascii=False).replace("</", "<\\/")
 
     return f"""<!doctype html>
 <html lang="en">
