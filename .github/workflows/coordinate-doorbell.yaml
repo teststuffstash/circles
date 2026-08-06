@@ -1,0 +1,28 @@
+# FU-143 point 7 — the merge doorbell. A merged PR is the loop's slowest edge: the ride's own
+# doorbell rang at PR-OPEN time, auto-merge fires minutes later on the reviewer's approval, and
+# nothing rings then — so "a child landed" waited for the next */10 coordinate cron. For the goal
+# lane that wait sits INSIDE every hop of the chain (child merges → FU-143 closeout → goal-review
+# → sibling dispatch), and 2026-08-05 measured it: 6+ hours wall-clock for ~30 minutes of work.
+# This collapses it to seconds: merged PR → in-cluster ARC runner → /coordinate → scan; the
+# widened C6 (homelab e66b421) is what the notification now has to trigger.
+#
+# Same pattern as homelab renovate.yaml/devbox-update.yaml (in-cluster runner → ClusterIP svc).
+# Payload = the graduated-stack shape from homelab aa68c95: unit "-" EXPLICITLY (a missing
+# body.unit key logs a permanent Sensor error line — the noise floor that hid homelab#103).
+# A false wake costs one scan; the coordinator-scan mutex serialises against the cron.
+name: coordinate-doorbell
+on:
+  pull_request:
+    types: [closed]
+jobs:
+  ring:
+    if: github.event.pull_request.merged == true
+    runs-on: homelab-ephemeral
+    timeout-minutes: 5
+    steps:
+      - name: Ring the coordinator doorbell
+        run: |
+          curl -m 5 -s -X POST -H "Content-Type: application/json" \
+            -d '{"stack":"circles","loop_ns":"circles-agents","unit":"-"}' \
+            http://agent-loop-eventsource-svc.agent-coordinator.svc.cluster.local:12000/coordinate \
+            >/dev/null || true
