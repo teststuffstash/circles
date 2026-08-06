@@ -447,12 +447,60 @@ class TestRenderGreyVisible:
 
     def test_grey_reason_distinguishable(self) -> None:
         """CIR-RENDER-GREY-VISIBLE#grey-reason-distinguishable —
-        by-choice and not-evaluated are distinguishable on the page."""
+        by-choice and not-evaluated are distinguishable on the page via the
+        a11y-table Detail cell text and the separated summary counts."""
         html = _render_fixture()
-        # The a11y table shows detail lines with grey reasons
-        assert "not evaluated" in html
-        # by-choice items show "unmonitored" in the table
-        assert "unmonitored" in html
+
+        # 1. The a11y-table Detail cells differ between by-choice and not-evaluated
+        #    grey items (CIR-RENDER-A11Y-TABLE + ⚖-R51).
+        #    Exercise (by-choice) has detail "unmonitored" without the
+        #    "not evaluated in this build" suffix.
+        #    Sleep/labs/plants (not-evaluated) include "not evaluated in this build".
+        # Extract the a11y table rows from the HTML.
+        import re
+        table_match = re.search(r'<table>(.*?)</table>', html, re.DOTALL)
+        assert table_match is not None
+        table_html = table_match.group(1)
+        rows = re.findall(r'<tr>(.*?)</tr>', table_html)
+        grey_rows = []
+        for row in rows:
+            tds = re.findall(r'<td>(.*?)</td>', row)
+            if len(tds) >= 4 and tds[2] == "unmonitored":
+                grey_rows.append((tds[1], tds[3]))
+        # We should have grey items in the table
+        assert len(grey_rows) >= 2, f"Expected at least 2 grey rows, got {len(grey_rows)}"
+
+        # Find a by-choice item and a not-evaluated item
+        by_choice_rows = [r for r in grey_rows if r[1] == "unmonitored"]
+        not_eval_rows = [r for r in grey_rows if "not evaluated in this build" in r[1]]
+        assert len(by_choice_rows) >= 1, \
+            f"Expected at least one by-choice grey row, got {len(by_choice_rows)}. " \
+            f"Grey rows: {grey_rows}"
+        assert len(not_eval_rows) >= 1, \
+            f"Expected at least one not-evaluated grey row, got {len(not_eval_rows)}. " \
+            f"Grey rows: {grey_rows}"
+
+        # The Detail cells must differ (distinguishable mechanism)
+        assert by_choice_rows[0][1] != not_eval_rows[0][1], \
+            f"by-choice detail '{by_choice_rows[0][1]}' should differ from " \
+            f"not-evaluated detail '{not_eval_rows[0][1]}'"
+
+        # 2. The summary separates grey-reason counts (summary-separates-grey-reasons)
+        assert "unmonitored" in html  # the by-choice count label
+        assert "not evaluated" in html  # the not-evaluated count label
+
+        # 3. Grey cells carry the grey reason in their aria-label
+        grey_cells = re.findall(
+            r'data-status="grey"[^>]*aria-label="([^"]+)"',
+            html,
+        )
+        assert len(grey_cells) >= 2
+        has_by_choice_aria = any("by choice" in c for c in grey_cells)
+        has_not_eval_aria = any("not evaluated" in c for c in grey_cells)
+        assert has_by_choice_aria, \
+            f"Expected a grey cell with aria-label containing 'by choice', got: {grey_cells}"
+        assert has_not_eval_aria, \
+            f"Expected a grey cell with aria-label containing 'not evaluated', got: {grey_cells}"
 
     def test_grey_surface_proportion(self) -> None:
         """CIR-RENDER-GREY-VISIBLE#grey-surface-proportion —
@@ -552,11 +600,40 @@ class TestRenderSummary:
 
     def test_summary_separates_grey_reasons(self) -> None:
         """CIR-RENDER-SUMMARY#summary-separates-grey-reasons —
-        by-choice and not-evaluated are counted separately."""
+        by-choice and not-evaluated are counted separately in the summary
+        rather than lumped into a single count."""
         html = _render_fixture()
         # The fixture has 1 by-choice (exercise) and 3 not-evaluated (sleep, labs, plants)
-        assert "unmonitored" in html
-        assert "not evaluated" in html
+        # The centre disc summary shows them as separate counts.
+        # The summary text is a single line like:
+        #   "2 ok · 1 attention · 1 act · 1 unmonitored · 3 not evaluated"
+        import re
+        # Find the summary text element (the second text in the SVG centre disc)
+        summary_matches = re.findall(
+            r'<text[^>]*>([^<]*)</text>',
+            html,
+        )
+        # The summary is the second text element (after the person name)
+        assert len(summary_matches) >= 2, \
+            f"Expected at least 2 text elements, got {len(summary_matches)}"
+        summary_text = summary_matches[1]
+
+        # The summary must contain both "unmonitored" and "not evaluated" as
+        # separate count entries, not lumped as "4 unmonitored"
+        assert "unmonitored" in summary_text, \
+            f"Summary should contain by-choice count, got: {summary_text}"
+        assert "not evaluated" in summary_text, \
+            f"Summary should contain not-evaluated count, got: {summary_text}"
+
+        # Verify the counts are correct for the fixture
+        assert "1 unmonitored" in summary_text, \
+            f"Expected '1 unmonitored' in summary, got: {summary_text}"
+        assert "3 not evaluated" in summary_text, \
+            f"Expected '3 not evaluated' in summary, got: {summary_text}"
+
+        # Verify they are separate entries (not "4 unmonitored")
+        assert "4 unmonitored" not in summary_text, \
+            f"Summary should not lump grey reasons, got: {summary_text}"
 
     def test_summary_is_not_a_rollup(self) -> None:
         """CIR-RENDER-SUMMARY#summary-is-not-a-rollup —
@@ -921,14 +998,34 @@ class TestFixtureAcceptance:
 
     def test_three_greys_distinguishable(self) -> None:
         """CIR-RENDER-GREY-VISIBLE#grey-reason-distinguishable —
-        the three grey reasons are told apart on the page."""
+        the three grey reasons are told apart on the page via the a11y-table
+        Detail cell text and the separated summary counts,
+        not via the arc fill colour (CIR-DATA-GREY-REASON rules this out)."""
         html = _render_fixture()
-        # by-choice appears in the summary
+
+        # 1. The page summary separates grey-reason counts rather than lumping
+        #    them — by-choice and not-evaluated appear with their individual counts
+        #    (summary-separates-grey-reasons is in TestRenderSummary).
+        #    The centre disc text includes both "unmonitored" and "not evaluated".
         assert "unmonitored" in html
-        # not-evaluated appears in the summary
         assert "not evaluated" in html
-        # The detail lines carry the grey reason
-        assert "not evaluated in this build" in html
+
+        # 2. The a11y-table Detail cells carry the grey reason.
+        #    Exercise (by-choice): detail is "unmonitored"
+        #    Sleep/labs/plants (not-evaluated): detail includes "not evaluated in this build"
+        import re
+        table_match = re.search(r'<table>(.*?)</table>', html, re.DOTALL)
+        assert table_match is not None
+        table_html = table_match.group(1)
+        # Check that at least one by-choice row and one not-evaluated row exist
+        assert "unmonitored</td>" in table_html
+
+        # 3. All grey cells use identical fill (#9E9E9E) — CIR-DATA-GREY-REASON
+        grey_fills = re.findall(r'data-status="grey"[^>]*>\s*<path[^>]*fill="([^"]+)"', html)
+        assert len(grey_fills) >= 2, f"Expected at least 2 grey fills, got {len(grey_fills)}"
+        # All grey fills must be identical (#9E9E9E, excluding the empty grey band)
+        for f in grey_fills:
+            assert f == "#9E9E9E", f"Grey cell fill '{f}' should be #9E9E9E (all grey reasons share the same colour)"
 
 
 # ===========================================================================

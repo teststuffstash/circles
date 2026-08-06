@@ -292,11 +292,21 @@ def _render_svg(artifact: dict) -> str:
             d = _arc_path(start_angle, end_angle, inner_r, outer_r)
             lx, ly, lrot = _label_transform(start_angle, end_angle, inner_r, outer_r)
 
-            # Arc cell
+            # Build aria-label: include grey reason for grey cells
+            # (CIR-RENDER-GREY-VISIBLE — per-cell hover-free path for screen-reader users)
+            aria_label = f"{label}, {STATUS_WORDS.get(status, status)}, ring {html.escape(ring.get('label', ''))}"
+            if status == "grey":
+                reason = item.get("grey_reason", "")
+                if reason == "by-choice":
+                    aria_label += ", by choice"
+                elif reason == "by-failure":
+                    aria_label += ", adapter failing"
+                else:
+                    aria_label += ", not evaluated"
             parts.append(
                 f'<g class="cell" data-item="{full_id}" data-detail="{detail_line}" '
                 f'data-label="{label}" data-status="{status}" '
-                f'tabindex="0" role="button" aria-label="{label}, {STATUS_WORDS.get(status, status)}, ring {html.escape(ring.get("label", ""))}">'
+                f'tabindex="0" role="button" aria-label="{aria_label}">'
             )
             parts.append(
                 f'<path d="{d}" fill="{color}" stroke="#fff" stroke-width="0.5"/>'

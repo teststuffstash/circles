@@ -72,9 +72,9 @@ styling that reads as decoration. A fully grey ring renders as a solid grey band
 | grey-distinct-from-statuses | a ring containing all four statuses | ⚪ distinguishable from each at a glance, on screen and in greyscale print |
 | grey-not-deemphasized | any ⚪ cell | same opacity, stroke and label treatment as coloured cells |
 | grey-surface-proportion | the fixture's `self/exercise` item | the grey arc occupies its full share of the ring — its size is its honesty |
-| grey-reason-distinguishable | one `by-choice` cell and one tooling-caused (`by-failure` / `not-evaluated`) cell | chosen silence and tooling-caused grey are distinguishable without hovering ([`CIR-DATA-GREY-REASON`](../data/status-resolution.md)) |
+| grey-reason-distinguishable | one `by-choice` cell and one tooling-caused (`by-failure` / `not-evaluated`) cell | chosen silence and tooling-caused grey are distinguishable without hovering via the text alternative (a11y-table Detail cell text differs per reason) and the separated summary counts ([`CIR-DATA-GREY-REASON`](../data/status-resolution.md)) |
 
-_Evidence: none yet — unverified._
+_Evidence: `test_grey_reason_distinguishable` asserts a11y-table Detail cells differ between `by-choice` and `not-evaluated` items, and the summary separates the counts. `test_three_greys_distinguishable` asserts all grey cells use identical fill (`#9E9E9E`) per `CIR-DATA-GREY-REASON` while the a11y table and summary distinguish the reasons. `test_summary_separates_grey_reasons` asserts the centre disc summary shows separate counts for `by-choice` and `not-evaluated`._
 
 ## CIR-RENDER-STATUS-ENCODING — status is never colour alone
 
