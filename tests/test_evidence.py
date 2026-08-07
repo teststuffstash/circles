@@ -80,11 +80,11 @@ class TestEvidenceDedup:
         3 tests, 2 distinct case ids → count should be 2.
         """
         cases = [
-            {"name": "[CIR-X#case-a]", "status": "passed"},
-            {"name": "[CIR-X#case-a]", "status": "passed"},
-            {"name": "[CIR-X#case-b]", "status": "passed"},
+            {"name": "[CIR-FOO-BAR#case-a]", "fullName": "test.test_case_a", "status": "passed"},
+            {"name": "[CIR-FOO-BAR#case-a]", "fullName": "test.test_case_a_retry", "status": "passed"},
+            {"name": "[CIR-FOO-BAR#case-b]", "fullName": "test.test_case_b", "status": "passed"},
         ]
-        block = _build_evidence_block("CIR-X", cases, "../report/")
+        block = _build_evidence_block("CIR-FOO-BAR", cases, "../report/")
         assert "2 test case(s)" in block, (
             f"Expected count 2 in summary, got block:\n{block}"
         )
