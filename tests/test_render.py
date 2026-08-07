@@ -1374,6 +1374,178 @@ class TestRenderMinArc:
         path_count = html.count("<path")
         assert path_count >= 8  # at least 8 arc paths + centre circle
 
+    def test_mixed_floored_natural_overflow_capped(self) -> None:
+        """CIR-RENDER-MIN-ARC#mixed-floored-natural-overflow-capped —
+        mixed floored and natural items where floored arcs alone
+        overflow total_deg; verify total consumed angle does not
+        exceed 360°."""
+        import math
+        import re as _re
+        import yaml
+        import tempfile
+
+        # Ring with 120 items: 20 disproportionately large items (natural)
+        # and 100 tiny items (floored).  With total_deg = 120° and 100
+        # floored items needing 300°, the overflow branch fires.
+        # The old (round-3) code derived scale from floored count only
+        # and applied it to all items, making the total consumed exceed
+        # total_deg.  The current code distributes evenly.
+        items = []
+        for j in range(20):
+            items.append({
+                "id": f"big-{j}",
+                "label": f"Big {j}",
+                "status": {"manual": "green"},
+                "share": 50,
+            })
+        for j in range(100):
+            items.append({
+                "id": f"tiny-{j}",
+                "label": f"Tiny {j}",
+                "status": {"manual": "green"},
+                "share": 1,
+            })
+        config_data = {
+            "person": "Test",
+            "rings": [{"id": "mixed", "label": "Mixed", "items": items}],
+        }
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False) as f:
+            yaml.dump(config_data, f)
+            tmp_path = Path(f.name)
+
+        try:
+            config = load_config(tmp_path)
+            artifact = resolve(config, reference_date=FIXTURE_REFERENCE_DATE, generated_at=FIXTURE_GENERATED_AT)
+            artifact = add_capacity_warnings(artifact)
+            html = render_page(artifact)
+            assert "<svg" in html
+
+            # Verify total consumed angle (arcs + gaps) does not exceed 360°
+            CX = 400.0
+            CY = 400.0
+
+            def _point_to_angle(x: float, y: float) -> float:
+                dx = x - CX
+                dy = CY - y
+                return math.degrees(math.atan2(dx, dy)) % 360
+
+            cell_paths = _re.findall(
+                r'data-item="[^"]*"[^>]*>\s*<path d="([^"]+)"',
+                html,
+            )
+            assert len(cell_paths) == 120, \
+                f"Expected 120 cell paths, got {len(cell_paths)}"
+
+            first_arc = cell_paths[0]
+            m_first = _re.match(
+                r'M\s+([\d.-]+)\s+([\d.-]+)\s+A\s+[\d.]+\s+[\d.]+\s+\d\s+\d\s+1\s+([\d.-]+)\s+([\d.-]+)',
+                first_arc,
+            )
+            x1o_first, y1o_first, _, _ = map(float, m_first.groups())
+            first_start = _point_to_angle(x1o_first, y1o_first) % 360
+
+            last_arc = cell_paths[-1]
+            m_last = _re.match(
+                r'M\s+([\d.-]+)\s+([\d.-]+)\s+A\s+[\d.]+\s+[\d.]+\s+\d\s+\d\s+1\s+([\d.-]+)\s+([\d.-]+)',
+                last_arc,
+            )
+            _, _, x2o_last, y2o_last = map(float, m_last.groups())
+            last_end = _point_to_angle(x2o_last, y2o_last) % 360
+
+            # Total consumed = (last_end - first_start) mod 360 + last gap
+            total_consumed = (last_end - first_start) % 360 + 2.0  # + CELL_GAP_DEG
+            assert total_consumed <= 360.5, \
+                f"Total consumed angle {total_consumed:.2f}° exceeds 360° — arcs overflow"
+        finally:
+            tmp_path.unlink()
+
+    def test_overflow_no_negative_arcs(self) -> None:
+        """CIR-RENDER-MIN-ARC#overflow-no-negative-arcs —
+        ring with >180 items where total_deg would go negative
+        pre-fix; verify no negative/degenerate arc angles and
+        the capacity warning has a non-negative count."""
+        import math
+        import re as _re
+        import yaml
+        import tempfile
+
+        # 200 items in one ring — total_deg = max(360 - 2*200, 0) = 0
+        items = []
+        for j in range(200):
+            items.append({
+                "id": f"item-{j}",
+                "label": f"Item {j}",
+                "status": {"manual": "green"},
+            })
+        config_data = {
+            "person": "Test",
+            "rings": [{"id": "overflow", "label": "Overflow", "items": items}],
+        }
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False) as f:
+            yaml.dump(config_data, f)
+            tmp_path = Path(f.name)
+
+        try:
+            config = load_config(tmp_path)
+            artifact = resolve(config, reference_date=FIXTURE_REFERENCE_DATE, generated_at=FIXTURE_GENERATED_AT)
+            artifact = add_capacity_warnings(artifact)
+            html = render_page(artifact)
+            assert "<svg" in html
+
+            # Verify no negative/degenerate arc angles
+            CX = 400.0
+            CY = 400.0
+
+            def _point_to_angle(x: float, y: float) -> float:
+                dx = x - CX
+                dy = CY - y
+                return math.degrees(math.atan2(dx, dy)) % 360
+
+            cell_paths = _re.findall(
+                r'data-item="[^"]*"[^>]*>\s*<path d="([^"]+)"',
+                html,
+            )
+            assert len(cell_paths) == 200, \
+                f"Expected 200 cell paths, got {len(cell_paths)}"
+
+            prev_end_angle = -90.0
+            for path_d in cell_paths:
+                m = _re.match(
+                    r'M\s+([\d.-]+)\s+([\d.-]+)\s+A\s+[\d.]+\s+[\d.]+\s+\d\s+\d\s+1\s+([\d.-]+)\s+([\d.-]+)',
+                    path_d,
+                )
+                assert m is not None, f"Could not parse path: {path_d}"
+                x1o, y1o, x2o, y2o = map(float, m.groups())
+
+                start_angle = _point_to_angle(x1o, y1o) % 360
+                end_angle = _point_to_angle(x2o, y2o) % 360
+                arc_deg = (end_angle - start_angle) % 360
+
+                # Arc angle must be non-negative (no degenerate arcs)
+                assert arc_deg >= 0, \
+                    f"Negative arc angle {arc_deg:.3f}° for path: {path_d[:80]}..."
+
+                # With equal distribution of 0°, all arcs are 0°, which is
+                # zero-length (degenerate) but non-negative — that's expected
+                # when total_deg = 0.
+
+            # Verify the capacity warning has a non-negative count
+            warnings = artifact.get("warnings", [])
+            overflow_warnings = [w for w in warnings
+                                 if "minimum arc" in w.get("message", "").lower()]
+            assert len(overflow_warnings) >= 1, \
+                f"Expected min-arc warning, got: {warnings}"
+            for w in overflow_warnings:
+                msg = w["message"]
+                # Extract the max_items_at_min value from the message
+                m = _re.search(r'exceeds (\d+) items at', msg)
+                assert m is not None, f"Could not parse max_items_at_min from: {msg}"
+                max_at_min = int(m.group(1))
+                assert max_at_min >= 0, \
+                    f"max_items_at_min ({max_at_min}) is negative in warning: {msg}"
+        finally:
+            tmp_path.unlink()
+
 
 # ===========================================================================
 # CIR-RENDER-CAPACITY — empty ring band

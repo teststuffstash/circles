@@ -3,14 +3,14 @@
   "report_path": "../specs-site/evidence",
   "requirements": {
     "CIR-ADAPT-COMMAND": [
+      "command-executable-bit-at-validation",
       "command-argv-array-required",
-      "command-executable-exists-at-validation",
-      "command-executable-bit-at-validation"
+      "command-executable-exists-at-validation"
     ],
     "CIR-ADAPT-MANUAL": [
-      "manual-returns-declared-light",
+      "manual-has-no-data-date",
       "manual-available-in-every-phase",
-      "manual-has-no-data-date"
+      "manual-returns-declared-light"
     ],
     "CIR-BAKE-ARTIFACT": [
       "warnings-empty-array",
@@ -21,8 +21,8 @@
       "detail-line-is-baked"
     ],
     "CIR-BAKE-DETERMINISM": [
-      "two-bakes-agree",
-      "ordering-is-stable"
+      "ordering-is-stable",
+      "two-bakes-agree"
     ],
     "CIR-BAKE-EXPOSURE": [
       "no-absolute-host-paths"
@@ -40,8 +40,8 @@
     ],
     "CIR-BAKE-STATUS-VALUES": [
       "status-never-display-words",
-      "status-wire-vocabulary",
-      "status-never-emoji"
+      "status-never-emoji",
+      "status-wire-vocabulary"
     ],
     "CIR-BAKE-VERSION": [
       "version-recognized"
@@ -51,104 +51,104 @@
       "warning-carries-cell-ref"
     ],
     "CIR-DATA-DETAIL-LINE": [
-      "detail-line-is-plain-text",
-      "no-guardrail",
       "manual-item-has-no-data-date",
-      "full-detail-line"
+      "detail-line-is-plain-text",
+      "full-detail-line",
+      "no-guardrail"
     ],
     "CIR-DATA-FAILURE-IS-GREY": [
       "failure-never-green",
       "failure-never-red"
     ],
     "CIR-DATA-FRESHNESS-THRESHOLDS": [
-      "threshold-fractional",
       "thresholds-equal",
-      "thresholds-inverted",
       "threshold-zero",
       "threshold-missing",
-      "thresholds-valid"
+      "thresholds-valid",
+      "thresholds-inverted",
+      "threshold-fractional"
     ],
     "CIR-DATA-FRESHNESS-WINDOW": [
       "window-mid",
-      "window-inside",
-      "window-just-past-red",
       "window-far-past-red",
-      "window-at-red-boundary",
       "window-just-past-yellow",
-      "window-at-yellow-boundary"
+      "window-at-yellow-boundary",
+      "window-just-past-red",
+      "window-at-red-boundary",
+      "window-inside"
     ],
     "CIR-DATA-GREY-REASON": [
-      "unmonitored-by-choice",
-      "unmonitored-not-evaluated"
+      "unmonitored-not-evaluated",
+      "unmonitored-by-choice"
     ],
     "CIR-DATA-IDENTITY": [
-      "id-character-set",
-      "id-with-space-or-slash",
       "id-missing",
-      "same-id-different-rings"
+      "same-id-different-rings",
+      "id-with-space-or-slash",
+      "id-character-set"
     ],
     "CIR-DATA-NO-AGGREGATION": [
-      "inner-red-outer-untouched",
-      "centre-carries-no-status"
+      "centre-carries-no-status",
+      "inner-red-outer-untouched"
     ],
     "CIR-DATA-RESOLUTION-TIME": [
-      "p0-manual-roundtrip",
       "one-reference-date-per-bake",
-      "page-never-reevaluates"
+      "page-never-reevaluates",
+      "p0-manual-roundtrip"
     ],
     "CIR-DATA-SCHEMA-ADAPTER-SLOT": [
-      "status-two-adapters",
-      "manual-invalid-word",
+      "status-unknown-adapter",
       "status-absent",
-      "status-unknown-adapter"
+      "manual-invalid-word",
+      "status-two-adapters"
     ],
     "CIR-DATA-SCHEMA-ITEM": [
-      "item-minimal",
+      "share-default",
       "note-absent",
       "guardrail-absent",
-      "share-default",
+      "item-minimal",
       "item-id-duplicate-in-ring"
     ],
     "CIR-DATA-SCHEMA-LINK": [
-      "link-root-relative",
+      "link-javascript-scheme",
       "link-scheme-relative",
-      "link-data-scheme",
-      "link-https",
-      "link-bare-relative",
       "link-http",
-      "link-javascript-scheme"
+      "link-https",
+      "link-data-scheme",
+      "link-bare-relative",
+      "link-root-relative"
     ],
     "CIR-DATA-SCHEMA-RING": [
-      "ring-id-duplicate",
-      "ring-label-missing",
-      "ring-label-glyphs",
       "ring-id-slug",
-      "ring-id-not-slug"
+      "ring-label-glyphs",
+      "ring-label-missing",
+      "ring-id-not-slug",
+      "ring-id-duplicate"
     ],
     "CIR-DATA-SCHEMA-TOPLEVEL": [
-      "rings-order-is-inside-out",
-      "timezone-valid",
       "person-missing",
       "timezone-omitted",
+      "rings-order-is-inside-out",
       "minimal-valid-config",
-      "rings-empty"
+      "rings-empty",
+      "timezone-valid"
     ],
     "CIR-DATA-SCHEMA-VERSION": [
       "version-absent-defaults-zero",
-      "version-from-the-future",
-      "version-matches"
+      "version-matches",
+      "version-from-the-future"
     ],
     "CIR-DATA-SHARE": [
-      "share-zero",
+      "shares-mixed",
+      "shares-equal-halves",
       "share-negative",
       "shares-mixed-fractional",
-      "shares-mixed",
       "shares-absent-equal",
-      "shares-equal-halves"
+      "share-zero"
     ],
     "CIR-DATA-SOURCE-PATH": [
-      "source-parent-traversal",
-      "source-absolute-path"
+      "source-absolute-path",
+      "source-parent-traversal"
     ],
     "CIR-DATA-STATUS-MANUAL-VALUES": [
       "manual-lowercase-only",
@@ -156,17 +156,17 @@
     ],
     "CIR-DATA-STATUS-RESOLUTION": [
       "manual-yellow",
-      "manual-red",
-      "adapter-not-evaluated-this-phase",
       "manual-green",
-      "no-adapter-declared"
+      "no-adapter-declared",
+      "manual-red",
+      "adapter-not-evaluated-this-phase"
     ],
     "CIR-DATA-VALIDATION": [
-      "unknown-item-key",
       "empty-ring",
-      "unknown-status-key",
+      "one-bad-item-fails-bake",
       "unknown-toplevel-key",
-      "one-bad-item-fails-bake"
+      "unknown-item-key",
+      "unknown-status-key"
     ],
     "CIR-PROC-BAKE-ONE-PATH": [
       "bake-same-code-both-triggers"
@@ -180,9 +180,9 @@
       "fixture-validates-against-the-schema"
     ],
     "CIR-RENDER-A11Y-TABLE": [
-      "a11y-table-states-status-in-words",
       "a11y-table-without-js",
-      "a11y-table-complete"
+      "a11y-table-complete",
+      "a11y-table-states-status-in-words"
     ],
     "CIR-RENDER-A4": [
       "print-margins-are-declared",
@@ -196,21 +196,21 @@
       "budget-built-page-is-small"
     ],
     "CIR-RENDER-BOOT-FAILURE": [
-      "boot-failure-payload-absent",
-      "boot-failure-empty-rings"
+      "boot-failure-empty-rings",
+      "boot-failure-payload-absent"
     ],
     "CIR-RENDER-CAPACITY": [
       "capacity-exceeded-ring-count",
-      "capacity-inside-envelope",
       "capacity-exceeded-item-count",
       "capacity-minimum-page",
-      "capacity-empty-ring-band",
-      "capacity-at-limit"
+      "capacity-inside-envelope",
+      "capacity-at-limit",
+      "capacity-empty-ring-band"
     ],
     "CIR-RENDER-CHROME": [
       "chrome-ring-key-order",
-      "chrome-banner-hidden-when-clean",
-      "chrome-idle-detail-strip"
+      "chrome-idle-detail-strip",
+      "chrome-banner-hidden-when-clean"
     ],
     "CIR-RENDER-CLICK": [
       "click-no-destination"
@@ -219,22 +219,22 @@
       "stamp-verbatim"
     ],
     "CIR-RENDER-GREY-VISIBLE": [
-      "grey-surface-proportion",
-      "grey-reason-distinguishable"
+      "grey-reason-distinguishable",
+      "grey-surface-proportion"
     ],
     "CIR-RENDER-HOVER": [
-      "hover-full-line",
-      "hover-leave-resets"
+      "hover-leave-resets",
+      "hover-full-line"
     ],
     "CIR-RENDER-KEYBOARD": [
-      "keyboard-accessible-name",
-      "keyboard-focus-shows-detail",
       "keyboard-focus-visible",
-      "keyboard-tab-order"
+      "keyboard-tab-order",
+      "keyboard-focus-shows-detail",
+      "keyboard-accessible-name"
     ],
     "CIR-RENDER-LABELS": [
-      "label-glyphs-passthrough",
-      "label-inside-arc"
+      "label-inside-arc",
+      "label-glyphs-passthrough"
     ],
     "CIR-RENDER-LEGEND": [
       "legend-all-four",
@@ -242,25 +242,27 @@
     ],
     "CIR-RENDER-MIN-ARC": [
       "min-arc-exceeded-by-ring",
-      "min-arc-tiny-share-still-drawn"
+      "mixed-floored-natural-overflow-capped",
+      "min-arc-tiny-share-still-drawn",
+      "overflow-no-negative-arcs"
     ],
     "CIR-RENDER-NO-EGRESS": [
-      "fonts-are-system-or-inlined",
-      "no-external-requests-at-runtime",
       "page-works-from-file-url",
+      "no-external-requests-at-runtime",
+      "fonts-are-system-or-inlined",
       "no-third-party-origins-in-markup"
     ],
     "CIR-RENDER-NO-JS": [
       "no-js-detail-lines-present",
-      "no-js-text-alternative-renders",
-      "no-js-is-not-blank"
+      "no-js-is-not-blank",
+      "no-js-text-alternative-renders"
     ],
     "CIR-RENDER-ONE-SCREEN": [
       "one-screen-reference"
     ],
     "CIR-RENDER-PALETTE": [
-      "palette-exact-fills",
-      "palette-label-contrast"
+      "palette-label-contrast",
+      "palette-exact-fills"
     ],
     "CIR-RENDER-PRINT-COLOR": [
       "print-stylesheet-is-inline",
@@ -277,8 +279,8 @@
       "ring-order-innermost-first"
     ],
     "CIR-RENDER-RING-PARTITION": [
-      "partition-full-circle-per-ring",
-      "partition-ring-boundaries-visible"
+      "partition-ring-boundaries-visible",
+      "partition-full-circle-per-ring"
     ],
     "CIR-RENDER-RING-THICKNESS": [
       "thickness-non-increasing-outward",
@@ -293,9 +295,9 @@
       "status-word-in-a11y-name"
     ],
     "CIR-RENDER-SUMMARY": [
-      "summary-is-not-a-rollup",
+      "summary-separates-grey-reasons",
       "summary-matches-the-picture",
-      "summary-separates-grey-reasons"
+      "summary-is-not-a-rollup"
     ],
     "CIR-RENDER-TOUCH": [
       "touch-target-size"
