@@ -137,19 +137,30 @@ def _build_evidence_block(
     choice — not SVG, not framework-specific). A reviewer or agent can read the
     fragment's claims without rendering it.
     """
+    # Sort by case id for stable, deterministic output and deduplicate by case id.
+    # A row id is the case's identity (CIR-PROC-TEST-ROWS: case id == row id), so
+    # two tests citing the same row id are one row — not a duplicate evidence line.
+    # The summary count reflects the deduplicated case rows, not raw test count.
+    unique_cases: list[dict] = []
+    seen: set[str] = set()
+    for c in sorted(cases, key=lambda c: _extract_case_id(c)):
+        case_id = _extract_case_id(c)
+        if case_id in seen:
+            continue
+        seen.add(case_id)
+        unique_cases.append(c)
+
     lines: list[str] = []
 
     lines.append("<details class=\"evidence-block\">")
-    lines.append(f"<summary>Evidence: {len(cases)} test case(s) — {WORLD}</summary>")
+    lines.append(f"<summary>Evidence: {len(unique_cases)} test case(s) — {WORLD}</summary>")
     lines.append("")
     lines.append(f"**Requirement:** {req_id} — **World:** {WORLD}")
     lines.append("")
     lines.append("| Case ID | Status | Detail |")
     lines.append("|---------|--------|--------|")
 
-    # Sort by case id for stable output
-    sorted_cases = sorted(cases, key=lambda c: c.get("fullName", ""))
-    for c in sorted_cases:
+    for c in unique_cases:
         case_id = _extract_case_id(c)
 
         status = c.get("status", "unknown")
@@ -298,8 +309,12 @@ def main() -> int:
     }
     for req_id, cases in sorted(grouped.items()):
         case_ids: list[str] = []
+        seen: set[str] = set()
         for c in cases:
             case_id = _extract_case_id(c)
+            if case_id in seen:
+                continue
+            seen.add(case_id)
             case_ids.append(case_id)
         manifest["requirements"][req_id] = case_ids
 

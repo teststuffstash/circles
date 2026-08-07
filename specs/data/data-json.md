@@ -131,6 +131,7 @@ artifact tests and future consumers read.
 | page-renders-with-no-network | `index.html` opened from `file://` | full page, all statuses |
 | page-makes-no-runtime-requests | page loaded with all non-document requests blocked | renders identically; zero requests ([`CIR-RENDER-NO-EGRESS`](../render/layout.md)) |
 | inlined-data-equals-the-file | `index.html` vs `data.json` from one bake | identical data |
+| page-has-both-artifacts | one bake run | `index.html` contains both the SVG chart and the inlined `<script id="artifact-data">` |
 | page-survives-save-and-mail | save-as from a browser | still renders, still prints |
 
 **⚖-R4 — inline the data, or fetch it?** Options: (a) inline, plus a sibling `data.json`;
@@ -219,13 +220,12 @@ as "no banner". (a) alone leaves the product's own dangerous-green undefended on
 bake exists; (b) puts a number in the page that only the pipeline knows.
 
 <details class="evidence-block">
-<summary>Evidence: 2 test case(s) — alex</summary>
+<summary>Evidence: 1 test case(s) — alex</summary>
 
 **Requirement:** CIR-BAKE-STALE-SELF — **World:** alex
 
 | Case ID | Status | Detail |
 |---------|--------|--------|
-| `TestBakeStaleAfterHours#test_stale_after_hours_null` | PASS | — |
 | `no-threshold-no-banner` | PASS | — |
 
 [View full report](../../specs-site/evidence)

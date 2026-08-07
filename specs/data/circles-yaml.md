@@ -196,21 +196,15 @@ resolution; (c) items declared once in a top-level map and *referenced* by rings
 buys nothing until someone actually has a shared concern.
 
 <details class="evidence-block">
-<summary>Evidence: 10 test case(s) — alex</summary>
+<summary>Evidence: 4 test case(s) — alex</summary>
 
 **Requirement:** CIR-DATA-IDENTITY — **World:** alex
 
 | Case ID | Status | Detail |
 |---------|--------|--------|
-| `id-character-set-digits` | PASS | — |
-| `id-character-set-single-char` | PASS | — |
-| `id-character-set-simple` | PASS | — |
-| `id-character-set-hyphen` | PASS | — |
-| `id-uppercase` | PASS | — |
-| `id-empty` | PASS | — |
-| `id-with-slash` | PASS | — |
-| `id-with-space` | PASS | — |
+| `id-character-set` | PASS | — |
 | `id-missing` | PASS | — |
+| `id-with-space-or-slash` | PASS | — |
 | `same-id-different-rings` | PASS | — |
 
 [View full report](../../specs-site/evidence)
@@ -255,6 +249,7 @@ loudly at bake time, not silently at click time.
 | row id | inputs | expected |
 |---|---|---|
 | link-https | `link: https://example.test/labs` | accepted |
+| link-http | `link: http://example.test/page` | accepted |
 | link-root-relative | `link: /details/self-sleep.html` | accepted |
 | link-javascript-scheme | `link: javascript:alert(1)` | config error, bake fails |
 | link-data-scheme | `link: data:text/html,…` | config error, bake fails |
@@ -276,13 +271,13 @@ answers here — the served page, or the config directory that every other path 
 
 | Case ID | Status | Detail |
 |---------|--------|--------|
-| `link-javascript-scheme` | PASS | — |
-| `link-data-scheme` | PASS | — |
 | `link-bare-relative` | PASS | — |
-| `link-scheme-relative` | PASS | — |
+| `link-data-scheme` | PASS | — |
 | `link-http` | PASS | — |
-| `link-root-relative` | PASS | — |
 | `link-https` | PASS | — |
+| `link-javascript-scheme` | PASS | — |
+| `link-root-relative` | PASS | — |
+| `link-scheme-relative` | PASS | — |
 
 [View full report](../../specs-site/evidence)
 

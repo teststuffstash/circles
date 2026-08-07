@@ -137,13 +137,13 @@ evidence join keys.
 
 | Case ID | Status | Detail |
 |---------|--------|--------|
-| `window-inside` | PASS | — |
 | `window-at-red-boundary` | PASS | — |
 | `window-at-yellow-boundary` | PASS | — |
-| `window-just-past-red` | PASS | — |
-| `window-mid` | PASS | — |
-| `window-just-past-yellow` | PASS | — |
 | `window-far-past-red` | PASS | — |
+| `window-inside` | PASS | — |
+| `window-just-past-red` | PASS | — |
+| `window-just-past-yellow` | PASS | — |
+| `window-mid` | PASS | — |
 
 [View full report](../../specs-site/evidence)
 

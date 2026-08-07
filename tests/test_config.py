@@ -233,10 +233,10 @@ class TestDataIdentity:
     """CIR-DATA-IDENTITY — ids, uniqueness and the item ref."""
 
     @pytest.mark.parametrize("item_id", [
-        pytest.param("sleep", id="CIR-DATA-IDENTITY#id-character-set-simple"),
-        pytest.param("date-night", id="CIR-DATA-IDENTITY#id-character-set-hyphen"),
-        pytest.param("nova123", id="CIR-DATA-IDENTITY#id-character-set-digits"),
-        pytest.param("a", id="CIR-DATA-IDENTITY#id-character-set-single-char"),
+        pytest.param("sleep", id="valid-simple"),
+        pytest.param("date-night", id="valid-hyphen"),
+        pytest.param("nova123", id="valid-digits"),
+        pytest.param("a", id="valid-single-char"),
     ])
     def test_id_character_set_valid(self, tmp_path: Path, item_id: str) -> None:
         """CIR-DATA-IDENTITY#id-character-set — valid slugs accepted."""
@@ -245,13 +245,13 @@ class TestDataIdentity:
         assert cfg.rings[0].items[0].id == item_id
 
     @pytest.mark.parametrize("item_id,error_pattern", [
-        pytest.param("date night", "space", id="CIR-DATA-IDENTITY#id-with-space"),
-        pytest.param("a/b", "slash", id="CIR-DATA-IDENTITY#id-with-slash"),
-        pytest.param("UPPERCASE", "slug", id="CIR-DATA-IDENTITY#id-uppercase"),
-        pytest.param("", "slug", id="CIR-DATA-IDENTITY#id-empty"),
+        pytest.param("date night", "space", id="invalid-space"),
+        pytest.param("a/b", "slash", id="invalid-slash"),
+        pytest.param("UPPERCASE", "slug", id="invalid-uppercase"),
+        pytest.param("", "slug", id="invalid-empty"),
     ])
     def test_id_invalid(self, tmp_path: Path, item_id: str, error_pattern: str) -> None:
-        """Invalid ids → config error with specific message (⚖-R52)."""
+        """CIR-DATA-IDENTITY#id-with-space-or-slash — Invalid ids → config error with specific message (⚖-R52)."""
         data = {"person": "Test", "rings": [{"id": "a", "label": "A", "items": [{"id": item_id, "label": "X"}]}]}
         with pytest.raises(ConfigError, match=error_pattern):
             _write_and_load(tmp_path, data)

@@ -70,7 +70,7 @@ than a different one.
 
 | Case ID | Status | Detail |
 |---------|--------|--------|
-| `one-screen-proxy` | PASS | — |
+| `one-screen-reference` | PASS | — |
 
 [View full report](../../specs-site/evidence)
 
@@ -212,13 +212,12 @@ print.
 | stamp-on-print | browser print | present on the A4 page |
 
 <details class="evidence-block">
-<summary>Evidence: 2 test case(s) — alex</summary>
+<summary>Evidence: 1 test case(s) — alex</summary>
 
 **Requirement:** CIR-RENDER-GENERATED-AT — **World:** alex
 
 | Case ID | Status | Detail |
 |---------|--------|--------|
-| `stamp-on-screen` | PASS | — |
 | `stamp-verbatim` | PASS | — |
 
 [View full report](../../specs-site/evidence)

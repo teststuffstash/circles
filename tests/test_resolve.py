@@ -752,7 +752,7 @@ class TestBakeStaleAfterHours:
     """stale_after_hours is null at P0."""
 
     def test_stale_after_hours_null(self) -> None:
-        """CIR-BAKE-STALE-SELF — stale_after_hours ships null at P0."""
+        """CIR-BAKE-STALE-SELF#no-threshold-no-banner — stale_after_hours ships null at P0."""
         artifact = _resolve_fixture()
         assert artifact["stale_after_hours"] is None
 

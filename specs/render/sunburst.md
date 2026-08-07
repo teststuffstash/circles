@@ -275,11 +275,11 @@ change, not a bigger default.
 | Case ID | Status | Detail |
 |---------|--------|--------|
 | `capacity-at-limit` | PASS | — |
+| `capacity-empty-ring-band` | PASS | — |
 | `capacity-exceeded-item-count` | PASS | — |
 | `capacity-exceeded-ring-count` | PASS | — |
 | `capacity-inside-envelope` | PASS | — |
 | `capacity-minimum-page` | PASS | — |
-| `capacity-empty-ring-band` | PASS | — |
 
 [View full report](../../specs-site/evidence)
 

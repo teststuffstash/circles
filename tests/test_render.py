@@ -286,8 +286,8 @@ class TestRenderGeneratedAt:
         assert "2026-08-03T02:00:00Z" in html
 
     def test_stamp_on_screen(self) -> None:
-        """CIR-RENDER-GENERATED-AT#stamp-on-screen —
-        the stamp is visible in the chrome."""
+        """CIR-RENDER-GENERATED-AT#stamp-verbatim —
+        the stamp is visible in the chrome with the verbatim string."""
         html = _render_fixture()
         assert "Built:" in html
         assert "2026-08-03T02:00:00Z" in html
@@ -1015,7 +1015,7 @@ class TestRenderOneScreen:
     """
 
     def test_one_screen_proxy(self) -> None:
-        """CIR-RENDER-ONE-SCREEN#one-screen-proxy —
+        """CIR-RENDER-ONE-SCREEN#one-screen-reference —
         PROXY CHECK ONLY: the page uses viewBox scaling and max-height constraints
         that enable one-screen rendering. Real verification requires a browser
         at 1280×800 viewport (CIR-PROC-BROWSER-EVIDENCE)."""

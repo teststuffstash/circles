@@ -87,17 +87,14 @@ styling that reads as decoration. A fully grey ring renders as a solid grey band
 | grey-reason-distinguishable | one `by-choice` cell and one tooling-caused (`by-failure` / `not-evaluated`) cell | chosen silence and tooling-caused grey are distinguishable without hovering via the text alternative (a11y-table Detail cell text differs per reason) and the separated summary counts ([`CIR-DATA-GREY-REASON`](../data/status-resolution.md)) |
 
 <details class="evidence-block">
-<summary>Evidence: 3 test case(s) — alex</summary>
+<summary>Evidence: 2 test case(s) — alex</summary>
 
 **Requirement:** CIR-RENDER-GREY-VISIBLE — **World:** alex
 
 | Case ID | Status | Detail |
 |---------|--------|--------|
-| `grey-distinct-from-background` | PASS | — |
-| `grey-distinct-from-statuses` | PASS | — |
-| `grey-not-deemphasized` | PASS | — |
-| `grey-surface-proportion` | PASS | — |
 | `grey-reason-distinguishable` | PASS | — |
+| `grey-surface-proportion` | PASS | — |
 
 [View full report](../../specs-site/evidence)
 
