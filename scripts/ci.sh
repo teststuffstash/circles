@@ -8,9 +8,6 @@ bash scripts/validate-chart.sh
 echo "=== test-chart ==="
 bash scripts/test-chart.sh
 
-echo "=== lint-specs ==="
-bash scripts/lint-specs.sh
-
 echo "=== specs-build ==="
 bash scripts/specs-build.sh
 
@@ -57,6 +54,9 @@ python3 scripts/generate-evidence.py \
   --specs-dir specs/ \
   --inject
 echo "  evidence generation: PASS"
+
+echo "=== lint-specs ==="
+bash scripts/lint-specs.sh
 
 echo "=== page render test ==="
 # Bake the page and verify it produces both files

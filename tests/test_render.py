@@ -107,10 +107,11 @@ class TestBakeSelfContained:
 # ===========================================================================
 
 class TestInlinedJsonScriptEscape:
-    """CIR-BAKE-SELF-CONTAINED#script-escape — the inlined artifact JSON must
-    survive </script> sequences in any string field (person, ring/item labels,
-    notes, detail lines, links, grey reasons) without prematurely closing the
-    <script> tag or corrupting the JSON round-trip.
+    """CIR-BAKE-SELF-CONTAINED#inlined-data-equals-the-file — the inlined
+    artifact JSON must survive </script> sequences in any string field
+    (person, ring/item labels, notes, detail lines, links, grey reasons)
+    without prematurely closing the <script> tag or corrupting the JSON
+    round-trip.
 
     Regression test for the hardening in bake/render.py:render_page() — the
     artifact JSON now escapes closing-script sequences (</ becomes <\\/) before
@@ -123,13 +124,13 @@ class TestInlinedJsonScriptEscape:
     PAYLOAD = "</script><script>alert('xss')</script>"
 
     @pytest.mark.parametrize("path", [
-        pytest.param(("person",), id="CIR-BAKE-SELF-CONTAINED#script-escape-person"),
-        pytest.param(("rings", 0, "label"), id="CIR-BAKE-SELF-CONTAINED#script-escape-ring-label"),
-        pytest.param(("rings", 0, "items", 0, "label"), id="CIR-BAKE-SELF-CONTAINED#script-escape-item-label"),
-        pytest.param(("rings", 0, "items", 0, "note"), id="CIR-BAKE-SELF-CONTAINED#script-escape-note"),
-        pytest.param(("rings", 0, "items", 0, "detail_line"), id="CIR-BAKE-SELF-CONTAINED#script-escape-detail-line"),
-        pytest.param(("rings", 0, "items", 0, "link"), id="CIR-BAKE-SELF-CONTAINED#script-escape-link"),
-        pytest.param(("rings", 0, "items", 0, "grey_reason"), id="CIR-BAKE-SELF-CONTAINED#script-escape-grey-reason"),
+        pytest.param(("person",), id="script-escape-person"),
+        pytest.param(("rings", 0, "label"), id="script-escape-ring-label"),
+        pytest.param(("rings", 0, "items", 0, "label"), id="script-escape-item-label"),
+        pytest.param(("rings", 0, "items", 0, "note"), id="script-escape-note"),
+        pytest.param(("rings", 0, "items", 0, "detail_line"), id="script-escape-detail-line"),
+        pytest.param(("rings", 0, "items", 0, "link"), id="script-escape-link"),
+        pytest.param(("rings", 0, "items", 0, "grey_reason"), id="script-escape-grey-reason"),
     ])
     def test_script_escape_survives(self, path: tuple) -> None:
         """A </script> in a string field must not break the inlined JSON:

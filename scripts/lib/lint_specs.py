@@ -111,6 +111,17 @@ def check_page(path: Path, repo: Path, f: Findings, seen_ids: dict[str, Path]) -
         if target.startswith(("http://", "https://", "mailto:")):
             continue
         resolved = (path.parent / target).resolve()
+        # Skip links into the generated site output directory (specs-site/).
+        # These are build artifacts created by the CI pipeline, not source
+        # documents, and may not exist at lint time (the report is generated
+        # after pytest + evidence generation). The evidence join check
+        # validates that the evidence block's content is correct; the
+        # report link's target is a CI artifact, not a source reference.
+        try:
+            resolved.relative_to(repo / "specs-site")
+            continue
+        except ValueError:
+            pass
         if not resolved.exists():
             f.error(path, f"dead relative link: {target}")
 
