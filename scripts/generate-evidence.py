@@ -141,14 +141,29 @@ def _build_evidence_block(
     # A row id is the case's identity (CIR-PROC-TEST-ROWS: case id == row id), so
     # two tests citing the same row id are one row — not a duplicate evidence line.
     # The summary count reflects the deduplicated case rows, not raw test count.
+    #
+    # When two tests cite the SAME case id with DIFFERENT outcomes (e.g., a flaky
+    # retry — one PASS, one FAIL), the worst outcome wins:
+    #   FAIL > BROKEN > SKIP > PASS > UNKN
+    # This ensures a flaky RED test is never silently hidden by a preceding GREEN
+    # run (issue #49).
+    _STATUS_SEVERITY = {"failed": 0, "broken": 1, "skipped": 2, "passed": 3, "unknown": 4}
+
     unique_cases: list[dict] = []
-    seen: set[str] = set()
+    seen: dict[str, dict] = {}  # case_id -> current worst entry
     for c in sorted(cases, key=lambda c: _extract_case_id(c)):
         case_id = _extract_case_id(c)
         if case_id in seen:
+            existing = seen[case_id]
+            existing_sev = _STATUS_SEVERITY.get(existing.get("status", "unknown"), 99)
+            current_sev = _STATUS_SEVERITY.get(c.get("status", "unknown"), 99)
+            if current_sev < existing_sev:
+                # Worse outcome → replace
+                seen[case_id] = c
             continue
-        seen.add(case_id)
-        unique_cases.append(c)
+        seen[case_id] = c
+
+    unique_cases = list(seen.values())
 
     lines: list[str] = []
 

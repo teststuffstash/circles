@@ -1,0 +1,61 @@
+# Fixture table: evidence dedup behavior — `_build_evidence_block` case-id collision handling
+# CIR-... see specs/data/ (the evidence join is owned by the DATA area)
+#
+# Every row exercises the dedup loop in scripts/generate-evidence.py:
+# when multiple tests cite the same row id (case id), the block must
+# not silently hide conflicting outcomes.
+#
+# All rows use the same Allure json shape: {"name": str, "status": str}
+# The `name` field carries the parametrized id (CIR-<REQ>#<case-id>).
+---
+rows:
+  - description: Single case — one PASS row shows PASS
+    cases:
+      - {name: "[CIR-DATA-FRESHNESS-WINDOW#window-inside]", status: passed}
+    expected:
+      window-inside: PASS
+
+  - description: Identical duplicates — both PASS, dedup shows one PASS
+    cases:
+      - {name: "[CIR-DATA-FRESHNESS-WINDOW#window-inside]", status: passed}
+      - {name: "[CIR-DATA-FRESHNESS-WINDOW#window-inside]", status: passed}
+    expected:
+      window-inside: PASS
+
+  - description: PASS then FAIL — dedup must show FAIL (worst outcome wins)
+    cases:
+      - {name: "[CIR-DATA-FRESHNESS-WINDOW#window-inside]", status: passed}
+      - {name: "[CIR-DATA-FRESHNESS-WINDOW#window-inside]", status: failed}
+    expected:
+      window-inside: FAIL
+
+  - description: FAIL then PASS — dedup must show FAIL (worst outcome wins)
+    cases:
+      - {name: "[CIR-DATA-FRESHNESS-WINDOW#window-inside]", status: failed}
+      - {name: "[CIR-DATA-FRESHNESS-WINDOW#window-inside]", status: passed}
+    expected:
+      window-inside: FAIL
+
+  - description: Multiple distinct cases — all shown, no dedup loss
+    cases:
+      - {name: "[CIR-DATA-FRESHNESS-WINDOW#window-inside]", status: passed}
+      - {name: "[CIR-DATA-FRESHNESS-WINDOW#window-at-red-boundary]", status: passed}
+      - {name: "[CIR-DATA-FRESHNESS-WINDOW#window-far-past-red]", status: passed}
+    expected:
+      window-inside: PASS
+      window-at-red-boundary: PASS
+      window-far-past-red: PASS
+
+  - description: SKIP then FAIL — dedup shows FAIL (worse wins)
+    cases:
+      - {name: "[CIR-DATA-FRESHNESS-WINDOW#window-inside]", status: skipped}
+      - {name: "[CIR-DATA-FRESHNESS-WINDOW#window-inside]", status: failed}
+    expected:
+      window-inside: FAIL
+
+  - description: PASS then BROKEN — dedup shows BROKEN (worse wins)
+    cases:
+      - {name: "[CIR-DATA-FRESHNESS-WINDOW#window-inside]", status: passed}
+      - {name: "[CIR-DATA-FRESHNESS-WINDOW#window-inside]", status: broken}
+    expected:
+      window-inside: BROKEN
