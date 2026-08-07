@@ -230,7 +230,7 @@ def _render_svg(artifact: dict) -> str:
             continue
 
         total_share = sum(item.get("share", 1.0) for item in items)
-        total_deg = 360.0 - CELL_GAP_DEG * len(items)
+        total_deg = max(360.0 - CELL_GAP_DEG * len(items), 0.0)
 
         # Compute natural arc angles, then iteratively floor-and-redistribute
         # so floored arcs keep MIN_ARC_DEG and remaining arcs absorb the
@@ -246,9 +246,13 @@ def _render_svg(artifact: dict) -> str:
             floored_sum = len(floored) * MIN_ARC_DEG
 
             if floored_sum > total_deg:
-                # Even floored arcs alone overflow — all get MIN_ARC_DEG.
-                # The capacity warning already fires in this case.
-                raw_arcs = [MIN_ARC_DEG] * len(raw_arcs)
+                # Even floored arcs alone overflow — divide total_deg
+                # equally among all items so the total consumed angle never
+                # exceeds total_deg (CIR-RENDER-MIN-ARC
+                # #overflow-capped-at-total-deg).  When floored arcs alone
+                # exceed the available space, every arc must be smaller than
+                # MIN_ARC_DEG, so distribute evenly.
+                raw_arcs = [total_deg / len(raw_arcs)] * len(raw_arcs)
                 break
 
             if not natural:
@@ -552,8 +556,8 @@ def _add_capacity_warnings(artifact: dict) -> list[dict]:
 
         # CIR-RENDER-MIN-ARC: check if items per ring would squeeze arcs below minimum
         if num_items > 0:
-            available_deg = 360.0 - CELL_GAP_DEG * num_items
-            max_items_at_min = int(available_deg / MIN_ARC_DEG)
+            available_deg = max(360.0 - CELL_GAP_DEG * num_items, 0.0)
+            max_items_at_min = int(available_deg / MIN_ARC_DEG) if available_deg > 0 else 0
             if num_items > max_items_at_min:
                 warnings.append({
                     "item": f"{ring_id}",
