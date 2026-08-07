@@ -22,6 +22,7 @@
     "scripts": {
       "ci":             ["bash scripts/ci.sh"],
       "test-chart":     ["bash scripts/test-chart.sh"],
+      "test-system":    ["bash scripts/test-system.sh"],
       "scan-secrets":   ["gitleaks detect --source . --no-banner --verbose"],
       "validate-chart": ["bash scripts/validate-chart.sh"],
       "build-image":    ["bash scripts/build-image.sh"],
