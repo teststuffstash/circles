@@ -199,6 +199,11 @@ COPY dist/ /usr/share/nginx/html/
 COPY nginx.conf /etc/nginx/conf.d/default.conf
 DF
 
+# Pre-pull the base image so docker build doesn't need to pull it mid-stream
+# (the registry mirror can be flaky with large layer downloads during build)
+echo "  pre-pulling base image…"
+docker pull nginxinc/nginx-unprivileged:1.27-alpine 2>&1 | sed 's/^/  /' || echo "  (pre-pull failed — will try during build)"
+
 # Retry docker build up to 3 times (handles transient BuildKit transport errors in CI dind)
 echo "  building image (up to 3 attempts)…"
 retry 3 docker build -t "$FULL_IMAGE" "$BUILD_CTX"
@@ -279,9 +284,10 @@ echo "  starting port-forward (127.0.0.1:${PF_PORT} -> 8080)…"
 kubectl port-forward "deployment/$CLUSTER_NAME" --namespace default "${PF_PORT}:8080" &
 PF_PID=$!
 
-# Actively wait for port-forward to be ready (curl loop with timeout)
+# Actively wait for port-forward to be ready (poll until port answers or timeout)
 PF_READY=false
-for i in $(seq 1 15); do
+PF_RETRIES=30
+for i in $(seq 1 "$PF_RETRIES"); do
   if curl -sf -o /dev/null "http://127.0.0.1:${PF_PORT}/" 2>/dev/null; then
     PF_READY=true
     break
@@ -290,16 +296,36 @@ for i in $(seq 1 15); do
 done
 
 if [ "$PF_READY" != "true" ]; then
-  echo "  WARNING: port-forward did not become ready after 15s, proceeding anyway…" >&2
+  echo "  FAIL: port-forward did not become ready after ${PF_RETRIES}s" >&2
+  echo "  DIAG: kubectl get pods -n default:" >&2
+  kubectl get pods --namespace default -o wide 2>&1 | sed 's/^/    /'
+  echo "  DIAG: kubectl describe pod ${POD_NAME}:" >&2
+  kubectl describe pod --namespace default "${POD_NAME}" 2>&1 | head -30 | sed 's/^/    /'
+  # Collect port-forward's own stderr (it may have failed to bind)
+  kill "$PF_PID" 2>/dev/null || true
+  wait "$PF_PID" 2>/dev/null || true
+  exit 1
 fi
+echo "  port-forward ready (${PF_PORT})"
 
-# Fetch pages
+# Fetch pages (retry up to 3 times — the port-forward might be ready but the
+# first connection can hit a keepalive race or the pod's readiness probe flap)
 echo "  fetching index.html from http://127.0.0.1:${PF_PORT}/…"
-HTTP_CODE=$(curl -sf -o "$FETCH_DIR/index.html" -w '%{http_code}' "http://127.0.0.1:${PF_PORT}/" 2>/dev/null || echo "000")
+HTTP_CODE="000"
+for attempt in 1 2 3; do
+  HTTP_CODE=$(curl -sf -o "$FETCH_DIR/index.html" -w '%{http_code}' "http://127.0.0.1:${PF_PORT}/" 2>/dev/null || echo "000")
+  if [ "$HTTP_CODE" = "200" ]; then
+    break
+  fi
+  if [ "$attempt" -lt 3 ]; then
+    echo "  curl returned HTTP $HTTP_CODE (attempt $attempt/3), retrying…" >&2
+    sleep 2
+  fi
+done
 if [ "$HTTP_CODE" = "200" ]; then
   echo "  index.html: HTTP $HTTP_CODE ($(wc -c < "$FETCH_DIR/index.html") bytes)"
 else
-  assert_fail "could not fetch index.html from cluster (HTTP $HTTP_CODE) — target=http://127.0.0.1:${PF_PORT}/"
+  assert_fail "could not fetch index.html from cluster (HTTP $HTTP_CODE — target=http://127.0.0.1:${PF_PORT}/)"
   # Show diagnostic info
   echo "  DIAG: kubectl get pods -n default:"
   kubectl get pods --namespace default -o wide 2>&1 | sed 's/^/    /'
