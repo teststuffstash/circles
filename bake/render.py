@@ -246,9 +246,11 @@ def _render_svg(artifact: dict) -> str:
             floored_sum = len(floored) * MIN_ARC_DEG
 
             if floored_sum > total_deg:
-                # Even floored arcs alone overflow — all get MIN_ARC_DEG.
-                # The capacity warning already fires in this case.
-                raw_arcs = [MIN_ARC_DEG] * len(raw_arcs)
+                # Even floored arcs alone overflow — cap consumed angle to
+                # total_deg by splitting equally among all arcs.  The capacity
+                # warning already fires in this case so the user sees a build
+                # warning; the page still draws without overlap.
+                raw_arcs = [total_deg / len(raw_arcs)] * len(raw_arcs)
                 break
 
             if not natural:

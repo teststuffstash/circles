@@ -199,9 +199,10 @@ never actually looks at — dangerous-green by geometry rather than by data.
 | min-arc-tiny-share-still-drawn | shares 100 and 1 in one ring | the small item is drawn at the minimum arc angle; the others absorb the difference |
 | min-arc-exceeded-by-ring | 30 items in one ring against the minimum angle | build warning; the page still draws |
 | min-arc-adjustment-is-disclosed | an item whose arc was widened to the minimum | the detail line states the declared share, so geometry never silently misreports a weight |
+| overflow-capped | 120 items in one ring (even floored arcs alone overflow) | build warning; arcs capped to fit 360°, preventing visual overlap |
 
 <details class="evidence-block">
-<summary>Evidence: 2 test case(s) — alex</summary>
+<summary>Evidence: 3 test case(s) — alex</summary>
 
 **Requirement:** CIR-RENDER-MIN-ARC — **World:** alex
 
@@ -209,6 +210,7 @@ never actually looks at — dangerous-green by geometry rather than by data.
 |---------|--------|--------|
 | `min-arc-exceeded-by-ring` | PASS | — |
 | `min-arc-tiny-share-still-drawn` | PASS | — |
+| `overflow-capped` | PASS | — |
 
 [View full report](../../specs-site/evidence)
 

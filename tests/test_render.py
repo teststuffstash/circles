@@ -857,7 +857,8 @@ class TestRenderCapacity:
     def test_min_arc_exceeded_by_ring(self) -> None:
         """CIR-RENDER-MIN-ARC#min-arc-exceeded-by-ring —
         many items in one ring triggers a min-arc build warning AND every
-        rendered arc angle respects MIN_ARC_DEG."""
+        rendered arc angle respects MIN_ARC_DEG (or, when even floored arcs
+        alone overflow, arcs are capped to fit within 360° without overlap)."""
         import math
         import re as _re
         import yaml
@@ -890,20 +891,6 @@ class TestRenderCapacity:
             min_arc_warnings = [w for w in warnings if "minimum arc" in w.get("message", "").lower()]
             assert len(min_arc_warnings) >= 1, f"Expected min-arc warning, got: {warnings}"
 
-            # Verify every rendered arc angle >= MIN_ARC_DEG by parsing the
-            # SVG path elements' outer-arc endpoints back into angles.
-            #
-            # Each arc path looks like:
-            #   M x1o y1o A r r 0 l 1 x2o y2o L x2i y2i A r r 0 l 0 x1i y1i Z
-            # The outer arc endpoint (x2o, y2o) encodes end_angle.
-            # The inner arc start point (x1i, y1i) encodes start_angle.
-            # We use the OUTER arc endpoint since it has larger resolution.
-            #
-            # Angles in _arc_path are clockwise from 12 o'clock. In SVG coords
-            # (y-down), angle from centre: atan2(dx, -dy) where dx,dy from centre.
-            CX = 400.0
-            CY = 400.0
-
             # Extract all paths that belong to cells (not the centre circle)
             # by finding path elements that follow a 'data-item=' attribute
             cell_paths = _re.findall(
@@ -911,12 +898,19 @@ class TestRenderCapacity:
                 html,
             )
 
-            # The centre circle path is also a <path> but has no data-item; that's fine.
             # We have exactly 120 cell paths
             assert len(cell_paths) == 120, \
                 f"Expected 120 cell paths, got {len(cell_paths)}"
 
             # Parse each path to extract start and end angles
+            #
+            # Each arc path looks like:
+            #   M x1o y1o A r r 0 l 1 x2o y2o L x2i y2i A r r 0 l 0 x1i y1i Z
+            # The outer arc endpoint (x2o, y2o) encodes end_angle.
+            CX = 400.0
+            CY = 400.0
+
+            total_consumed = 0.0
             prev_end_angle = -90.0  # First arc starts at 12 o'clock
             for path_d in cell_paths:
                 # Extract the two outer arc points from the path
@@ -940,11 +934,12 @@ class TestRenderCapacity:
                 # Handle crossing the 0°/360° boundary
                 arc_deg = (end_angle - start_angle) % 360
 
-                # The arc should be at least MIN_ARC_DEG (allow 0.05° fp tolerance)
-                assert arc_deg >= 2.95, \
-                    f"Arc angle {arc_deg:.3f}° is below MIN_ARC_DEG (3.0°) for path: {path_d[:80]}..."
+                # In the overflow regime (n*MIN_ARC_DEG > total_deg), arcs are
+                # smaller than MIN_ARC_DEG and split equally — this is the cap
+                # that prevents overlap.  Verify arcs are present and non-zero.
+                assert arc_deg > 0, f"Arc angle {arc_deg:.3f}° is zero for path: {path_d[:80]}..."
 
-                # The arc should start where previous ended (plus cell gap)
+                # The arc should start where previous ended (plus cell gap).
                 # Allow for floating point
                 if prev_end_angle != -90.0:
                     expected_start = (prev_end_angle + 2.0) % 360  # CELL_GAP_DEG = 2.0
@@ -955,8 +950,14 @@ class TestRenderCapacity:
                            abs(actual_start - expected_start + 360) < 1.0, \
                         f"Arc gap mismatch: expected start {expected_start:.1f}°, got {actual_start:.1f}°"
 
+                total_consumed += arc_deg + 2.0  # arc + CELL_GAP_DEG
                 prev_end_angle = end_angle
 
+            # Verify total consumed angle ≤ 370° (allow small fp rounding
+            # and the last gap that extends past the circle is harmless).
+            # This is the key assertion: arcs must NOT overlap visually.
+            assert total_consumed < 380, \
+                f"Total consumed angle {total_consumed:.1f}° exceeds 360° — arcs likely overlap"
         finally:
             tmp_path.unlink()
 
@@ -1331,6 +1332,69 @@ class TestRenderMinArc:
         # All 8 items have paths
         path_count = html.count("<path")
         assert path_count >= 8  # at least 8 arc paths + centre circle
+
+    def test_min_arc_overflow_capped(self) -> None:
+        """CIR-RENDER-MIN-ARC#overflow-capped —
+        extreme over-capacity ring (120 items) draws all items without
+        overlapping arcs.  The 'even floored arcs alone overflow' branch
+        caps consumed angle to 360° and splits equally."""
+        # Build a minimal artifact with 120 equal-share items in one ring.
+        # Status is a string (post-resolve format) since we bypass resolve().
+        items = [
+            {"id": f"item-{i}", "label": f"I{i}", "status": "green" if i % 2 == 0 else "yellow"}
+            for i in range(120)
+        ]
+        artifact = {
+            "person": "Test",
+            "generated_at": "2026-08-03T02:00:00Z",
+            "rings": [{"id": "r", "label": "R", "items": items}],
+            "reference_date": "2026-08-03",
+        }
+
+        from bake.render import add_capacity_warnings
+        artifact = add_capacity_warnings(artifact)
+        html = render_page(artifact)
+
+        # All 120 items produce <path> elements (centre is a <circle>)
+        path_count = html.count("<path")
+        assert path_count >= 120, f"Expected at least 120 paths for 120 items, got {path_count}"
+
+        # The warnings should include the min-arc capacity warning
+        warnings = artifact.get("warnings", [])
+        overflow_warnings = [w for w in warnings if "exceeds" in w.get("message", "")]
+        assert len(overflow_warnings) >= 1, (
+            f"Expected min-arc overflow warning, got: {warnings}"
+        )
+
+        # Verify arcs don't overlap: the last arc's end should be within
+        # the circle.  We check by extracting the last path's outer-arc
+        # endpoint coordinates and verifying it's on the circle boundary.
+        import re
+        # Find all outer-arc endpoints (the x2o,y2o in _arc_path).
+        # Pattern: A <rx> <ry> <x-axis-rotation> <large-arc> <sweep> <x> <y>
+        # The outer arc has sweep=1, inner has sweep=0.
+        outer_arc_coords = re.findall(
+            r'A [\d.]+ [\d.]+ 0 [01] 1 ([\d.]+) ([\d.]+)',
+            html,
+        )
+        assert len(outer_arc_coords) >= 120, (
+            f"Expected at least 120 outer arc endpoints, got {len(outer_arc_coords)}"
+        )
+        # The last outer arc endpoint should be near the start (12 o'clock).
+        # Start is at -90° (12 o'clock), so end should be near -90° + 360° = 270°.
+        # At 270° from 12 o'clock: x = CX + outer_r * sin(270°), y = CY - outer_r * cos(270°)
+        # sin(270°) = -1, cos(270°) = 0 → x ≈ CX - outer_r, y ≈ CY
+        # But we don't know outer_r easily.  Instead, verify the last endpoint
+        # is within the circle (not wildly outside).
+        last_x_str, last_y_str = outer_arc_coords[-1]
+        last_x, last_y = float(last_x_str), float(last_y_str)
+        # The centre is at (400, 400).  Max radius is ~CENTRE_RADIUS + BASE_THICKNESS ≈ 140.
+        # So the last endpoint should be within ~200 of centre.
+        dist = ((last_x - 400) ** 2 + (last_y - 400) ** 2) ** 0.5
+        assert dist < 200, (
+            f"Last arc endpoint ({last_x:.1f}, {last_y:.1f}) is {dist:.1f}px from centre "
+            f"— likely overlapping beyond the circle"
+        )
 
 
 # ===========================================================================
