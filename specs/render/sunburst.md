@@ -19,7 +19,18 @@ may reorder rings.
 | ring-order-innermost-first | rings `[self, partner, children, wider]` | `self` is the innermost rendered ring, `wider` the outermost |
 | ring-order-never-resorted | rings whose labels sort differently alphabetically | rendered order still follows the array, never alphabetical or status sorting |
 
-_Evidence: none yet — unverified._
+<details class="evidence-block">
+<summary>Evidence: 1 test case(s) — alex</summary>
+
+**Requirement:** CIR-RENDER-RING-ORDER — **World:** alex
+
+| Case ID | Status | Detail |
+|---------|--------|--------|
+| `ring-order-innermost-first` | PASS | — |
+
+[View full report](../../specs-site/evidence)
+
+</details>
 
 ## CIR-RENDER-RING-PARTITION — rings are independent, not a hierarchy
 
@@ -52,7 +63,19 @@ ring), and the triage doctrine is per-ring, not per-branch. Nesting would also f
 emptiness wherever an inner item has no outer children. Recorded as an ⚖ rather than assumed,
 because "sunburst" usually implies (b) — this entry is where to overrule.
 
-_Evidence: none yet — unverified._
+<details class="evidence-block">
+<summary>Evidence: 2 test case(s) — alex</summary>
+
+**Requirement:** CIR-RENDER-RING-PARTITION — **World:** alex
+
+| Case ID | Status | Detail |
+|---------|--------|--------|
+| `partition-full-circle-per-ring` | PASS | — |
+| `partition-ring-boundaries-visible` | PASS | — |
+
+[View full report](../../specs-site/evidence)
+
+</details>
 
 ## CIR-RENDER-ARC-SHARE — arc angles from shares
 
@@ -68,7 +91,18 @@ visible notch.
 | arc-share-mixed-weights | siblings with shares 2, 1, 1 | arcs ≈ 180° / 90° / 90° |
 | arc-gap-uniform | any ring | all inter-cell gaps in the ring equal |
 
-_Evidence: none yet — unverified._
+<details class="evidence-block">
+<summary>Evidence: 1 test case(s) — alex</summary>
+
+**Requirement:** CIR-RENDER-ARC-SHARE — **World:** alex
+
+| Case ID | Status | Detail |
+|---------|--------|--------|
+| `arc-share-half-arcs` | PASS | — |
+
+[View full report](../../specs-site/evidence)
+
+</details>
 
 ## CIR-RENDER-SIBLING-ORDER — where siblings start
 
@@ -105,7 +139,18 @@ order is what the person wrote and changes only when they change it, so spatial 
 status changes — a cell going 🔴 stays where it was. (c) is rejected outright: a page whose
 geometry reshuffles as statuses change cannot be read "at a glance" day over day.
 
-_Evidence: none yet — unverified._
+<details class="evidence-block">
+<summary>Evidence: 1 test case(s) — alex</summary>
+
+**Requirement:** CIR-RENDER-SIBLING-ORDER — **World:** alex
+
+| Case ID | Status | Detail |
+|---------|--------|--------|
+| `sibling-order-clockwise-from-noon` | PASS | — |
+
+[View full report](../../specs-site/evidence)
+
+</details>
 
 ## CIR-RENDER-RING-THICKNESS — the most important ring is the smallest
 
@@ -129,7 +174,20 @@ size it is the first thing to become unreadable. (c) buys legibility at the cost
 one-screen budget. Nobody else in the fan-out raised this; it has a real consequence at print
 size, which is why it is recorded rather than left to the implementer.
 
-_Evidence: none yet — unverified._
+<details class="evidence-block">
+<summary>Evidence: 3 test case(s) — alex</summary>
+
+**Requirement:** CIR-RENDER-RING-THICKNESS — **World:** alex
+
+| Case ID | Status | Detail |
+|---------|--------|--------|
+| `centre-disc-holds-identity` | PASS | — |
+| `centre-hole-is-not-zero` | PASS | — |
+| `thickness-non-increasing-outward` | PASS | — |
+
+[View full report](../../specs-site/evidence)
+
+</details>
 
 ## CIR-RENDER-MIN-ARC — no unreadable slivers
 
@@ -142,7 +200,19 @@ never actually looks at — dangerous-green by geometry rather than by data.
 | min-arc-exceeded-by-ring | 30 items in one ring against the minimum angle | build warning; the page still draws |
 | min-arc-adjustment-is-disclosed | an item whose arc was widened to the minimum | the detail line states the declared share, so geometry never silently misreports a weight |
 
-_Evidence: none yet — unverified._
+<details class="evidence-block">
+<summary>Evidence: 2 test case(s) — alex</summary>
+
+**Requirement:** CIR-RENDER-MIN-ARC — **World:** alex
+
+| Case ID | Status | Detail |
+|---------|--------|--------|
+| `min-arc-exceeded-by-ring` | PASS | — |
+| `min-arc-tiny-share-still-drawn` | PASS | — |
+
+[View full report](../../specs-site/evidence)
+
+</details>
 
 ## CIR-RENDER-LABELS — labels fit, truncate, or step aside
 
@@ -158,7 +228,19 @@ overflows its cell. Ring labels never appear on the chart — the ring key names
 | label-full-text-always-reachable | any elided or omitted label | full text present in the detail line and the text alternative |
 | label-glyphs-passthrough | label `◀ Nova` | glyph rendered as-is |
 
-_Evidence: none yet — unverified._
+<details class="evidence-block">
+<summary>Evidence: 2 test case(s) — alex</summary>
+
+**Requirement:** CIR-RENDER-LABELS — **World:** alex
+
+| Case ID | Status | Detail |
+|---------|--------|--------|
+| `label-glyphs-passthrough` | PASS | — |
+| `label-inside-arc` | PASS | — |
+
+[View full report](../../specs-site/evidence)
+
+</details>
 
 ## CIR-RENDER-CAPACITY — how much the page holds
 
@@ -185,7 +267,23 @@ ninth friend, and silence hides a real product signal. The envelope numbers are 
 print constraint (see [layout.md](layout.md)). If real use outgrows them, the answer is a spec
 change, not a bigger default.
 
-_Evidence: none yet — unverified._
+<details class="evidence-block">
+<summary>Evidence: 6 test case(s) — alex</summary>
+
+**Requirement:** CIR-RENDER-CAPACITY — **World:** alex
+
+| Case ID | Status | Detail |
+|---------|--------|--------|
+| `capacity-at-limit` | PASS | — |
+| `capacity-empty-ring-band` | PASS | — |
+| `capacity-exceeded-item-count` | PASS | — |
+| `capacity-exceeded-ring-count` | PASS | — |
+| `capacity-inside-envelope` | PASS | — |
+| `capacity-minimum-page` | PASS | — |
+
+[View full report](../../specs-site/evidence)
+
+</details>
 
 ## CIR-RENDER-SUMMARY — the count that survives everything
 
@@ -210,7 +308,20 @@ traced, tested or acted on. Worst-wins in particular trains the reader to ignore
 red area — the opposite of what the page is for. Counts give the same at-a-glance signal without
 inventing a verdict.
 
-_Evidence: none yet — unverified._
+<details class="evidence-block">
+<summary>Evidence: 3 test case(s) — alex</summary>
+
+**Requirement:** CIR-RENDER-SUMMARY — **World:** alex
+
+| Case ID | Status | Detail |
+|---------|--------|--------|
+| `summary-is-not-a-rollup` | PASS | — |
+| `summary-matches-the-picture` | PASS | — |
+| `summary-separates-grey-reasons` | PASS | — |
+
+[View full report](../../specs-site/evidence)
+
+</details>
 
 ## Proposed fixture rows (for the builder to land — not landed by this spec pass)
 

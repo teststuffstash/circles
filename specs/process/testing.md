@@ -77,7 +77,18 @@ statement about (source dates, reference date), which is a complete and time-ind
 (a) makes the committed file a lie about what tests actually run; (c) turns the calendar into a
 CI outage, failing unrelated PRs on a date nobody chose.
 
-_Evidence: none yet — unverified._
+<details class="evidence-block">
+<summary>Evidence: 1 test case(s) — alex</summary>
+
+**Requirement:** CIR-PROC-TEST-FIXTURES — **World:** alex
+
+| Case ID | Status | Detail |
+|---------|--------|--------|
+| `fixture-validates-against-the-schema` | PASS | — |
+
+[View full report](../../specs-site/evidence)
+
+</details>
 
 ## CIR-PROC-SPEC-GATE — the spec tree gates itself
 

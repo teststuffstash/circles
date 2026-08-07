@@ -8,14 +8,12 @@ bash scripts/validate-chart.sh
 echo "=== test-chart ==="
 bash scripts/test-chart.sh
 
-echo "=== lint-specs ==="
-bash scripts/lint-specs.sh
-
 echo "=== specs-build ==="
 bash scripts/specs-build.sh
 
-echo "=== bake unit tests ==="
-uv run --frozen pytest tests/ -v --tb=short
+echo "=== bake unit tests (with Allure evidence) ==="
+rm -rf /tmp/allure-raw
+uv run --frozen pytest tests/ -v --tb=short --alluredir=/tmp/allure-raw
 
 echo "=== bake artifact-schema check ==="
 # Build the artifact from the fixture and validate its structure
@@ -45,6 +43,20 @@ if errors:
     sys.exit(1)
 print('  artifact schema check: PASS')
 "
+
+echo "=== generate evidence fragments ==="
+# Generate the Allure HTML report and inject evidence blocks into spec pages
+mkdir -p specs-site/evidence
+python3 scripts/generate-allure-report.py /tmp/allure-raw specs-site/evidence
+python3 scripts/generate-evidence.py \
+  --allure-dir /tmp/allure-raw \
+  --report-dir ../specs-site/evidence \
+  --specs-dir specs/ \
+  --inject
+echo "  evidence generation: PASS"
+
+echo "=== lint-specs ==="
+bash scripts/lint-specs.sh
 
 echo "=== page render test ==="
 # Bake the page and verify it produces both files
