@@ -3,13 +3,13 @@
 cd "$(dirname "$0")/.."
 
 echo "=== validate-chart ==="
-bash scripts/validate-chart.sh
+./scripts/validate-chart.sh
 
 echo "=== test-chart ==="
-bash scripts/test-chart.sh
+./scripts/test-chart.sh
 
 echo "=== specs-build ==="
-bash scripts/specs-build.sh
+./scripts/specs-build.sh
 
 echo "=== bake unit tests (with Allure evidence) ==="
 rm -rf /tmp/allure-raw
@@ -56,7 +56,7 @@ python3 scripts/generate-evidence.py \
 echo "  evidence generation: PASS"
 
 echo "=== lint-specs ==="
-bash scripts/lint-specs.sh
+./scripts/lint-specs.sh
 
 echo "=== page render test ==="
 # Bake the page and verify it produces both files
@@ -165,4 +165,4 @@ rm -rf /tmp/circles-bake-test
 
 echo ""
 echo "=== test-system (skippable: set CIRCLES_SYSTEM_TEST_SKIP=1) ==="
-bash scripts/test-system.sh
+./scripts/test-system.sh
