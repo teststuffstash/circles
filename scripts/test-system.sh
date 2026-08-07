@@ -49,6 +49,7 @@ CLUSTER_NAME="circles-test"
 IMG="${CIRCLES_IMAGE:-circles-system-test}"
 TAG="${CIRCLES_TAG:-test-$(git rev-parse --short HEAD 2>/dev/null || echo 'local')}"
 FULL_IMAGE="${IMG}:${TAG}"
+PF_PORT=${CIRCLES_PF_PORT:-8888}
 
 # Temp dirs (cleaned up by trap)
 BAKE_OUT=$(mktemp -d /tmp/circles-bake.XXXXXX)
@@ -66,6 +67,7 @@ cleanup() {
   # Kill any lingering port-forward
   if [ -n "${PF_PID:-}" ]; then
     kill "$PF_PID" 2>/dev/null || true
+    wait "$PF_PID" 2>/dev/null || true
   fi
   # Delete kind cluster
   if kind get clusters 2>/dev/null | grep -q "^${CLUSTER_NAME}$"; then
@@ -83,6 +85,28 @@ assert_fail() {
   local msg="$1"
   echo "  FAIL: $msg" >&2
   FAIL_COUNT=$((FAIL_COUNT + 1))
+}
+
+# ── retry helper (exponential backoff, max 3 attempts) ──────────────────────────
+# Usage: retry N command arg1 arg2
+# Runs command with args, output goes to terminal directly (not captured).
+# Returns command's exit code.
+retry() {
+  local max_attempts=${1:-3}; shift
+  local attempt=1 rc=0
+  while [ "$attempt" -le "$max_attempts" ]; do
+    if "$@"; then
+      return 0
+    fi
+    rc=$?
+    if [ "$attempt" -lt "$max_attempts" ]; then
+      echo "  Retrying ($attempt/$max_attempts)…" >&2
+      sleep $((attempt * 2))
+    fi
+    attempt=$((attempt + 1))
+  done
+  echo "  RETRY FAILED after $max_attempts attempt(s): $*" >&2
+  return "$rc"
 }
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -149,12 +173,43 @@ mkdir -p "$BUILD_CTX/dist"
 cp "$BAKE_OUT/data.json" "$BUILD_CTX/dist/"
 cp "$BAKE_OUT/index.html" "$BUILD_CTX/dist/"
 
+# Add nginx config to serve .json files (and set correct Content-Type)
+cat > "$BUILD_CTX/nginx.conf" << 'NF'
+server {
+    listen       8080;
+    server_name  localhost;
+    root   /usr/share/nginx/html;
+    index  index.html index.htm;
+
+    location / {
+        try_files $uri $uri/ =404;
+    }
+
+    location ~* \.json$ {
+        add_header Content-Type application/json;
+        try_files $uri =404;
+    }
+}
+NF
+
+# Fix permissions before COPY (bake tool creates 600 files, but nginx user needs read)
+chmod 644 "$BUILD_CTX/dist/"*
+
 cat > "$BUILD_CTX/Dockerfile" << 'DF'
 FROM nginxinc/nginx-unprivileged:1.27-alpine
 COPY dist/ /usr/share/nginx/html/
+COPY nginx.conf /etc/nginx/conf.d/default.conf
 DF
 
-docker build -t "$FULL_IMAGE" "$BUILD_CTX" 2>&1 | sed 's/^/  /'
+# Retry docker build up to 3 times (handles transient BuildKit transport errors in CI dind)
+echo "  building image (up to 3 attempts)…"
+retry 3 docker build -t "$FULL_IMAGE" "$BUILD_CTX"
+# Explicitly check exit code (retry already printed output inline)
+RC=$?
+if [ "$RC" -ne 0 ]; then
+  echo "  ERROR: docker build failed after retries" >&2
+  exit "$RC"
+fi
 echo "  image built: $FULL_IMAGE"
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -208,29 +263,58 @@ echo "  chart installed"
 # ═══════════════════════════════════════════════════════════════════════════════
 echo ""
 echo "==> step 6/7: wait for deployment and fetch page"
+
+# Wait for the deployment to be fully available (check endpoints too)
 kubectl rollout status "deployment/$CLUSTER_NAME" --namespace default --timeout=120s 2>&1 | sed 's/^/  /'
 
+# Verify the pod is running with the right image
+POD_NAME=$(kubectl get pod --namespace default -l "app.kubernetes.io/name=circles" -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || echo "")
+if [ -z "$POD_NAME" ]; then
+  echo "  WARNING: could not get pod name, checking with release-name label instead…"
+  POD_NAME=$(kubectl get pod --namespace default -l "app.kubernetes.io/name=${CLUSTER_NAME}" -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || echo "")
+fi
+echo "  pod: ${POD_NAME:-unknown}"
+kubectl get pod --namespace default "${POD_NAME}" -o jsonpath='{.status.phase}' 2>/dev/null && echo ""
+
 # Port-forward to access the pod (nginx-unprivileged listens on 8080)
-PF_PORT=8888
+echo "  starting port-forward (127.0.0.1:${PF_PORT} -> 8080)…"
 kubectl port-forward "deployment/$CLUSTER_NAME" --namespace default "${PF_PORT}:8080" &
 PF_PID=$!
-sleep 5  # Allow port-forward to establish
+
+# Actively wait for port-forward to be ready (curl loop with timeout)
+PF_READY=false
+for i in $(seq 1 15); do
+  if curl -sf -o /dev/null "http://127.0.0.1:${PF_PORT}/" 2>/dev/null; then
+    PF_READY=true
+    break
+  fi
+  sleep 1
+done
+
+if [ "$PF_READY" != "true" ]; then
+  echo "  WARNING: port-forward did not become ready after 15s, proceeding anyway…" >&2
+fi
 
 # Fetch pages
-echo "  fetching index.html…"
+echo "  fetching index.html from http://127.0.0.1:${PF_PORT}/…"
 HTTP_CODE=$(curl -sf -o "$FETCH_DIR/index.html" -w '%{http_code}' "http://127.0.0.1:${PF_PORT}/" 2>/dev/null || echo "000")
 if [ "$HTTP_CODE" = "200" ]; then
   echo "  index.html: HTTP $HTTP_CODE ($(wc -c < "$FETCH_DIR/index.html") bytes)"
 else
-  assert_fail "could not fetch index.html from cluster (HTTP $HTTP_CODE)"
+  assert_fail "could not fetch index.html from cluster (HTTP $HTTP_CODE) — target=http://127.0.0.1:${PF_PORT}/"
+  # Show diagnostic info
+  echo "  DIAG: kubectl get pods -n default:"
+  kubectl get pods --namespace default -o wide 2>&1 | sed 's/^/    /'
+  echo "  DIAG: kubectl describe pod $POD_NAME (last 10 lines):"
+  kubectl describe pod --namespace default "$POD_NAME" 2>&1 | tail -10 | sed 's/^/    /'
 fi
 
-echo "  fetching data.json…"
+echo "  fetching data.json from http://127.0.0.1:${PF_PORT}/data.json…"
 HTTP_CODE=$(curl -sf -o "$FETCH_DIR/data.json" -w '%{http_code}' "http://127.0.0.1:${PF_PORT}/data.json" 2>/dev/null || echo "000")
 if [ "$HTTP_CODE" = "200" ]; then
   echo "  data.json: HTTP $HTTP_CODE ($(wc -c < "$FETCH_DIR/data.json") bytes)"
 else
-  # nginx might not serve .json by default — that's okay, data is inlined
+  # data.json might not be served by default — that's okay, data is inlined
   echo "  NOTE: data.json returned HTTP $HTTP_CODE — relying on inlined data check"
   touch "$FETCH_DIR/data.json"
 fi
@@ -305,7 +389,6 @@ fi
 # 7c — no third-party origins in served markup (CIR-RENDER-NO-EGRESS)
 echo "  7c: no-external-origins"
 if [ -f "$FETCH_DIR/index.html" ]; then
-  # Use python3 with heredoc-style input via stdin to avoid quoting issues
   if python3 -c '
 import re, sys
 with open("'"$FETCH_DIR"'/index.html") as f: html = f.read()
