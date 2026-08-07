@@ -93,10 +93,12 @@ retry() {
   local max_attempts=${1:-3}; shift
   local attempt=1 rc=0
   while [ "$attempt" -le "$max_attempts" ]; do
-    if "$@"; then
+    # Run the command, capture its exit code BEFORE the 'if' resets $?
+    "$@"
+    rc=$?
+    if [ "$rc" -eq 0 ]; then
       return 0
     fi
-    rc=$?
     if [ "$attempt" -lt "$max_attempts" ]; then
       echo "  Retrying ($attempt/$max_attempts)…" >&2
       sleep $((attempt * 2))
@@ -207,13 +209,20 @@ docker pull nginxinc/nginx-unprivileged:1.27-alpine 2>&1 | sed 's/^/  /' || echo
 # Retry docker build up to 3 times (handles transient BuildKit transport errors in CI dind)
 echo "  building image (up to 3 attempts)…"
 retry 3 docker build -t "$FULL_IMAGE" "$BUILD_CTX"
-# Explicitly check exit code (retry already printed output inline)
 RC=$?
 if [ "$RC" -ne 0 ]; then
   echo "  ERROR: docker build failed after retries" >&2
   exit "$RC"
 fi
-echo "  image built: $FULL_IMAGE"
+
+# Verify the image actually exists (catches cases where docker build exits 0 but
+# the image wasn't tagged, or BuildKit transport errors left a partial result)
+echo "  verifying image exists…"
+if ! docker image inspect "$FULL_IMAGE" >/dev/null 2>&1; then
+  echo "  ERROR: image $FULL_IMAGE not found after build" >&2
+  exit 1
+fi
+echo "  image built and verified: $FULL_IMAGE"
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # STEP 3: Create kind cluster with registry mirrors
@@ -244,8 +253,20 @@ echo "  kind cluster created"
 # ═══════════════════════════════════════════════════════════════════════════════
 echo ""
 echo "==> step 4/7: load image into kind"
-kind load docker-image --name "$CLUSTER_NAME" "$FULL_IMAGE" 2>&1 | sed 's/^/  /'
-echo "  image loaded"
+if ! kind load docker-image --name "$CLUSTER_NAME" "$FULL_IMAGE" 2>&1 | sed 's/^/  /'; then
+  echo "  ERROR: could not load image into kind" >&2
+  exit 1
+fi
+
+# Verify the image made it into the cluster (kind stores it as a cluster-side image)
+echo "  verifying image in kind node…"
+NODE_NAME="${CLUSTER_NAME}-control-plane"
+if docker exec "$NODE_NAME" crictl images 2>/dev/null | grep -q "${IMG}"; then
+  echo "  image loaded: $FULL_IMAGE"
+else
+  echo "  WARNING: could not verify image in kind node (crictl not available or image not found)" >&2
+  echo "  continuing anyway — the deployment will fail fast if the image is missing"
+fi
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # STEP 5: Install the chart
