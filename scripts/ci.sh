@@ -162,3 +162,7 @@ print('  page-content-check: PASS')
 
 # Clean up
 rm -rf /tmp/circles-bake-test
+
+echo ""
+echo "=== test-system (skippable: set CIRCLES_SYSTEM_TEST_SKIP=1) ==="
+bash scripts/test-system.sh
