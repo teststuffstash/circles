@@ -102,6 +102,75 @@ class TestBakeSelfContained:
 
 
 # ===========================================================================
+# CIR-BAKE-SELF-CONTAINED#script-escape — inlined JSON must not break on
+# </script> sequences in string content (labels, notes, detail lines)
+# ===========================================================================
+
+class TestInlinedJsonScriptEscape:
+    """CIR-BAKE-SELF-CONTAINED#script-escape — the inlined artifact JSON must
+    survive </script> sequences in any string field (person, ring/item labels,
+    notes, detail lines, links, grey reasons) without prematurely closing the
+    <script> tag or corrupting the JSON round-trip.
+
+    Regression test for the hardening in bake/render.py:render_page() — the
+    artifact JSON now escapes closing-script sequences (</ becomes <\\/) before
+    inlining.  The escaped form is a valid JSON escape equivalent to /, so the
+    data round-trips on json.loads().
+    """
+
+    # A payload that, if left unescaped, closes the script tag early and lets
+    # attacker-controlled text inject a second <script> element.
+    PAYLOAD = "</script><script>alert('xss')</script>"
+
+    @pytest.mark.parametrize("path", [
+        pytest.param(("person",), id="CIR-BAKE-SELF-CONTAINED#script-escape-person"),
+        pytest.param(("rings", 0, "label"), id="CIR-BAKE-SELF-CONTAINED#script-escape-ring-label"),
+        pytest.param(("rings", 0, "items", 0, "label"), id="CIR-BAKE-SELF-CONTAINED#script-escape-item-label"),
+        pytest.param(("rings", 0, "items", 0, "note"), id="CIR-BAKE-SELF-CONTAINED#script-escape-note"),
+        pytest.param(("rings", 0, "items", 0, "detail_line"), id="CIR-BAKE-SELF-CONTAINED#script-escape-detail-line"),
+        pytest.param(("rings", 0, "items", 0, "link"), id="CIR-BAKE-SELF-CONTAINED#script-escape-link"),
+        pytest.param(("rings", 0, "items", 0, "grey_reason"), id="CIR-BAKE-SELF-CONTAINED#script-escape-grey-reason"),
+    ])
+    def test_script_escape_survives(self, path: tuple) -> None:
+        """A </script> in a string field must not break the inlined JSON:
+        the script-tag boundary survives AND the artifact round-trips."""
+        artifact = _resolve_fixture()
+
+        # Inject the payload into the target field (builds an artifact dict
+        # with a </script>-containing string field, per the issue).
+        target = artifact
+        for key in path[:-1]:
+            target = target[key]
+        target[path[-1]] = self.PAYLOAD
+
+        html = render_page(artifact)
+
+        # Extract the inlined JSON from the artifact-data script block.
+        marker = '<script id="artifact-data" type="application/json">'
+        start = html.find(marker)
+        assert start >= 0, "artifact data script tag not found"
+        start = html.index(">", start) + 1
+        # The FIRST </script> after the marker must be the real closing tag —
+        # if the payload were unescaped it would close the tag early, so this
+        # would find the injected one and yield truncated, invalid JSON.
+        end = html.index("</script>", start)
+        inlined_text = html[start:end].strip()
+
+        # Boundary survives: the inlined block is valid, complete JSON.
+        inlined = json.loads(inlined_text)
+
+        # Round-trip: the payload is preserved verbatim in the same field.
+        got = inlined
+        for key in path:
+            got = got[key]
+        assert got == self.PAYLOAD, "injected </script> payload not preserved"
+
+        # And the whole artifact round-trips identically (CIR-BAKE-SELF-CONTAINED
+        # #inlined-data-equals-the-file still holds with hostile content).
+        assert inlined == artifact
+
+
+# ===========================================================================
 # CIR-RENDER-RING-ORDER — rings read inside-out
 # ===========================================================================
 
