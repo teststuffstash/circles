@@ -1,4 +1,38 @@
-# Vanilla bootstrap image (circles): serves the hello page so the deploy pipeline is E2E-provable
-# on day one. Replaced by the real product image via specs — never grow it in place.
+# circles production image — multi-stage bake-then-serve
+#
+# Stage 1: bake — run the circles bake against the fixture config to produce
+# data.json + index.html.  The bake step runs at image-build time (P0); at P1
+# the nightly scheduler runs the same bake independently.
+#
+# Stage 2: nginx-unprivileged — serve the baked static site.
+
+# ── Stage 1: bake ──────────────────────────────────────────────────────────
+FROM python:3.11-alpine AS bake
+
+WORKDIR /build
+
+# Install uv (deterministic Python toolchain, pinned via devbox)
+COPY --from=ghcr.io/astral-sh/uv:0.5 /uv /usr/local/bin/uv
+
+# Copy the bake source and its dependencies
+COPY pyproject.toml uv.lock ./
+RUN uv sync --frozen --no-dev
+
+# Copy the bake module and the fixture config
+COPY bake/ bake/
+COPY fixtures/ fixtures/
+
+# Run the bake (P0: fixture person, reference date 2026-08-03 for reproducibility)
+RUN uv run --frozen python -m bake \
+    --config fixtures/alex/circles.yaml \
+    --out dist/ \
+    --reference-date 2026-08-03
+
+# ── Stage 2: serve ─────────────────────────────────────────────────────────
 FROM nginxinc/nginx-unprivileged:1.27-alpine
-COPY dist/ /usr/share/nginx/html/
+
+# Copy the baked artifacts from stage 1
+COPY --from=bake --chmod=644 /build/dist/ /usr/share/nginx/html/
+
+# Copy the production nginx config (Content-Type for .json, etc.)
+COPY --chmod=644 nginx.conf /etc/nginx/conf.d/default.conf

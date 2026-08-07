@@ -48,4 +48,9 @@ def write_artifact(artifact: dict, out_dir: Path) -> Path:
             except OSError:
                 pass
 
+    # Ensure the artifact is world-readable — tempfile.mkstemp() creates with
+    # mode 0600 by default, but nginx-unprivileged (non-root user) needs read
+    # access (CIR-BAKE-ATOMIC-WRITE#permissions-world-readable).
+    target.chmod(0o644)
+
     return target
