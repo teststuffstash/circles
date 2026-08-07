@@ -246,9 +246,11 @@ def _render_svg(artifact: dict) -> str:
             floored_sum = len(floored) * MIN_ARC_DEG
 
             if floored_sum > total_deg:
-                # Even floored arcs alone overflow — all get MIN_ARC_DEG.
-                # The capacity warning already fires in this case.
-                raw_arcs = [MIN_ARC_DEG] * len(raw_arcs)
+                # Even floored arcs alone overflow — scale all arcs
+                # proportionally so the total consumed angle does not exceed
+                # total_deg (CIR-RENDER-MIN-ARC#overflow-capped-at-total-deg).
+                scale = total_deg / floored_sum
+                raw_arcs = [MIN_ARC_DEG * scale] * len(raw_arcs)
                 break
 
             if not natural:

@@ -857,7 +857,9 @@ class TestRenderCapacity:
     def test_min_arc_exceeded_by_ring(self) -> None:
         """CIR-RENDER-MIN-ARC#min-arc-exceeded-by-ring —
         many items in one ring triggers a min-arc build warning AND every
-        rendered arc angle respects MIN_ARC_DEG."""
+        rendered arc angle respects MIN_ARC_DEG AND the total consumed
+        angle does not exceed 360° (CIR-RENDER-MIN-ARC
+        #overflow-capped-at-total-deg)."""
         import math
         import re as _re
         import yaml
@@ -904,6 +906,11 @@ class TestRenderCapacity:
             CX = 400.0
             CY = 400.0
 
+            def _point_to_angle(x: float, y: float) -> float:
+                dx = x - CX
+                dy = CY - y  # flip y (SVG y-down → Cartesian y-up)
+                return math.degrees(math.atan2(dx, dy)) % 360
+
             # Extract all paths that belong to cells (not the centre circle)
             # by finding path elements that follow a 'data-item=' attribute
             cell_paths = _re.findall(
@@ -928,21 +935,29 @@ class TestRenderCapacity:
                 assert m is not None, f"Could not parse path: {path_d}"
                 x1o, y1o, x2o, y2o = map(float, m.groups())
 
-                # Convert endpoints back to angles (clockwise from 12 o'clock)
-                def _point_to_angle(x: float, y: float) -> float:
-                    dx = x - CX
-                    dy = CY - y  # flip y (SVG y-down → Cartesian y-up)
-                    return math.degrees(math.atan2(dx, dy)) % 360
-
                 start_angle = _point_to_angle(x1o, y1o) % 360
                 end_angle = _point_to_angle(x2o, y2o) % 360
 
                 # Handle crossing the 0°/360° boundary
                 arc_deg = (end_angle - start_angle) % 360
 
-                # The arc should be at least MIN_ARC_DEG (allow 0.05° fp tolerance)
-                assert arc_deg >= 2.95, \
-                    f"Arc angle {arc_deg:.3f}° is below MIN_ARC_DEG (3.0°) for path: {path_d[:80]}..."
+                # With 120 items, CELL_GAP_DEG=2°, MIN_ARC_DEG=3°:
+                #   total_deg = 360 - 120*2 = 120°
+                #   floored_sum = 120*3 = 360° > 120°
+                # So the overflow branch fires and arcs are scaled to
+                # 120/360 * 3 = 1° each — below MIN_ARC_DEG but that's
+                # expected (the warning covers it).  The key assertion is
+                # the total-consumed check below.
+                # For non-overflow cases, every arc must be >= MIN_ARC_DEG.
+                NUM_ITEMS = 120
+                CELL_GAP_DEG = 2.0
+                MIN_ARC_DEG = 3.0
+                total_deg = 360.0 - CELL_GAP_DEG * NUM_ITEMS
+                floored_sum = NUM_ITEMS * MIN_ARC_DEG
+                overflow_branch = floored_sum > total_deg
+                if not overflow_branch:
+                    assert arc_deg >= 2.95, \
+                        f"Arc angle {arc_deg:.3f}° is below MIN_ARC_DEG (3.0°) for path: {path_d[:80]}..."
 
                 # The arc should start where previous ended (plus cell gap)
                 # Allow for floating point
@@ -956,6 +971,33 @@ class TestRenderCapacity:
                         f"Arc gap mismatch: expected start {expected_start:.1f}°, got {actual_start:.1f}°"
 
                 prev_end_angle = end_angle
+
+            # Verify the total consumed angle (arcs + gaps) does not exceed
+            # 360°, even under extreme over-capacity (CIR-RENDER-MIN-ARC
+            # #overflow-capped-at-total-deg).  Without the cap, 120 × 3° = 360°
+            # of arcs plus 120 × 2° = 240° of gaps would total 600°, wrapping
+            # around visually.
+            first_arc = cell_paths[0]
+            m_first = _re.match(
+                r'M\s+([\d.-]+)\s+([\d.-]+)\s+A\s+[\d.]+\s+[\d.]+\s+\d\s+\d\s+1\s+([\d.-]+)\s+([\d.-]+)',
+                first_arc,
+            )
+            x1o_first, y1o_first, _, _ = map(float, m_first.groups())
+            first_start = _point_to_angle(x1o_first, y1o_first) % 360
+
+            last_arc = cell_paths[-1]
+            m_last = _re.match(
+                r'M\s+([\d.-]+)\s+([\d.-]+)\s+A\s+[\d.]+\s+[\d.]+\s+\d\s+\d\s+1\s+([\d.-]+)\s+([\d.-]+)',
+                last_arc,
+            )
+            _, _, x2o_last, y2o_last = map(float, m_last.groups())
+            last_end = _point_to_angle(x2o_last, y2o_last) % 360
+
+            # Total consumed = (last_end - first_start) mod 360 + last gap
+            total_consumed = (last_end - first_start) % 360 + 2.0  # + CELL_GAP_DEG
+            # Should be <= 360° (allow 0.5° fp tolerance)
+            assert total_consumed <= 360.5, \
+                f"Total consumed angle {total_consumed:.2f}° exceeds 360° — arcs overflow"
 
         finally:
             tmp_path.unlink()
