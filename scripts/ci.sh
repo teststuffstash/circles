@@ -16,3 +16,7 @@ set -euo pipefail
 bash scripts/lint-specs.sh
 bash scripts/validate-chart.sh
 bash scripts/test-chart.sh
+
+# Bake unit tests (CIR-PROC-GATE#gate-resolution-logic-unit-tested)
+# Render page tests (CIR-PROC-TEST-ROWS, CIR-RENDER-*)
+uv run pytest tests/ -q --tb=short

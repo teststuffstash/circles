@@ -1,0 +1,1 @@
+"""circles bake — the bake that turns circles.yaml into the data.json render artifact."""

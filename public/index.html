@@ -1,3 +1,461 @@
-<!doctype html><title>circles</title>
-<h1>circles — vanilla bootstrap</h1>
-<p>The circles stack's deploy pipeline works. The real page arrives via specs.</p>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Alex Example — circles</title>
+<style>
+/* CIR-RENDER-PALETTE — the four fills */
+:root {
+  --c-ok: #00916A;
+  --c-attention: #F2B300;
+  --c-act: #B22222;
+  --c-unmonitored: #9E9E9E;
+  --c-ok-label: #000;
+  --c-attention-label: #000;
+  --c-act-label: #fff;
+  --c-unmonitored-label: #000;
+  --c-page-bg: #fff;
+  --c-text: #1a1a1a;
+  --c-border: #ccc;
+  --c-stale-overlay: rgba(0,0,0,0.06);
+  --gap: 2px;
+  --chrome-w: 300px;
+  --base-font: -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Oxygen,Ubuntu,Cantarell,sans-serif;
+}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+html{font-family:var(--base-font);font-size:14px;color:var(--c-text);background:var(--c-page-bg)}
+body{display:flex;flex-direction:column;min-height:100vh;padding:12px 16px;overflow:hidden}
+/* Layout: chart left, chrome right */
+.page-row{display:flex;flex:1;gap:16px;min-height:0}
+.chart-area{flex:0 0 auto;display:flex;align-items:center;justify-content:center}
+.chart-area svg{width:520px;height:520px;display:block}
+.chrome-area{flex:1;min-width:0;display:flex;flex-direction:column;gap:10px;overflow-y:auto}
+/* Chrome sections */
+.section{border:1px solid var(--c-border);border-radius:6px;padding:10px 12px}
+.section h3{font-size:11px;text-transform:uppercase;letter-spacing:0.5px;color:#666;margin-bottom:6px}
+/* Ring key */
+.ring-key-list{list-style:none}
+.ring-key-list li{font-size:13px;padding:2px 0}
+/* Legend */
+.legend-grid{display:grid;grid-template-columns:1fr 1fr;gap:4px}
+.legend-item{display:flex;align-items:center;gap:6px;font-size:13px}
+.legend-swatch{width:14px;height:14px;border-radius:3px;flex-shrink:0;border:1px solid rgba(0,0,0,0.1)}
+/* Bottom bar */
+.bottom-bar{display:flex;flex-direction:column;gap:4px;margin-top:4px}
+.detail-strip{font-size:13px;padding:6px 10px;border:1px solid var(--c-border);border-radius:6px;background:#fafafa;min-height:28px;line-height:1.4}
+.detail-strip.idle{color:#888}
+.stamp{font-size:11px;color:#888;text-align:right}
+/* Warnings */
+.warnings-banner{font-size:13px;padding:6px 10px;border-radius:6px;background:#fff3cd;border:1px solid #ffc107;display:none}
+.warnings-banner.visible{display:block}
+.warnings-banner summary{cursor:pointer;font-weight:600}
+/* Stale banner (not wired at P0 — stale_after_hours is null) */
+.stale-banner{display:none}
+/* A11Y table */
+.a11y-toggle{font-size:12px;color:#555;margin-top:6px}
+.a11y-toggle summary{cursor:pointer;padding:4px 0}
+.a11y-table{width:100%;border-collapse:collapse;font-size:12px;margin-top:4px}
+.a11y-table th,.a11y-table td{border:1px solid var(--c-border);padding:3px 6px;text-align:left}
+.a11y-table th{background:#f0f0f0;font-weight:600}
+.a11y-table .status-word{font-weight:600}
+/* Stale overlay (CSS class applied by JS if stale) */
+.stale .chart-area svg{filter:saturate(0.3) opacity(0.85)}
+/* Print styles */
+@media print{
+  @page{margin:10mm}
+  body{overflow:visible;padding:0}
+  .page-row{page-break-after:avoid}
+  .chrome-area{overflow:visible}
+  .a11y-table{display:table!important}
+  .a11y-toggle{display:none!important}
+  .detail-strip{border:1px solid #999}
+  .stamp{color:#555}
+  svg{print-color-adjust:exact;-webkit-print-color-adjust:exact}
+  .legend-swatch{print-color-adjust:exact;-webkit-print-color-adjust:exact}
+  /* Interactive affordances hidden */
+  .a11y-toggle summary{display:none}
+}
+/* No-JS path: the table is visible, the chart is hidden */
+@media print{
+  .svg-chart{display:block}
+  .nojs-table-wrapper{display:none}
+}
+/* Default: JS active means chart visible, table behind disclosure */
+.a11y-table-wrapper{display:none}
+.a11y-table-wrapper.open{display:block}
+</style>
+</head>
+<body>
+<script id="baked-data" type="application/json">
+{"version": 1, "spec_version": 0, "person": "Alex Example", "generated_at": "2026-08-05T17:14:47Z", "reference_date": "2026-08-03", "timezone": "UTC", "stale_after_hours": null, "rings": [{"id": "self", "label": "\u2460 Self", "items": [{"id": "sleep", "label": "Sleep", "status": "grey", "grey_reason": "by-failure", "guardrail": "Lights out by 23:00 on weeknights", "note": null, "link": null, "share": 1, "last_data_date": null, "detail_line": "Lights out by 23:00 on weeknights \u00b7 unmonitored \u00b7 adapter not evaluated in this build", "detail_page": null}, {"id": "labs", "label": "Quarterly labs", "status": "grey", "grey_reason": "by-failure", "guardrail": "Blood panel every 90 days", "note": null, "link": null, "share": 1, "last_data_date": null, "detail_line": "Blood panel every 90 days \u00b7 unmonitored \u00b7 adapter not evaluated in this build", "detail_page": null}, {"id": "exercise", "label": "Exercise", "status": "grey", "grey_reason": "by-choice", "guardrail": null, "note": null, "link": null, "share": 1, "last_data_date": null, "detail_line": "not monitored", "detail_page": null}]}, {"id": "partner", "label": "\u2461 Partner", "items": [{"id": "date-night", "label": "Date night", "status": "yellow", "grey_reason": null, "guardrail": "Protected evening, twice a month", "note": null, "link": null, "share": 1, "last_data_date": null, "detail_line": "Protected evening, twice a month \u00b7 attention", "detail_page": null}]}, {"id": "children", "label": "\u2462 Children", "items": [{"id": "nova", "label": "\u25c0 Nova", "status": "green", "grey_reason": null, "guardrail": null, "note": null, "link": null, "share": 0.5, "last_data_date": null, "detail_line": "ok", "detail_page": null}, {"id": "kit", "label": "Kit \u25b6", "status": "green", "grey_reason": null, "guardrail": null, "note": null, "link": null, "share": 0.5, "last_data_date": null, "detail_line": "ok", "detail_page": null}]}, {"id": "wider", "label": "\u2463 Wider life", "items": [{"id": "friends", "label": "Friends", "status": "red", "grey_reason": null, "guardrail": null, "note": null, "link": null, "share": 1, "last_data_date": null, "detail_line": "act", "detail_page": null}, {"id": "plants", "label": "Plants", "status": "grey", "grey_reason": "by-failure", "guardrail": null, "note": null, "link": null, "share": 1, "last_data_date": null, "detail_line": "unmonitored \u00b7 adapter not evaluated in this build", "detail_page": null}]}], "warnings": [{"item": "self/sleep", "message": "adapter not evaluated in this build"}, {"item": "self/labs", "message": "adapter not evaluated in this build"}, {"item": "wider/plants", "message": "adapter not evaluated in this build"}]}
+</script>
+
+<div class="page-row" id="page-row">
+  <div class="chart-area" id="chart-area">
+    <svg class="svg-chart" id="sunburst-svg" viewBox="0 0 600 600" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Sunburst chart of Alex Example's circles — see the table below for full item details">
+    </svg>
+  </div>
+  <div class="chrome-area">
+    <div class="section" id="ring-key-section">
+      <h3>Rings</h3>
+      <ol class="ring-key-list" id="ring-key-list"></ol>
+    </div>
+    <div class="section" id="legend-section">
+      <h3>Status</h3>
+      <div class="legend-grid">
+        <div class="legend-item"><span class="legend-swatch" style="background:var(--c-ok)"></span> ok</div>
+        <div class="legend-item"><span class="legend-swatch" style="background:var(--c-attention)"></span> attention</div>
+        <div class="legend-item"><span class="legend-swatch" style="background:var(--c-act)"></span> act</div>
+        <div class="legend-item"><span class="legend-swatch" style="background:var(--c-unmonitored)"></span> unmonitored</div>
+      </div>
+    </div>
+    <div class="section">
+      <h3>Generated</h3>
+      <div id="stamp-display" class="stamp"></div>
+    </div>
+  </div>
+</div>
+
+<div class="bottom-bar">
+  <div class="detail-strip idle" id="detail-strip">↕ Hover or focus a cell for details</div>
+  <div class="warnings-banner" id="warnings-banner">
+    <details><summary id="warnings-summary"></summary><ul id="warnings-list"></ul></details>
+  </div>
+  <div class="stamp" id="stamp-bar"></div>
+  <div class="a11y-toggle">
+    <details id="a11y-details">
+      <summary>Item table (accessible)</summary>
+      <div class="a11y-table-wrapper" id="a11y-table-wrapper">
+        <table class="a11y-table" id="a11y-table">
+          <thead><tr><th>Ring</th><th>Item</th><th>Status</th><th>Guardrail / Note</th><th>Detail</th></tr></thead>
+          <tbody id="a11y-table-body"></tbody>
+        </table>
+      </div>
+    </details>
+  </div>
+</div>
+
+<script>
+(function(){
+"use strict";
+
+// ---- CIR-RENDER-PALETTE ----
+var PALETTE = {
+  green:  {fill:"#00916A", label:"#000", word:"ok"},
+  yellow: {fill:"#F2B300", label:"#000", word:"attention"},
+  red:    {fill:"#B22222", label:"#fff", word:"act"},
+  grey:   {fill:"#9E9E9E", label:"#000", word:"unmonitored"}
+};
+
+// ---- Load data ----
+var DATA;
+try {
+  var el = document.getElementById("baked-data");
+  DATA = JSON.parse(el.textContent);
+} catch(e) {
+  document.body.innerHTML = '<div style="padding:40px;font-family:sans-serif"><h1>Boot failure</h1><p>The circles artifact could not be loaded — the baked data payload is missing or corrupted.</p><p style="color:#888;font-size:12px">' + e.message + '</p></div>';
+  return;
+}
+
+// Validate basic shape
+if (!DATA || !DATA.person || !DATA.rings || !Array.isArray(DATA.rings) || DATA.rings.length === 0) {
+  document.body.innerHTML = '<div style="padding:40px;font-family:sans-serif"><h1>Boot failure</h1><p>The circles artifact is unusable — required keys are missing or rings are empty.</p></div>';
+  return;
+}
+if (DATA.version !== 1) {
+  document.body.innerHTML = '<div style="padding:40px;font-family:sans-serif"><h1>Boot failure</h1><p>Unrecognized artifact version ' + DATA.version + '. This page understands version 1.</p></div>';
+  return;
+}
+
+// ---- Title ----
+document.title = DATA.person + " — circles";
+
+// ---- Geometry constants ----
+var CX = 300, CY = 300;
+var HOLE_RADIUS = 40;
+// Non-increasing thickness outward (CIR-RENDER-RING-THICKNESS)
+// 4 rings: thickness 70, 60, 50, 40
+var RING_THICKNESSES = [70, 60, 50, 40];
+if (DATA.rings.length !== 4) {
+  // Adapt thicknesses for other ring counts — non-increasing
+  var totalR = DATA.rings.length;
+  var baseThicks = [];
+  var remaining = 240;
+  for (var i = 0; i < totalR; i++) {
+    var t = Math.round(remaining / (totalR - i));
+    baseThicks.push(t);
+    remaining -= t;
+  }
+  RING_THICKNESSES = baseThicks;
+}
+var GAP_DEG = 2; // degrees between cells in a ring
+var GAP_RAD = GAP_DEG * Math.PI / 180;
+
+// ---- Radii ----
+function computeRadii() {
+  var radii = [];
+  var inner = HOLE_RADIUS;
+  for (var i = 0; i < RING_THICKNESSES.length; i++) {
+    var outer = inner + RING_THICKNESSES[i];
+    radii.push({inner: inner, outer: outer});
+    inner = outer;
+  }
+  return radii;
+}
+
+// ---- SVG math ----
+function degToRad(deg) {
+  return deg * Math.PI / 180;
+}
+
+function polarToCart(cx, cy, r, angleRad) {
+  // angleRad: 0 = 12 o'clock, clockwise
+  // SVG: positive x = 3 o'clock, positive y = down
+  // So 12 o'clock in SVG = -90° from positive x
+  var svgAngle = angleRad - Math.PI / 2;
+  return {x: cx + r * Math.cos(svgAngle), y: cy + r * Math.sin(svgAngle)};
+}
+
+function describeArc(cx, cy, r1, r2, startAngle, endAngle) {
+  // startAngle, endAngle in radians, 0 = 12 o'clock, clockwise
+  if (endAngle - startAngle >= 2 * Math.PI - 0.0001) {
+    // Full circle — draw two halves to avoid SVG arc ambiguity
+    var mid = startAngle + Math.PI;
+    var p1a = polarToCart(cx, cy, r1, startAngle);
+    var p2a = polarToCart(cx, cy, r2, startAngle);
+    var p1m = polarToCart(cx, cy, r1, mid);
+    var p2m = polarToCart(cx, cy, r2, mid);
+    var p1e = polarToCart(cx, cy, r1, endAngle);
+    var p2e = polarToCart(cx, cy, r2, endAngle);
+    return 'M' + p1a.x + ',' + p1a.y +
+      ' A' + r1 + ',' + r1 + ' 0 0,1 ' + p1m.x + ',' + p1m.y +
+      ' A' + r1 + ',' + r1 + ' 0 0,1 ' + p1e.x + ',' + p1e.y +
+      ' L' + p2e.x + ',' + p2e.y +
+      ' A' + r2 + ',' + r2 + ' 0 0,0 ' + p2m.x + ',' + p2m.y +
+      ' A' + r2 + ',' + r2 + ' 0 0,0 ' + p2a.x + ',' + p2a.y + ' Z';
+  }
+  var sweep = 1; // clockwise
+  var dTheta = endAngle - startAngle;
+  var largeArc = dTheta > Math.PI ? 1 : 0;
+  var p1s = polarToCart(cx, cy, r1, startAngle);
+  var p1e = polarToCart(cx, cy, r1, endAngle);
+  var p2s = polarToCart(cx, cy, r2, startAngle);
+  var p2e = polarToCart(cx, cy, r2, endAngle);
+  return 'M' + p1s.x + ',' + p1s.y +
+    ' A' + r1 + ',' + r1 + ' 0 ' + largeArc + ',1 ' + p1e.x + ',' + p1e.y +
+    ' L' + p2e.x + ',' + p2e.y +
+    ' A' + r2 + ',' + r2 + ' 0 ' + largeArc + ',0 ' + p2s.x + ',' + p2s.y + ' Z';
+}
+
+// ---- Build chart ----
+var svg = document.getElementById("sunburst-svg");
+var radii = computeRadii();
+var summaryCounts = {green:0, yellow:0, red:0, grey:0, greyByChoice:0, greyByFailure:0};
+
+// Process each ring
+DATA.rings.forEach(function(ring, ri) {
+  var items = ring.items;
+  if (items.length === 0) return;
+
+  var totalShares = 0;
+  for (var i = 0; i < items.length; i++) {
+    totalShares += (items[i].share || 1);
+  }
+
+  var r = radii[ri] || radii[radii.length - 1];
+  var startAngle = -GAP_RAD / 2; // start at 12 o'clock, account for half-gap
+
+  items.forEach(function(item, ii) {
+    var share = item.share || 1;
+    var itemAngle = (share / totalShares) * 2 * Math.PI;
+    var cellAngle = itemAngle - GAP_RAD; // subtract gap
+    if (cellAngle < 0) cellAngle = 0;
+
+    var endAngle = startAngle + cellAngle;
+    if (endAngle < startAngle + 0.0001) {
+      startAngle += itemAngle;
+      return; // skip — too small
+    }
+
+    var path = describeArc(CX, CY, r.inner, r.outer, startAngle, endAngle);
+    var palette = PALETTE[item.status] || PALETTE.grey;
+    var labelColor = palette.label;
+    var fillColor = palette.fill;
+
+    // Arc path
+    var pathEl = document.createElementNS("http://www.w3.org/2000/svg", "path");
+    pathEl.setAttribute("d", path);
+    pathEl.setAttribute("fill", fillColor);
+    pathEl.setAttribute("stroke", "rgba(0,0,0,0.08)");
+    pathEl.setAttribute("stroke-width", "0.5");
+    pathEl.setAttribute("data-ring", ring.label);
+    pathEl.setAttribute("data-item", item.label);
+    pathEl.setAttribute("data-status", item.status);
+    pathEl.setAttribute("data-detail", item.detail_line || "");
+    svg.appendChild(pathEl);
+
+    // Label — placed at mid-angle, mid-radius
+    var midAngle = startAngle + cellAngle / 2;
+    var midRadius = (r.inner + r.outer) / 2;
+    var pos = polarToCart(CX, CY, midRadius, midAngle);
+    var label = item.label;
+    // Estimate if label fits (simplified: check arc width at mid-radius)
+    var arcWidth = midRadius * cellAngle;
+    var fontSize = Math.min(11, Math.max(7, arcWidth / (label.length * 0.6)));
+    if (fontSize >= 7 && arcWidth > 16) {
+      var textEl = document.createElementNS("http://www.w3.org/2000/svg", "text");
+      textEl.setAttribute("x", pos.x);
+      textEl.setAttribute("y", pos.y);
+      textEl.setAttribute("text-anchor", "middle");
+      textEl.setAttribute("dominant-baseline", "central");
+      textEl.setAttribute("font-size", Math.round(fontSize * 10) / 10 + "px");
+      textEl.setAttribute("fill", labelColor);
+      textEl.setAttribute("font-family", "-apple-system,BlinkMacSystemFont,sans-serif");
+      textEl.setAttribute("pointer-events", "none");
+      // Truncate if needed
+      var maxChars = Math.floor(arcWidth / (fontSize * 0.6));
+      var displayLabel = label;
+      if (displayLabel.length > maxChars && maxChars > 3) {
+        displayLabel = displayLabel.substring(0, maxChars - 1) + "…";
+      }
+      textEl.textContent = displayLabel;
+      svg.appendChild(textEl);
+    }
+
+    // Count for summary
+    summaryCounts[item.status] = (summaryCounts[item.status] || 0) + 1;
+    if (item.status === "grey") {
+      if (item.grey_reason === "by-choice") {
+        summaryCounts.greyByChoice++;
+      } else if (item.grey_reason === "by-failure") {
+        summaryCounts.greyByFailure++;
+      }
+    }
+
+    startAngle += itemAngle;
+  });
+});
+
+// ---- Centre disc ----
+var disc = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+disc.setAttribute("cx", CX);
+disc.setAttribute("cy", CY);
+disc.setAttribute("r", HOLE_RADIUS - 2);
+disc.setAttribute("fill", "#fff");
+disc.setAttribute("stroke", "#ddd");
+disc.setAttribute("stroke-width", "1");
+svg.appendChild(disc);
+
+// Person name in centre
+var nameEl = document.createElementNS("http://www.w3.org/2000/svg", "text");
+nameEl.setAttribute("x", CX);
+nameEl.setAttribute("y", CY - 8);
+nameEl.setAttribute("text-anchor", "middle");
+nameEl.setAttribute("dominant-baseline", "central");
+nameEl.setAttribute("font-size", "10px");
+nameEl.setAttribute("font-weight", "600");
+nameEl.setAttribute("fill", "#333");
+nameEl.setAttribute("font-family", "-apple-system,BlinkMacSystemFont,sans-serif");
+nameEl.setAttribute("pointer-events", "none");
+nameEl.textContent = DATA.person;
+svg.appendChild(nameEl);
+
+// Summary counts
+var totalItems = DATA.rings.reduce(function(sum, r) { return sum + r.items.length; }, 0);
+var summaryParts = [];
+if (summaryCounts.green > 0) summaryParts.push(summaryCounts.green + " ok");
+if (summaryCounts.yellow > 0) summaryParts.push(summaryCounts.yellow + " attention");
+if (summaryCounts.red > 0) summaryParts.push(summaryCounts.red + " act");
+if (summaryCounts.greyByChoice > 0) summaryParts.push(summaryCounts.greyByChoice + " unmonitored");
+if (summaryCounts.greyByFailure > 0) summaryParts.push(summaryCounts.greyByFailure + " failing");
+if (summaryParts.length === 0) summaryParts.push("0 items");
+
+var summaryEl = document.createElementNS("http://www.w3.org/2000/svg", "text");
+summaryEl.setAttribute("x", CX);
+summaryEl.setAttribute("y", CY + 6);
+summaryEl.setAttribute("text-anchor", "middle");
+summaryEl.setAttribute("dominant-baseline", "central");
+summaryEl.setAttribute("font-size", "8px");
+summaryEl.setAttribute("fill", "#666");
+summaryEl.setAttribute("font-family", "-apple-system,BlinkMacSystemFont,sans-serif");
+summaryEl.setAttribute("pointer-events", "none");
+summaryEl.textContent = summaryParts.join(" · ");
+svg.appendChild(summaryEl);
+
+// ---- Ring key ----
+var keyList = document.getElementById("ring-key-list");
+DATA.rings.forEach(function(ring) {
+  var li = document.createElement("li");
+  li.textContent = ring.label;
+  keyList.appendChild(li);
+});
+
+// ---- Stamp ----
+document.getElementById("stamp-display").textContent = DATA.generated_at;
+document.getElementById("stamp-bar").textContent = "Generated: " + DATA.generated_at;
+
+// ---- Warnings ----
+if (DATA.warnings && DATA.warnings.length > 0) {
+  var banner = document.getElementById("warnings-banner");
+  banner.classList.add("visible");
+  document.getElementById("warnings-summary").textContent = DATA.warnings.length + " warning" + (DATA.warnings.length > 1 ? "s" : "") + " — " + DATA.warnings[0].message;
+  var list = document.getElementById("warnings-list");
+  DATA.warnings.forEach(function(w) {
+    var li = document.createElement("li");
+    li.textContent = (w.item || "") + ": " + w.message;
+    list.appendChild(li);
+  });
+}
+
+// ---- A11Y table ----
+var tbody = document.getElementById("a11y-table-body");
+DATA.rings.forEach(function(ring) {
+  ring.items.forEach(function(item) {
+    var tr = document.createElement("tr");
+    // Ring
+    var tdRing = document.createElement("td");
+    tdRing.textContent = ring.label;
+    tr.appendChild(tdRing);
+    // Item label
+    var tdItem = document.createElement("td");
+    tdItem.textContent = item.label;
+    tr.appendChild(tdItem);
+    // Status word
+    var tdStatus = document.createElement("td");
+    tdStatus.className = "status-word";
+    var palette = PALETTE[item.status] || PALETTE.grey;
+    tdStatus.textContent = palette.word;
+    if (item.status === "grey" && item.grey_reason === "by-choice") {
+      tdStatus.textContent = "unmonitored (by choice)";
+    } else if (item.status === "grey" && item.grey_reason === "by-failure") {
+      tdStatus.textContent = "unmonitored (adapter issue)";
+    }
+    tr.appendChild(tdStatus);
+    // Guardrail / Note
+    var tdGuard = document.createElement("td");
+    tdGuard.textContent = item.guardrail || item.note || "";
+    tr.appendChild(tdGuard);
+    // Detail
+    var tdDetail = document.createElement("td");
+    tdDetail.textContent = item.detail_line || "";
+    tr.appendChild(tdDetail);
+
+    tbody.appendChild(tr);
+  });
+});
+
+// ---- Stale check (P0: stale_after_hours is null, so never stale) ----
+if (DATA.stale_after_hours !== null && DATA.stale_after_hours !== undefined) {
+  var genTime = new Date(DATA.generated_at);
+  var now = new Date();
+  var hoursElapsed = (now - genTime) / (1000 * 60 * 60);
+  if (hoursElapsed > DATA.stale_after_hours) {
+    document.body.classList.add("stale");
+  }
+}
+
+})();
+</script>
+</body>
+</html>
