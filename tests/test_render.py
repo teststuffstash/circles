@@ -15,6 +15,7 @@ from datetime import date, datetime, timezone
 from pathlib import Path
 
 import pytest
+import yaml
 
 from bake.config import load_config
 from bake.emit import write_artifact
@@ -23,6 +24,7 @@ from bake.resolve import resolve
 
 FIXTURES = Path(__file__).resolve().parent.parent / "fixtures"
 ALEX_YAML = FIXTURES / "alex" / "circles.yaml"
+CLICK_TABLE = FIXTURES / "click-destinations.yaml"
 FIXTURE_REFERENCE_DATE = date(2026, 8, 3)
 FIXTURE_GENERATED_AT = datetime(2026, 8, 3, 2, 0, 0, tzinfo=timezone.utc)
 
@@ -74,6 +76,54 @@ def _render_fixture() -> str:
     """Render the fixture artifact to HTML."""
     artifact = _resolve_fixture()
     return render_page(artifact)
+
+
+def _load_click_table() -> dict:
+    """Load the CIR-RENDER-CLICK destination table (fixtures/click-destinations.yaml)."""
+    with open(CLICK_TABLE, encoding="utf-8") as f:
+        return yaml.safe_load(f)
+
+
+def _render_click_row(row: dict, tmp_path: Path) -> str:
+    """Render a one-ring page for a click-destination table row.
+
+    The row's `item` block is spliced into a config for the fixture person at
+    runtime (CIR-PROC-TEST-FIXTURES#fixture-row-is-spec-row) — nothing about the
+    item is invented in test code.
+    """
+    table = _load_click_table()
+    data = {
+        "person": table["person"],
+        "rings": [{
+            "id": table["ring"]["id"],
+            "label": table["ring"]["label"],
+            "items": [row["item"]],
+        }],
+    }
+    config_path = tmp_path / "circles.yaml"
+    config_path.write_text(yaml.dump(data), encoding="utf-8")
+
+    config = load_config(config_path)
+    artifact = resolve(
+        config,
+        reference_date=FIXTURE_REFERENCE_DATE,
+        generated_at=FIXTURE_GENERATED_AT,
+    )
+    return render_page(add_capacity_warnings(artifact))
+
+
+def _cell_open_tag(html_text: str, full_id: str) -> tuple[str, str]:
+    """Return (tag_name, attributes) of the cell element for `full_id`.
+
+    Cells are emitted as `<g class="cell" …>` when they have no destination and
+    `<a class="cell cell-linked" href=… >` when they do (CIR-RENDER-CLICK).
+    """
+    m = re.search(
+        r'<(a|g)\s+([^>]*data-item="' + re.escape(full_id) + r'"[^>]*)>',
+        html_text,
+    )
+    assert m is not None, f"No cell element found for {full_id!r} in the rendered page"
+    return m.group(1), m.group(2)
 
 
 # ===========================================================================
@@ -673,16 +723,76 @@ class TestRenderKeyboard:
 # ===========================================================================
 
 class TestRenderClick:
-    """CIR-RENDER-CLICK — where a cell leads."""
+    """CIR-RENDER-CLICK — where a cell leads.
 
-    def test_click_no_destination(self) -> None:
-        """CIR-RENDER-CLICK#click-no-destination —
-        cells without links are not clickable (role=button but no href)."""
-        html = _render_fixture()
-        # Cells use role="button" not <a> tags
-        assert 'role="button"' in html
-        # No href attributes on cells
-        assert 'href="' not in html
+    One parametrised test over every row of fixtures/click-destinations.yaml
+    (CIR-PROC-TEST-ROWS#rows-parametrised-not-copied), not one function per row.
+
+    The P2 rows (`click-link-wins-over-detail`, `click-detail-when-no-link`) are
+    absent from the table on purpose: detail pages do not exist at P0, so there is
+    no behaviour to assert. They are deferred with the rest of P2 (#35).
+    """
+
+    @pytest.mark.parametrize(
+        "row",
+        _load_click_table()["rows"],
+        ids=lambda r: f"CIR-RENDER-CLICK#{r['row_id']}",
+    )
+    def test_click_destination(self, row: dict, tmp_path: Path) -> None:
+        """CIR-RENDER-CLICK — the cell's activation target is what the row declares.
+
+        Row ids are carried by the parametrised case id, so each row of the spec
+        table joins to its own evidence entry.
+        """
+        html_text = _render_click_row(row, tmp_path)
+        expected = row["expected"]
+        full_id = f"self/{row['item']['id']}"
+        tag, attrs = _cell_open_tag(html_text, full_id)
+
+        if not expected["clickable"]:
+            # No destination: not an anchor, no href anywhere, cursor stays default.
+            assert tag == "g", (
+                f"{full_id} has no destination but rendered as <{tag}> — "
+                f"a cell with neither link nor detail page must not be an anchor"
+            )
+            assert "href=" not in attrs, f"{full_id} must carry no href, got: {attrs}"
+            assert 'href="' not in html_text, (
+                "a destination-less page must contain no link at all"
+            )
+            assert "cell-linked" not in attrs, (
+                f"{full_id} must not carry the clickable class, got: {attrs}"
+            )
+            # The pointer cursor is an affordance for a destination that does not
+            # exist here — the base .cell rule must leave the cursor alone.
+            assert ".cell { cursor: default" in html_text, (
+                "cells without a destination must not show a pointer cursor"
+            )
+            return
+
+        assert tag == "a", (
+            f"{full_id} declares link={expected['href']!r} but rendered as <{tag}> — "
+            f"the destination is dropped, so the cell leads nowhere"
+        )
+        assert f'href="{expected["href"]}"' in attrs, (
+            f"{full_id}: expected href={expected['href']!r}, got: {attrs}"
+        )
+        assert "cell-linked" in attrs, f"{full_id}: expected the clickable class, got: {attrs}"
+        assert ".cell-linked { cursor: pointer" in html_text, (
+            "a cell with a destination must show the pointer cursor"
+        )
+
+        if expected["target"] is None:
+            # Root-relative: navigates in place — no new tab, so no rel needed either.
+            assert "target=" not in attrs, (
+                f"{full_id}: a root-relative link must navigate in place, got: {attrs}"
+            )
+        else:
+            assert f'target="{expected["target"]}"' in attrs, (
+                f"{full_id}: expected target={expected['target']!r}, got: {attrs}"
+            )
+            assert f'rel="{expected["rel"]}"' in attrs, (
+                f"{full_id}: a new-tab link must carry rel={expected['rel']!r}, got: {attrs}"
+            )
 
 
 # ===========================================================================
