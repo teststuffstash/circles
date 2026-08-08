@@ -9,6 +9,7 @@
 from __future__ import annotations
 
 import json
+import math
 import re
 from datetime import date, datetime, timezone
 from pathlib import Path
@@ -29,6 +30,38 @@ FIXTURE_GENERATED_AT = datetime(2026, 8, 3, 2, 0, 0, tzinfo=timezone.utc)
 # ===========================================================================
 # Helpers
 # ===========================================================================
+
+def _point_to_angle(x: float, y: float, cx: float = 400.0, cy: float = 400.0) -> float:
+    """Convert SVG (x, y) coordinates to a clockwise-from-12-o'clock angle in degrees.
+
+    In SVG coordinates (y-down), the angle from centre is atan2(dx, -dy)
+    where dx, dy are from centre.  The centre of the sunburst viewBox is
+    (cx, cy) = (400, 400) by default.
+    """
+    dx = x - cx
+    dy = cy - y  # flip y (SVG y-down → Cartesian y-up)
+    return math.degrees(math.atan2(dx, dy)) % 360
+
+
+def _arc_sweep_degrees(path_d: str, cx: float = 400.0, cy: float = 400.0) -> float:
+    """Compute the angular sweep of a non-full-circle SVG arc path.
+
+    Each cell arc is a single sub-path: M start → A outer → L → A inner → Z.
+    The sweep is the clockwise angle from the M point to the first A endpoint.
+    """
+    m_match = re.match(r'M\s+([\d.-]+)\s+([\d.-]+)', path_d)
+    assert m_match is not None, f"Could not parse M command in: {path_d}"
+    x0, y0 = float(m_match.group(1)), float(m_match.group(2))
+    a_endpoints = re.findall(
+        r'A\s+[\d.]+\s+[\d.]+\s+\d+\s+\d+\s+\d+\s+([\d.-]+)\s+([\d.-]+)',
+        path_d,
+    )
+    assert len(a_endpoints) >= 1, f"Could not find A command in: {path_d}"
+    outer_end_x, outer_end_y = map(float, a_endpoints[0])
+    start_angle = _point_to_angle(x0, y0, cx, cy)
+    end_angle = _point_to_angle(outer_end_x, outer_end_y, cx, cy)
+    return (end_angle - start_angle) % 360
+
 
 def _resolve_fixture() -> dict:
     """Load the fixture config and resolve it."""
@@ -860,7 +893,6 @@ class TestRenderCapacity:
         rendered arc angle respects MIN_ARC_DEG AND the total consumed
         angle does not exceed 360° (CIR-RENDER-MIN-ARC
         #overflow-capped-at-total-deg)."""
-        import math
         import re as _re
         import yaml
         import tempfile
@@ -901,16 +933,6 @@ class TestRenderCapacity:
             # The inner arc start point (x1i, y1i) encodes start_angle.
             # We use the OUTER arc endpoint since it has larger resolution.
             #
-            # Angles in _arc_path are clockwise from 12 o'clock. In SVG coords
-            # (y-down), angle from centre: atan2(dx, -dy) where dx,dy from centre.
-            CX = 400.0
-            CY = 400.0
-
-            def _point_to_angle(x: float, y: float) -> float:
-                dx = x - CX
-                dy = CY - y  # flip y (SVG y-down → Cartesian y-up)
-                return math.degrees(math.atan2(dx, dy)) % 360
-
             # Extract all paths that belong to cells (not the centre circle)
             # by finding path elements that follow a 'data-item=' attribute
             cell_paths = _re.findall(
@@ -1375,15 +1397,6 @@ class TestRenderArcShare:
             assert len(sub_paths) == 2, \
                 f"Expected 2 sub-paths (half-circle arcs), got {len(sub_paths)}: {path_d}"
 
-            import math
-            CX = 400.0
-            CY = 400.0
-
-            def _point_to_angle(x: float, y: float) -> float:
-                dx = x - CX
-                dy = CY - y
-                return math.degrees(math.atan2(dx, dy)) % 360
-
             # Verify each sub-path has non-degenerate arcs (start != end)
             # and that together they cover the full 360°.
             total_sweep = 0.0
@@ -1475,35 +1488,6 @@ class TestRenderArcShare:
             # Verify arc proportions via SVG path geometry.
             # Shares 2:1:1 → arcs ≈ 180° / 90° / 90° (minus inter-cell gaps).
             import re as _re
-            import math
-
-            CX = 400.0
-            CY = 400.0
-
-            def _point_to_angle(x: float, y: float) -> float:
-                dx = x - CX
-                dy = CY - y
-                return math.degrees(math.atan2(dx, dy)) % 360
-
-            def _arc_sweep_degrees(path_d: str) -> float:
-                """Compute the angular sweep of a non-full-circle SVG arc path.
-
-                Each cell arc is a single sub-path: M start → A outer → L → A inner → Z.
-                The sweep is the clockwise angle from the M point to the first A endpoint.
-                """
-                m_match = _re.match(r'M\s+([\d.-]+)\s+([\d.-]+)', path_d)
-                assert m_match is not None, f"Could not parse M command in: {path_d}"
-                x0, y0 = float(m_match.group(1)), float(m_match.group(2))
-                a_endpoints = _re.findall(
-                    r'A\s+[\d.]+\s+[\d.]+\s+\d+\s+\d+\s+\d+\s+([\d.-]+)\s+([\d.-]+)',
-                    path_d,
-                )
-                assert len(a_endpoints) >= 1, f"Could not find A command in: {path_d}"
-                outer_end_x, outer_end_y = map(float, a_endpoints[0])
-                start_angle = _point_to_angle(x0, y0)
-                end_angle = _point_to_angle(outer_end_x, outer_end_y)
-                return (end_angle - start_angle) % 360
-
             # Extract path d for each item by data-item attribute
             big_match = _re.search(
                 r'data-item="a/big"[^>]*>\s*<path d="([^"]+)"', html,
@@ -1590,7 +1574,6 @@ class TestRenderMinArc:
         mixed floored and natural items where floored arcs alone
         overflow total_deg; verify total consumed angle does not
         exceed 360°."""
-        import math
         import re as _re
         import yaml
         import tempfile
@@ -1632,14 +1615,6 @@ class TestRenderMinArc:
             assert "<svg" in html
 
             # Verify total consumed angle (arcs + gaps) does not exceed 360°
-            CX = 400.0
-            CY = 400.0
-
-            def _point_to_angle(x: float, y: float) -> float:
-                dx = x - CX
-                dy = CY - y
-                return math.degrees(math.atan2(dx, dy)) % 360
-
             cell_paths = _re.findall(
                 r'data-item="[^"]*"[^>]*>\s*<path d="([^"]+)"',
                 html,
@@ -1675,7 +1650,6 @@ class TestRenderMinArc:
         ring with >180 items where total_deg would go negative
         pre-fix; verify no negative/degenerate arc angles and
         the capacity warning has a non-negative count."""
-        import math
         import re as _re
         import yaml
         import tempfile
@@ -1704,14 +1678,6 @@ class TestRenderMinArc:
             assert "<svg" in html
 
             # Verify no negative/degenerate arc angles
-            CX = 400.0
-            CY = 400.0
-
-            def _point_to_angle(x: float, y: float) -> float:
-                dx = x - CX
-                dy = CY - y
-                return math.degrees(math.atan2(dx, dy)) % 360
-
             cell_paths = _re.findall(
                 r'data-item="[^"]*"[^>]*>\s*<path d="([^"]+)"',
                 html,
