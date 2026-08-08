@@ -92,13 +92,14 @@ visible notch.
 | arc-gap-uniform | any ring | all inter-cell gaps in the ring equal |
 
 <details class="evidence-block">
-<summary>Evidence: 1 test case(s) — alex</summary>
+<summary>Evidence: 2 test case(s) — alex</summary>
 
 **Requirement:** CIR-RENDER-ARC-SHARE — **World:** alex
 
 | Case ID | Status | Detail |
 |---------|--------|--------|
 | `arc-share-half-arcs` | PASS | — |
+| `arc-share-single-item-ring` | PASS | — |
 
 [View full report](../../specs-site/evidence)
 

@@ -230,7 +230,14 @@ def _render_svg(artifact: dict) -> str:
             continue
 
         total_share = sum(item.get("share", 1.0) for item in items)
-        total_deg = max(360.0 - CELL_GAP_DEG * len(items), 0.0)
+
+        # A single-item ring spans the full 360° with no visible gap
+        # (CIR-RENDER-ARC-SHARE#arc-share-single-item-ring,
+        #  CIR-RENDER-RING-PARTITION#partition-full-circle-per-ring).
+        if len(items) == 1:
+            total_deg = 360.0
+        else:
+            total_deg = max(360.0 - CELL_GAP_DEG * len(items), 0.0)
 
         # Compute natural arc angles, then iteratively floor-and-redistribute
         # so floored arcs keep MIN_ARC_DEG and remaining arcs absorb the
