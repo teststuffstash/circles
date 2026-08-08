@@ -81,7 +81,24 @@ def _arc_path(
     """Return SVG path d attribute for an arc segment.
 
     Angles in degrees, clockwise from 12 o'clock.
+
+    Full-circle arcs (sweep ≈ 360°) are split into two half-circle arcs
+    because SVG elliptical-arc commands with coincident start/end points
+    are omitted by conforming renderers (CIR-RENDER-ARC-SHARE
+    #arc-share-single-item-ring).
     """
+    sweep = end_angle - start_angle
+
+    # Full circle: split into two half-circle arcs so no single A command
+    # has coincident start/end points.
+    if abs(sweep) >= 359.999:
+        mid = start_angle + sweep / 2.0
+        return (
+            _arc_path(start_angle, mid, inner_r, outer_r)
+            + " "
+            + _arc_path(mid, end_angle, inner_r, outer_r)
+        )
+
     start_rad = math.radians(start_angle)
     end_rad = math.radians(end_angle)
 
@@ -97,7 +114,6 @@ def _arc_path(
     x2i = CX + inner_r * math.sin(end_rad)
     y2i = CY - inner_r * math.cos(end_rad)
 
-    sweep = end_angle - start_angle
     large_arc = 1 if sweep > 180 else 0
 
     return (
@@ -230,7 +246,14 @@ def _render_svg(artifact: dict) -> str:
             continue
 
         total_share = sum(item.get("share", 1.0) for item in items)
-        total_deg = max(360.0 - CELL_GAP_DEG * len(items), 0.0)
+
+        # A single-item ring spans the full 360° with no visible gap
+        # (CIR-RENDER-ARC-SHARE#arc-share-single-item-ring,
+        #  CIR-RENDER-RING-PARTITION#partition-full-circle-per-ring).
+        if len(items) == 1:
+            total_deg = 360.0
+        else:
+            total_deg = max(360.0 - CELL_GAP_DEG * len(items), 0.0)
 
         # Compute natural arc angles, then iteratively floor-and-redistribute
         # so floored arcs keep MIN_ARC_DEG and remaining arcs absorb the

@@ -22,6 +22,7 @@ adapter reads all matched files and takes the newest date across the union.
 | source-glob-no-match | glob matches zero files | ⚪ + build warning (missing source) |
 | source-path-missing | path does not exist | ⚪ + build warning (missing source) |
 | source-parent-traversal | `source: ../../etc/hosts` | config error, bake fails — the escape message |
+| source-non-literal-parent-traversal | `source: sub/../../etc/hosts` | config error, bake fails — does not start with `..` but normalizes to an escape |
 | source-absolute-path | `source: /etc/hosts` | config error, bake fails — the absolute-path message, decided syntactically before any resolution (⚖-R52) |
 | source-unreadable | file exists, permission denied | ⚪ + build warning |
 
@@ -31,13 +32,14 @@ absoluteness is a syntactic property tested before resolution, so each row's mes
 independently triggerable.
 
 <details class="evidence-block">
-<summary>Evidence: 2 test case(s) — alex</summary>
+<summary>Evidence: 3 test case(s) — alex</summary>
 
 **Requirement:** CIR-DATA-SOURCE-PATH — **World:** alex
 
 | Case ID | Status | Detail |
 |---------|--------|--------|
 | `source-absolute-path` | PASS | — |
+| `source-non-literal-parent-traversal` | PASS | — |
 | `source-parent-traversal` | PASS | — |
 
 [View full report](../../specs-site/evidence)

@@ -135,7 +135,7 @@ def _validate_manual(raw: dict, path: str) -> None:
                           f"must be one of green, yellow, red")
 
 
-def _validate_freshness(raw: dict, path: str) -> None:
+def _validate_freshness(raw: dict, path: str, config_dir: Path) -> None:
     """Validate a freshness adapter block (CIR-DATA-FRESHNESS-THRESHOLDS)."""
     freshness = raw.get("freshness", {})
     if not isinstance(freshness, dict):
@@ -157,6 +157,16 @@ def _validate_freshness(raw: dict, path: str) -> None:
                           f"sources must be relative to the config directory")
 
     if source.startswith(".."):
+        raise ConfigError(f"{path}.status.freshness.source: '{source}' escapes the config "
+                          f"directory — parent traversal is not allowed")
+
+    # Normalize and check containment — catches non-literal escapes like
+    # 'sub/../../etc/hosts' that don't start with '..' but resolve outside
+    # the config directory (CIR-DATA-SOURCE-PATH).
+    resolved = (config_dir / source).resolve()
+    try:
+        resolved.relative_to(config_dir)
+    except ValueError:
         raise ConfigError(f"{path}.status.freshness.source: '{source}' escapes the config "
                           f"directory — parent traversal is not allowed")
 
@@ -249,7 +259,7 @@ def _validate_status(raw: dict, path: str, config_dir: Path | None = None) -> Ad
     if kind == "manual":
         _validate_manual(status, path)
     elif kind == "freshness":
-        _validate_freshness(status, path)
+        _validate_freshness(status, path, config_dir)
     elif kind == "command":
         if config_dir is None:
             raise ConfigError(f"{path}.status.command: config_dir is required for command validation")
