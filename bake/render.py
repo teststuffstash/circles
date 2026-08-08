@@ -57,6 +57,18 @@ LABEL_COLORS: dict[str, str] = {
 # ---------------------------------------------------------------------------
 
 
+def _total_deg(num_items: int) -> float:
+    """Compute total degrees available for arc placement.
+
+    A single-item ring spans the full 360° with no visible gap
+    (CIR-RENDER-ARC-SHARE#arc-share-single-item-ring,
+     CIR-RENDER-RING-PARTITION#partition-full-circle-per-ring).
+    """
+    if num_items == 1:
+        return 360.0
+    return max(360.0 - CELL_GAP_DEG * num_items, 0.0)
+
+
 def _compute_radii(num_rings: int) -> list[tuple[float, float]]:
     """Compute (inner_radius, outer_radius) for each ring, inside-out.
 
@@ -247,13 +259,7 @@ def _render_svg(artifact: dict) -> str:
 
         total_share = sum(item.get("share", 1.0) for item in items)
 
-        # A single-item ring spans the full 360° with no visible gap
-        # (CIR-RENDER-ARC-SHARE#arc-share-single-item-ring,
-        #  CIR-RENDER-RING-PARTITION#partition-full-circle-per-ring).
-        if len(items) == 1:
-            total_deg = 360.0
-        else:
-            total_deg = max(360.0 - CELL_GAP_DEG * len(items), 0.0)
+        total_deg = _total_deg(len(items))
 
         # Compute natural arc angles, then iteratively floor-and-redistribute
         # so floored arcs keep MIN_ARC_DEG and remaining arcs absorb the
@@ -579,7 +585,7 @@ def _add_capacity_warnings(artifact: dict) -> list[dict]:
 
         # CIR-RENDER-MIN-ARC: check if items per ring would squeeze arcs below minimum
         if num_items > 0:
-            available_deg = max(360.0 - CELL_GAP_DEG * num_items, 0.0)
+            available_deg = _total_deg(num_items)
             max_items_at_min = int(available_deg / MIN_ARC_DEG) if available_deg > 0 else 0
             if num_items > max_items_at_min:
                 warnings.append({
