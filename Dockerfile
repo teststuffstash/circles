@@ -14,13 +14,14 @@ WORKDIR /build
 # Install uv (deterministic Python toolchain, pinned via devbox)
 COPY --from=ghcr.io/astral-sh/uv:0.5 /uv /usr/local/bin/uv
 
-# Copy the bake source and its dependencies
-COPY pyproject.toml uv.lock ./
-RUN uv sync --frozen --no-dev
-
-# Copy the bake module and the fixture config
+# Copy the bake module, fixture config, and project metadata
 COPY bake/ bake/
 COPY fixtures/ fixtures/
+COPY pyproject.toml uv.lock ./
+
+# Install dependencies (bake/ must exist on disk before uv sync so setuptools
+# can discover the circles-bake package for the editable install declared in uv.lock)
+RUN uv sync --frozen --no-dev
 
 # Run the bake (P0: fixture person, reference date 2026-08-03 for reproducibility)
 RUN uv run --frozen python -m bake \

@@ -126,8 +126,9 @@ toolchain made implicitly.
 
 This repo is public and may contain **only synthetic data** (`CLAUDE.md`), while the deployable
 unit is a multi-stage nginx image whose content is baked at build time (`COPY dist/` from a bake
-stage). At P0 the bake uses the fixture person's config; in production a private config replaces it
-before docker build. Nothing today states how a real person's
+stage). At P0 the bake uses the fixture person's config; in production a private repo or job
+publishes an artifact the chart mounts (⚖-R1) — the image is never rebuilt with real data.
+Nothing today states how a real person's
 `circles.yaml`, their note sources, or their baked artifact get into a running deployment. Until
 that is stated, every phase above is undeployable for its actual purpose.
 
