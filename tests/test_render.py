@@ -1331,7 +1331,12 @@ class TestRenderArcShare:
     def test_arc_share_single_item_ring(self) -> None:
         """CIR-RENDER-ARC-SHARE#arc-share-single-item-ring —
         a ring with exactly one item renders as a full 360° band
-        with no visible gap (CELL_GAP_DEG is not subtracted)."""
+        with no visible gap (CELL_GAP_DEG is not subtracted).
+
+        The SVG path must use two half-circle arcs (not a single 360° arc)
+        because SVG elliptical-arc commands with coincident start/end points
+        are omitted by conforming renderers.
+        """
         import yaml
         import tempfile
 
@@ -1352,8 +1357,6 @@ class TestRenderArcShare:
             artifact = add_capacity_warnings(artifact)
             html = render_page(artifact)
 
-            # The single item should span the full 360° — the arc path
-            # should start at -90° (12 o'clock) and end at 270° (also 12 o'clock).
             # Extract all cell paths from the SVG.
             import re as _re
             cell_paths = _re.findall(
@@ -1363,14 +1366,14 @@ class TestRenderArcShare:
             assert len(cell_paths) == 1, \
                 f"Expected 1 cell path, got {len(cell_paths)}"
 
-            # Parse the path to extract start and end angles
             path_d = cell_paths[0]
-            m = _re.match(
-                r'M\s+([\d.-]+)\s+([\d.-]+)\s+A\s+[\d.]+\s+[\d.]+\s+\d\s+\d\s+1\s+([\d.-]+)\s+([\d.-]+)',
-                path_d,
-            )
-            assert m is not None, f"Could not parse path: {path_d}"
-            x1o, y1o, x2o, y2o = map(float, m.groups())
+
+            # The path must contain TWO sub-paths (two M commands) —
+            # a single 360° arc would be degenerate (coincident endpoints
+            # are omitted by SVG renderers).
+            sub_paths = [s.strip() for s in path_d.split("Z") if s.strip()]
+            assert len(sub_paths) == 2, \
+                f"Expected 2 sub-paths (half-circle arcs), got {len(sub_paths)}: {path_d}"
 
             import math
             CX = 400.0
@@ -1381,14 +1384,51 @@ class TestRenderArcShare:
                 dy = CY - y
                 return math.degrees(math.atan2(dx, dy)) % 360
 
-            start_angle = _point_to_angle(x1o, y1o) % 360
-            end_angle = _point_to_angle(x2o, y2o) % 360
+            # Verify each sub-path has non-degenerate arcs (start != end)
+            # and that together they cover the full 360°.
+            total_sweep = 0.0
+            for sp in sub_paths:
+                # Parse the sub-path using regex to find all A commands
+                # Structure: M x0 y0 A rx ry xrot large sweep x1 y1 L x2 y2 A rx ry xrot large sweep x3 y3
+                sp = sp.strip()
+                assert sp.startswith("M"), f"Sub-path must start with M: {sp}"
 
-            # The arc should span the full 360° (start ≈ end)
-            arc_deg = (end_angle - start_angle) % 360
-            # Allow small tolerance for floating point
-            assert abs(arc_deg - 360.0) < 1.0 or abs(arc_deg) < 1.0, \
-                f"Single-item ring arc spans {arc_deg:.2f}°, expected ~360° (full circle)"
+                # Extract all A command endpoints
+                a_endpoints = _re.findall(
+                    r'A\s+[\d.]+\s+[\d.]+\s+\d+\s+\d+\s+\d+\s+([\d.-]+)\s+([\d.-]+)',
+                    sp,
+                )
+                assert len(a_endpoints) == 2, \
+                    f"Expected 2 A commands per sub-path, got {len(a_endpoints)}: {sp}"
+
+                # Outer arc: start = M target, end = first A endpoint
+                m_match = _re.match(r'M\s+([\d.-]+)\s+([\d.-]+)', sp)
+                assert m_match is not None, f"Could not parse M command: {sp}"
+                x0, y0 = float(m_match.group(1)), float(m_match.group(2))
+                outer_end_x, outer_end_y = map(float, a_endpoints[0])
+
+                # Inner arc: start = L target, end = second A endpoint
+                l_match = _re.search(r'L\s+([\d.-]+)\s+([\d.-]+)', sp)
+                assert l_match is not None, f"Could not parse L command: {sp}"
+                inner_start_x, inner_start_y = float(l_match.group(1)), float(l_match.group(2))
+                inner_end_x, inner_end_y = map(float, a_endpoints[1])
+
+                # Verify arcs are non-degenerate (start != end)
+                assert abs(x0 - outer_end_x) > 0.01 or abs(y0 - outer_end_y) > 0.01, \
+                    f"Outer arc has coincident endpoints ({x0:.2f},{y0:.2f}) → ({outer_end_x:.2f},{outer_end_y:.2f})"
+                assert abs(inner_start_x - inner_end_x) > 0.01 or abs(inner_start_y - inner_end_y) > 0.01, \
+                    f"Inner arc has coincident endpoints ({inner_start_x:.2f},{inner_start_y:.2f}) → ({inner_end_x:.2f},{inner_end_y:.2f})"
+
+                # Compute the angular span of this sub-path using the outer arc
+                # (M → first A endpoint), which sweeps 180° for each half-circle.
+                start_angle = _point_to_angle(x0, y0)
+                end_angle = _point_to_angle(outer_end_x, outer_end_y)
+                sweep = (end_angle - start_angle) % 360
+                total_sweep += sweep
+
+            # The two half-circles together should cover 360°
+            assert abs(total_sweep - 360.0) < 2.0, \
+                f"Total sweep of both sub-paths is {total_sweep:.2f}°, expected ~360°"
         finally:
             tmp_path.unlink()
 
