@@ -308,8 +308,20 @@ last good artifact stays live. A half-written file must never be observable by t
 |---|---|---|
 | failed-bake-keeps-last-good | bake fails validation on run N | run N−1's artifact still served, unchanged |
 | interrupted-write-is-atomic | bake killed mid-write | the served file is either the old or the new one, never truncated |
+| permissions-world-readable | data.json written via write_artifact() | file mode is 0o644 (world-readable) so nginx-unprivileged can serve it |
 
-_Evidence: none yet — unverified._
+<details class="evidence-block">
+<summary>Evidence: 1 test case(s) — alex</summary>
+
+**Requirement:** CIR-BAKE-ATOMIC-WRITE — **World:** alex
+
+| Case ID | Status | Detail |
+|---------|--------|--------|
+| `permissions-world-readable` | PASS | — |
+
+[View full report](../../specs-site/evidence)
+
+</details>
 
 ## CIR-BAKE-DETERMINISM — same inputs, same output
 
