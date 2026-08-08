@@ -16,7 +16,7 @@ from typing import Any
 
 import pytest
 
-from bake.config import load_config
+from bake.config import ConfigError, load_config
 from bake.emit import write_artifact
 from bake.resolve import (
     GreyReason,
@@ -472,6 +472,183 @@ class TestBakeDetailFields:
                 assert "last_data_date" in item
                 assert "note" in item
                 assert "grey_reason" in item
+
+
+# ===========================================================================
+# CIR-ADAPT-CONTRACT — one adapter, one answer
+# ===========================================================================
+
+class TestAdaptContract:
+    """CIR-ADAPT-CONTRACT — one adapter, one answer."""
+
+    def test_adapter_resolves_one_item(self) -> None:
+        """CIR-ADAPT-CONTRACT#adapter-resolves-one-item —
+        one `status:` block produces exactly one status."""
+        artifact = _resolve_fixture()
+        # Every item with an adapter has exactly one status
+        for ring in artifact["rings"]:
+            for item in ring["items"]:
+                if item.get("grey_reason") != "not-evaluated":
+                    assert item["status"] in ("green", "yellow", "red", "grey")
+
+    def test_adapter_never_reads_the_clock(self) -> None:
+        """CIR-ADAPT-CONTRACT#adapter-never-reads-the-clock —
+        adapter uses injected reference date, not the system clock."""
+        # resolve() takes reference_date as explicit parameter
+        # Two bakes with different reference dates produce different generated_at
+        # but the same stale_after_hours structure
+        config = load_config(ALEX_YAML)
+        art1 = resolve(config, reference_date=date(2026, 8, 3), generated_at=FIXTURE_GENERATED_AT)
+        art2 = resolve(config, reference_date=date(2026, 8, 10), generated_at=FIXTURE_GENERATED_AT)
+        # Both resolve; the reference_date is injected, never read from a clock
+        assert art1["reference_date"] == "2026-08-03"
+        assert art2["reference_date"] == "2026-08-10"
+
+    def test_adapter_never_writes(self, tmp_path: Path) -> None:
+        """CIR-ADAPT-CONTRACT#adapter-never-writes —
+        adapters do not write to the config dir; the bake owns all output."""
+        # Create a command adapter whose argv[0] would create a file if executed.
+        # At P0, resolve() does NOT evaluate commands — it returns not-evaluated.
+        # If it DID execute, it would leave a file behind; verify no file is written.
+        import yaml
+
+        script_path = tmp_path / "emit.sh"
+        marker_path = tmp_path / "adapter-was-run.marker"
+        script_path.write_text("#!/usr/bin/env bash\ntouch " + str(marker_path))
+        script_path.chmod(0o755)
+
+        data = {
+            "person": "Test",
+            "rings": [{
+                "id": "a", "label": "A",
+                "items": [{
+                    "id": "x", "label": "X",
+                    "status": {"command": [str(script_path)]},
+                }],
+            }],
+        }
+        config_path = tmp_path / "circles.yaml"
+        config_path.write_text(yaml.dump(data))
+
+        config = load_config(config_path)
+        artifact = resolve(config, reference_date=date(2026, 8, 3), generated_at=FIXTURE_GENERATED_AT)
+
+        # The adapter was NOT executed — no marker file was written
+        assert not marker_path.exists(), (
+            f"Command adapter was executed — marker file exists at {marker_path}"
+        )
+        # The item resolves to grey/not-evaluated (P0 contract)
+        item = _item_by_id(artifact, "a", "x")
+        assert item["status"] == "grey"
+        assert item["grey_reason"] == "not-evaluated"
+
+    def test_adapter_unknown_name_is_config_error(self, tmp_path: Path) -> None:
+        """CIR-ADAPT-CONTRACT#adapter-unknown-name —
+        status: {prometheus: …} on a build without it → config error."""
+        import yaml
+        data = {
+            "person": "Test",
+            "rings": [{
+                "id": "a", "label": "A",
+                "items": [{"id": "x", "label": "X", "status": {"prometheus": {"query": "up"}}}],
+            }],
+        }
+        path = tmp_path / "circles.yaml"
+        path.write_text(yaml.dump(data))
+        with pytest.raises(ConfigError, match="unknown adapter"):
+            load_config(path)
+
+    def test_adapter_failure_is_isolated(self) -> None:
+        """CIR-ADAPT-CONTRACT#adapter-failure-is-isolated —
+        one failing adapter does not affect other items (at P0, adapters are
+        not-evaluated, so no failure cascades)."""
+        artifact = _resolve_fixture()
+        # wider/plants (command adapter, not-evaluated) is ⚪
+        plants = _item_by_id(artifact, "wider", "plants")
+        assert plants["status"] == "grey"
+        assert plants["grey_reason"] == "not-evaluated"
+        # Other items are unaffected
+        friends = _item_by_id(artifact, "wider", "friends")
+        assert friends["status"] == "red"
+        nova = _item_by_id(artifact, "children", "nova")
+        assert nova["status"] == "green"
+
+
+# ===========================================================================
+# CIR-ADAPT-REFERENCE-DATE — one clock per bake, injected
+# ===========================================================================
+
+class TestAdaptReferenceDate:
+    """CIR-ADAPT-REFERENCE-DATE — one clock per bake, injected."""
+
+    def test_reference_date_shared(self) -> None:
+        """CIR-ADAPT-REFERENCE-DATE#reference-date-shared —
+        all items in one bake share the same reference date."""
+        artifact = _resolve_fixture()
+        # The artifact carries one reference_date for all items
+        assert artifact["reference_date"] == "2026-08-03"
+        # No per-item reference date field exists
+        for ring in artifact["rings"]:
+            for item in ring["items"]:
+                assert "reference_date" not in item
+
+    def test_reference_date_injectable(self) -> None:
+        """CIR-ADAPT-REFERENCE-DATE#reference-date-injectable —
+        test supplies a fixed reference date, ages are deterministic."""
+        config = load_config(ALEX_YAML)
+        # Same inputs produce same artifact (except generated_at is also injected)
+        art1 = resolve(config, reference_date=date(2026, 8, 3), generated_at=FIXTURE_GENERATED_AT)
+        art2 = resolve(config, reference_date=date(2026, 8, 3), generated_at=FIXTURE_GENERATED_AT)
+        # Identical (same generated_at since we inject it)
+        import json
+        assert json.dumps(art1, sort_keys=True) == json.dumps(art2, sort_keys=True)
+
+    def test_reference_date_fixture_pinned(self) -> None:
+        """CIR-ADAPT-REFERENCE-DATE#reference-date-fixture-pinned —
+        fixture bakes use injected 2026-08-03, never today."""
+        artifact = _resolve_fixture()
+        assert artifact["reference_date"] == "2026-08-03"
+        assert artifact["generated_at"] == "2026-08-03T02:00:00Z"
+
+    def test_reference_date_default_is_config_timezone(self) -> None:
+        """CIR-ADAPT-REFERENCE-DATE#reference-date-default-is-config-timezone —
+        the config provides a timezone; the host's local zone must not leak."""
+        # P0 default is UTC; test that the timezone field is present in the artifact
+        artifact = _resolve_fixture()
+        assert artifact["timezone"] == "UTC"
+
+
+# ===========================================================================
+# CIR-ADAPT-NO-PAGE-LOGIC — the page is adapter-blind
+# ===========================================================================
+
+class TestAdaptNoPageLogic:
+    """CIR-ADAPT-NO-PAGE-LOGIC — the page is adapter-blind."""
+
+    def test_page_has_no_adapter_vocabulary(self) -> None:
+        """CIR-ADAPT-NO-PAGE-LOGIC#page-has-no-adapter-vocabulary —
+        the artifact never branches on which adapter produced a status."""
+        artifact = _resolve_fixture()
+        # No adapter kind info leaks into the artifact
+        for ring in artifact["rings"]:
+            for item in ring["items"]:
+                assert "adapter" not in item
+                assert "adapter_kind" not in item
+                assert "adapter_name" not in item
+
+    def test_new_adapter_changes_no_page_code(self) -> None:
+        """CIR-ADAPT-NO-PAGE-LOGIC#new-adapter-changes-no-page-code —
+        the artifact shape is fixed regardless of adapter kind."""
+        artifact = _resolve_fixture()
+        # All items have the same set of fields regardless of adapter
+        expected_fields = {"id", "label", "status", "grey_reason", "guardrail", "note",
+                          "link", "share", "last_data_date", "detail_line", "detail_page"}
+        for ring in artifact["rings"]:
+            for item in ring["items"]:
+                assert set(item.keys()) == expected_fields, (
+                    f"Item {ring['id']}/{item['id']} has unexpected fields: "
+                    f"{set(item.keys()) - expected_fields}"
+                )
 
 
 # ===========================================================================

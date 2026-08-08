@@ -289,6 +289,10 @@ def _validate_item(raw: dict, ring_id: str, index: int, config_dir: Path) -> tup
         raise ConfigError(f"{path}.id: must be a string, got {type(item_id).__name__}")
     _validate_slug(item_id, item_id, path)
 
+    # Rebuild path with qualified item id for clearer error messages
+    # (CIR-DATA-CONFIG-ERROR-FAILS#message-names-the-item)
+    path = f"rings[{ring_id}].items[{ring_id}/{item_id}]"
+
     # label is required
     if "label" not in raw:
         raise ConfigError(f"{path}: 'label' is required")
