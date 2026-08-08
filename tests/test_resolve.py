@@ -504,14 +504,43 @@ class TestAdaptContract:
         assert art1["reference_date"] == "2026-08-03"
         assert art2["reference_date"] == "2026-08-10"
 
-    def test_adapter_never_writes(self) -> None:
+    def test_adapter_never_writes(self, tmp_path: Path) -> None:
         """CIR-ADAPT-CONTRACT#adapter-never-writes —
         adapters do not write to the config dir; the bake owns all output."""
-        # At P0, adapters are not evaluated — they return not-evaluated.
-        # The contract is enforced by resolve() not calling any write operation.
-        artifact = _resolve_fixture()
-        # The artifact is pure data; no filesystem operations leak through
-        assert isinstance(artifact, dict)
+        # Create a command adapter whose argv[0] would create a file if executed.
+        # At P0, resolve() does NOT evaluate commands — it returns not-evaluated.
+        # If it DID execute, it would leave a file behind; verify no file is written.
+        import yaml
+
+        script_path = tmp_path / "emit.sh"
+        marker_path = tmp_path / "adapter-was-run.marker"
+        script_path.write_text("#!/usr/bin/env bash\ntouch " + str(marker_path))
+        script_path.chmod(0o755)
+
+        data = {
+            "person": "Test",
+            "rings": [{
+                "id": "a", "label": "A",
+                "items": [{
+                    "id": "x", "label": "X",
+                    "status": {"command": [str(script_path)]},
+                }],
+            }],
+        }
+        config_path = tmp_path / "circles.yaml"
+        config_path.write_text(yaml.dump(data))
+
+        config = load_config(config_path)
+        artifact = resolve(config, reference_date=date(2026, 8, 3), generated_at=FIXTURE_GENERATED_AT)
+
+        # The adapter was NOT executed — no marker file was written
+        assert not marker_path.exists(), (
+            f"Command adapter was executed — marker file exists at {marker_path}"
+        )
+        # The item resolves to grey/not-evaluated (P0 contract)
+        item = _item_by_id(artifact, "a", "x")
+        assert item["status"] == "grey"
+        assert item["grey_reason"] == "not-evaluated"
 
     def test_adapter_unknown_name_is_config_error(self, tmp_path: Path) -> None:
         """CIR-ADAPT-CONTRACT#adapter-unknown-name —

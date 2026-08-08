@@ -686,11 +686,12 @@ class TestDataConfigErrorFails:
         }
         with pytest.raises(ConfigError) as excinfo:
             _write_and_load(tmp_path, data)
-        # The error message contains the item path (rings[children].items[1])
-        # which identifies the item within the ring
+        # The error message identifies the failing item by its qualified id
+        # (CIR-DATA-CONFIG-ERROR-FAILS#message-names-the-item)
         msg = str(excinfo.value)
-        assert "children" in msg, f"Expected 'children' in error message: {msg}"
-        assert "items[1]" in msg, f"Expected 'items[1]' in error message: {msg}"
+        assert "children/kit" in msg, (
+            f"Expected 'children/kit' in error message: {msg}"
+        )
 
 
 # ===========================================================================
