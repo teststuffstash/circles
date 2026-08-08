@@ -35,6 +35,12 @@ def write_artifact(artifact: dict, out_dir: Path) -> Path:
     )
     try:
         os.write(fd, raw.encode("utf-8"))
+        # Ensure the temp file is world-readable before the atomic rename —
+        # tempfile.mkstemp() creates with mode 0600 by default, but
+        # nginx-unprivileged (non-root user) needs read access.  Chmod before
+        # replace so there is no window where the target path exists with
+        # restrictive permissions (CIR-BAKE-ATOMIC-WRITE#permissions-world-readable).
+        os.fchmod(fd, 0o644)
         os.close(fd)
         fd = -1
         os.replace(tmp_path, str(target))

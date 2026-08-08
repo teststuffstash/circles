@@ -498,6 +498,23 @@ class TestBakeAtomicWrite:
         assert parsed["version"] == 1
         assert parsed["person"] == "Alex Example"
 
+    def test_write_artifact_is_world_readable(self, tmp_path: Path) -> None:
+        """CIR-BAKE-ATOMIC-WRITE#permissions-world-readable —
+        data.json must be world-readable (mode 0o644) so non-root
+        nginx-unprivileged can serve it (regression: tempfile.mkstemp
+        creates with mode 0o600 by default)."""
+        import stat
+        artifact = _resolve_fixture()
+        write_artifact(artifact, tmp_path)
+        out_path = tmp_path / "data.json"
+        mode = out_path.stat().st_mode
+        # Must be readable by owner, group, and world (0o644 ≡ 0o100644 on disk)
+        assert bool(mode & stat.S_IRUSR), "owner cannot read"
+        assert bool(mode & stat.S_IRGRP), "group cannot read"
+        assert bool(mode & stat.S_IROTH), "world cannot read"
+        # Must NOT be writable by world (security — only owner writes)
+        assert not bool(mode & stat.S_IWOTH), "world can write"
+
 
 # ===========================================================================
 # CIR-BAKE-DETERMINISM — same inputs, same output
