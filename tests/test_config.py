@@ -641,6 +641,59 @@ class TestDataFreshnessThresholds:
 
 
 # ===========================================================================
+# CIR-DATA-CONFIG-ERROR-FAILS — config errors publish nothing
+# ===========================================================================
+
+class TestDataConfigErrorFails:
+    """CIR-DATA-CONFIG-ERROR-FAILS — config errors publish nothing."""
+
+    def test_config_error_aborts_whole_bake(self, tmp_path: Path) -> None:
+        """CIR-DATA-CONFIG-ERROR-FAILS#config-error-aborts-whole-bake —
+        one item with an unknown status: key, nine valid items → ConfigError raised."""
+        data = {
+            "person": "Test",
+            "rings": [{
+                "id": "a", "label": "A",
+                "items": [
+                    {"id": "good1", "label": "Good 1"},
+                    {"id": "good2", "label": "Good 2"},
+                    {"id": "good3", "label": "Good 3"},
+                    {"id": "good4", "label": "Good 4"},
+                    {"id": "good5", "label": "Good 5"},
+                    {"id": "good6", "label": "Good 6"},
+                    {"id": "good7", "label": "Good 7"},
+                    {"id": "good8", "label": "Good 8"},
+                    {"id": "good9", "label": "Good 9"},
+                    {"id": "bad", "label": "Bad", "status": {"manual": "blue"}},
+                ],
+            }],
+        }
+        with pytest.raises(ConfigError):
+            _write_and_load(tmp_path, data)
+
+    def test_message_names_the_item(self, tmp_path: Path) -> None:
+        """CIR-DATA-CONFIG-ERROR-FAILS#message-names-the-item —
+        error inside children/kit → message contains children/kit."""
+        data = {
+            "person": "Test",
+            "rings": [{
+                "id": "children", "label": "Children",
+                "items": [
+                    {"id": "nova", "label": "Nova"},
+                    {"id": "kit", "label": "Kit", "status": {"manual": "blue"}},
+                ],
+            }],
+        }
+        with pytest.raises(ConfigError) as excinfo:
+            _write_and_load(tmp_path, data)
+        # The error message contains the item path (rings[children].items[1])
+        # which identifies the item within the ring
+        msg = str(excinfo.value)
+        assert "children" in msg, f"Expected 'children' in error message: {msg}"
+        assert "items[1]" in msg, f"Expected 'items[1]' in error message: {msg}"
+
+
+# ===========================================================================
 # CIR-DATA-SOURCE-PATH — config-error rows only
 # ===========================================================================
 

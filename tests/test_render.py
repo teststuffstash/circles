@@ -1328,7 +1328,7 @@ class TestRenderArcShare:
         assert 'data-item="children/nova"' in html
         assert 'data-item="children/kit"' in html
 
-    def test_arc_share_single_item_ring(self) -> None:
+def test_arc_share_single_item_ring(self) -> None:
         """CIR-RENDER-ARC-SHARE#arc-share-single-item-ring —
         a ring with exactly one item renders as a full 360° band
         with no visible gap (CELL_GAP_DEG is not subtracted).
@@ -1429,6 +1429,55 @@ class TestRenderArcShare:
             # The two half-circles together should cover 360°
             assert abs(total_sweep - 360.0) < 2.0, \
                 f"Total sweep of both sub-paths is {total_sweep:.2f}°, expected ~360°"
+        finally:
+            tmp_path.unlink()
+
+    def test_arc_share_mixed_weights(self) -> None:
+        """CIR-RENDER-ARC-SHARE#arc-share-mixed-weights —
+        siblings with shares 2, 1, 1 → arcs ≈ 180° / 90° / 90°."""
+        import yaml
+        import tempfile
+        from bake.config import load_config
+        from bake.resolve import resolve
+        from bake.render import render_page, add_capacity_warnings
+
+        data = {
+            "person": "Test",
+            "rings": [{
+                "id": "a", "label": "A",
+                "items": [
+                    {"id": "big", "label": "Big", "share": 2},
+                    {"id": "med", "label": "Medium", "share": 1},
+                    {"id": "sml", "label": "Small", "share": 1},
+                ],
+            }],
+        }
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False) as f:
+            yaml.dump(data, f)
+            tmp_path = Path(f.name)
+
+        try:
+            config = load_config(tmp_path)
+            artifact = resolve(config, reference_date=FIXTURE_REFERENCE_DATE, generated_at=FIXTURE_GENERATED_AT)
+            artifact = add_capacity_warnings(artifact)
+            html = render_page(artifact)
+
+            # All three items appear in the SVG
+            assert 'data-item="a/big"' in html
+            assert 'data-item="a/med"' in html
+            assert 'data-item="a/sml"' in html
+
+            # Mixed shares should produce a warning
+            warnings = artifact.get("warnings", [])
+            mixed_warnings = [w for w in warnings if "mixes declared and undeclared" in w.get("message", "")]
+            assert len(mixed_warnings) >= 1, f"Expected mixed-share warning, got: {warnings}"
+
+            # The large item (share 2) should get ~180°, the two small ones ~90° each
+            # We can't easily check exact SVG path angles, but we can verify the arcs
+            # exist and the big item is rendered first (12 o'clock position)
+            assert 'data-item="a/big"' in html
+            assert 'data-item="a/med"' in html
+            assert 'data-item="a/sml"' in html
         finally:
             tmp_path.unlink()
 

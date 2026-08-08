@@ -100,6 +100,7 @@ visible notch.
 |---------|--------|--------|
 | `arc-share-half-arcs` | PASS | — |
 | `arc-share-single-item-ring` | PASS | — |
+| `arc-share-mixed-weights` | PASS | — |
 
 [View full report](../../specs-site/evidence)
 

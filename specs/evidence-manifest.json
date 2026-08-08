@@ -194,7 +194,8 @@
     ],
     "CIR-RENDER-ARC-SHARE": [
       "arc-share-single-item-ring",
-      "arc-share-half-arcs"
+      "arc-share-half-arcs",
+      "arc-share-mixed-weights"
     ],
     "CIR-RENDER-ASSET-BUDGET": [
       "budget-built-page-is-small",
@@ -306,6 +307,27 @@
     ],
     "CIR-RENDER-TOUCH": [
       "touch-target-size"
+    ],
+    "CIR-ADAPT-CONTRACT": [
+      "adapter-resolves-one-item",
+      "adapter-never-reads-the-clock",
+      "adapter-never-writes",
+      "adapter-failure-is-isolated",
+      "adapter-unknown-name"
+    ],
+    "CIR-ADAPT-NO-PAGE-LOGIC": [
+      "new-adapter-changes-no-page-code",
+      "page-has-no-adapter-vocabulary"
+    ],
+    "CIR-ADAPT-REFERENCE-DATE": [
+      "reference-date-shared",
+      "reference-date-injectable",
+      "reference-date-fixture-pinned",
+      "reference-date-default-is-config-timezone"
+    ],
+    "CIR-DATA-CONFIG-ERROR-FAILS": [
+      "message-names-the-item",
+      "config-error-aborts-whole-bake"
     ]
   }
 }

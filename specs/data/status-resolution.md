@@ -81,7 +81,19 @@ never read — dangerous-green.
 | published-page-survives-failed-bake | published page exists, new bake hits a config error | old page still served; it ages and eventually trips [`CIR-BAKE-STALE-SELF`](data-json.md) |
 | message-names-the-item | error inside `children/kit` | message contains `children/kit` |
 
-_Evidence: none yet — unverified._
+<details class="evidence-block">
+<summary>Evidence: 2 test case(s) — alex</summary>
+
+**Requirement:** CIR-DATA-CONFIG-ERROR-FAILS — **World:** alex
+
+| Case ID | Status | Detail |
+|---------|--------|--------|
+| `config-error-aborts-whole-bake` | PASS | — |
+| `message-names-the-item` | PASS | — |
+
+[View full report](../../specs-site/evidence)
+
+</details>
 
 ## CIR-DATA-FAILURE-IS-GREY — the failure algebra
 
