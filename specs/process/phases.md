@@ -37,7 +37,20 @@ not a failure), makes P1 a pure implementation step with no config migration, an
 goal's own phasing — under (c) P0 is no longer "hand-set" in any meaningful sense. (a) throws
 away the fixture, which is also the spec's key example.
 
-_Evidence: none yet — unverified._
+<details class="evidence-block">
+<summary>Evidence: 3 test case(s) — alex</summary>
+
+**Requirement:** CIR-PROC-PHASE-P0 — **World:** alex
+
+| Case ID | Status | Detail |
+|---------|--------|--------|
+| `p0-config-stays-valid` | PASS | — |
+| `p0-manual-end-to-end` | PASS | — |
+| `p0-unevaluated-adapters-are-grey` | PASS | — |
+
+[View full report](../../specs-site/evidence)
+
+</details>
 
 ## CIR-PROC-PHASE-P1 — the nightly bake
 
@@ -96,12 +109,26 @@ without naming the language that interface is *in* leaves the first implementati
 it by accident. Recorded here rather than assumed, because it is a real decision that the
 toolchain made implicitly.
 
-_Evidence: none yet — unverified._
+<details class="evidence-block">
+<summary>Evidence: 1 test case(s) — alex</summary>
+
+**Requirement:** CIR-PROC-BAKE-ONE-PATH — **World:** alex
+
+| Case ID | Status | Detail |
+|---------|--------|--------|
+| `bake-same-code-both-triggers` | PASS | — |
+
+[View full report](../../specs-site/evidence)
+
+</details>
 
 ## CIR-PROC-DEPLOY-SEAM — how a real person's data reaches a deployed page
 
 This repo is public and may contain **only synthetic data** (`CLAUDE.md`), while the deployable
-unit is an nginx image whose content is `COPY public/`. Nothing today states how a real person's
+unit is a multi-stage nginx image whose content is baked at build time (`COPY dist/` from a bake
+stage). At P0 the bake uses the fixture person's config; in production a private repo or job
+publishes an artifact the chart mounts (⚖-R1) — the image is never rebuilt with real data.
+Nothing today states how a real person's
 `circles.yaml`, their note sources, or their baked artifact get into a running deployment. Until
 that is stated, every phase above is undeployable for its actual purpose.
 

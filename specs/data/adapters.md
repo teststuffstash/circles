@@ -42,7 +42,23 @@ not take down the bake, because a failed bake means a stale page
 ([`CIR-BAKE-STALE-SELF`](data-json.md)) and a stale page is the thing this product exists to
 prevent.
 
-_Evidence: none yet — unverified._
+<details class="evidence-block">
+<summary>Evidence: 6 test case(s) — alex</summary>
+
+**Requirement:** CIR-ADAPT-CONTRACT — **World:** alex
+
+| Case ID | Status | Detail |
+|---------|--------|--------|
+| `adapter-cannot-return-grey` | PASS | — |
+| `adapter-failure-is-isolated` | PASS | — |
+| `adapter-never-reads-the-clock` | PASS | — |
+| `adapter-never-writes` | PASS | — |
+| `adapter-resolves-one-item` | PASS | — |
+| `adapter-unknown-name` | PASS | — |
+
+[View full report](../../specs-site/evidence)
+
+</details>
 
 ## CIR-ADAPT-REFERENCE-DATE — one clock per bake, injected
 
@@ -62,7 +78,22 @@ and tests always inject the fixture reference date (`fixtures/README.md`, ⚖-R2
 | reference-date-default-is-config-timezone | bake invoked with no injected date | today derived from the current instant in the config's `timezone:` — the host's local zone must not leak ([`CIR-BAKE-DETERMINISM`](data-json.md)) |
 | reference-date-fixture-pinned | any bake or test over `fixtures/alex` | injected `2026-08-03`, never the running day's calendar (⚖-R24) |
 
-_Evidence: none yet — unverified._
+<details class="evidence-block">
+<summary>Evidence: 5 test case(s) — alex</summary>
+
+**Requirement:** CIR-ADAPT-REFERENCE-DATE — **World:** alex
+
+| Case ID | Status | Detail |
+|---------|--------|--------|
+| `reference-date-crosses-midnight` | PASS | — |
+| `reference-date-default-is-config-timezone` | PASS | — |
+| `reference-date-fixture-pinned` | PASS | — |
+| `reference-date-injectable` | PASS | — |
+| `reference-date-shared` | PASS | — |
+
+[View full report](../../specs-site/evidence)
+
+</details>
 
 ## CIR-ADAPT-MANUAL — hand-set light
 
@@ -76,7 +107,20 @@ possible contributed built-in, never a hidden behavior of `manual:`.
 | manual-has-no-data-date | any manual item | detail line carries no "last data" segment |
 | manual-available-in-every-phase | any phase | implemented from P0 ([`CIR-PROC-PHASE-P0`](../process/phases.md)) |
 
-_Evidence: none yet — unverified._
+<details class="evidence-block">
+<summary>Evidence: 3 test case(s) — alex</summary>
+
+**Requirement:** CIR-ADAPT-MANUAL — **World:** alex
+
+| Case ID | Status | Detail |
+|---------|--------|--------|
+| `manual-available-in-every-phase` | PASS | — |
+| `manual-has-no-data-date` | PASS | — |
+| `manual-returns-declared-light` | PASS | — |
+
+[View full report](../../specs-site/evidence)
+
+</details>
 
 ## CIR-ADAPT-FRESHNESS — dates in files
 
@@ -124,7 +168,20 @@ lines (`date=2026-08-01`, `note=…`); (c) full JSON on stdout. **Ruled: (a) now
 compatible extension** — (b) is a superset of (a) and needs no config change, whereas (c) makes
 the escape hatch stop being a one-line shell script.
 
-_Evidence: none yet — unverified._
+<details class="evidence-block">
+<summary>Evidence: 3 test case(s) — alex</summary>
+
+**Requirement:** CIR-ADAPT-COMMAND — **World:** alex
+
+| Case ID | Status | Detail |
+|---------|--------|--------|
+| `command-argv-array-required` | PASS | — |
+| `command-executable-bit-at-validation` | PASS | — |
+| `command-executable-exists-at-validation` | PASS | — |
+
+[View full report](../../specs-site/evidence)
+
+</details>
 
 ## CIR-ADAPT-BUDGET — time and blast radius
 
@@ -171,4 +228,16 @@ absorbs every weird source, needs no plugin loader, and keeps arbitrary third-pa
 the bake process. Under (b) the adapter registry, its discovery order and its versioning all
 become spec surface that does not exist today.
 
-_Evidence: none yet — unverified._
+<details class="evidence-block">
+<summary>Evidence: 2 test case(s) — alex</summary>
+
+**Requirement:** CIR-ADAPT-NO-PAGE-LOGIC — **World:** alex
+
+| Case ID | Status | Detail |
+|---------|--------|--------|
+| `new-adapter-changes-no-page-code` | PASS | — |
+| `page-has-no-adapter-vocabulary` | PASS | — |
+
+[View full report](../../specs-site/evidence)
+
+</details>

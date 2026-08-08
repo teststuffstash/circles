@@ -17,9 +17,10 @@ on:
   push:
     branches: [master]
     paths:
-      - "public/**"
       - "chart/**"
       - "Dockerfile"
+      - "bake/**"
+      - "fixtures/**"
   workflow_dispatch: {} # manual re-deploy of current master
 
 concurrency:
