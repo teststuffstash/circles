@@ -27,13 +27,14 @@ works through scale-to-fit (⚖-R38); it just is not the legibility gate. The ex
 judgment call a human can override at merge time.
 
 <details class="evidence-block">
-<summary>Evidence: 1 test case(s) — alex</summary>
+<summary>Evidence: 2 test case(s) — alex</summary>
 
 **Requirement:** CIR-RENDER-REFERENCE-VIEWPORT — **World:** alex
 
 | Case ID | Status | Detail |
 |---------|--------|--------|
 | `viewport-gate-is-fixed` | PASS | — |
+| `viewport-larger-passes-trivially` | PASS | — |
 
 [View full report](../../specs-site/evidence)
 
@@ -64,13 +65,16 @@ phone-vs-desktop tension the goal leaves open: the phone gets a complete, smalle
 than a different one.
 
 <details class="evidence-block">
-<summary>Evidence: 1 test case(s) — alex</summary>
+<summary>Evidence: 4 test case(s) — alex</summary>
 
 **Requirement:** CIR-RENDER-ONE-SCREEN — **World:** alex
 
 | Case ID | Status | Detail |
 |---------|--------|--------|
+| `one-screen-larger-viewport` | PASS | — |
 | `one-screen-reference` | PASS | — |
+| `one-screen-smaller-viewport` | PASS | — |
+| `one-screen-with-warnings` | PASS | — |
 
 [View full report](../../specs-site/evidence)
 
