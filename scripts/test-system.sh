@@ -51,7 +51,6 @@ PF_PORT=${CIRCLES_PF_PORT:-8888}
 
 # Temp dirs (cleaned up by trap)
 BAKE_OUT=$(mktemp -d /tmp/circles-bake.XXXXXX)
-BUILD_CTX=$(mktemp -d /tmp/circles-build.XXXXXX)
 FETCH_DIR=$(mktemp -d /tmp/circles-fetch.XXXXXX)
 KIND_CONFIG=$(mktemp /tmp/kind-config.XXXXXX.yaml)
 
@@ -72,7 +71,7 @@ cleanup() {
     kind delete cluster --name "$CLUSTER_NAME" 2>&1 | sed 's/^/  /'
   fi
   # Clean temp dirs
-  rm -rf "$BAKE_OUT" "$BUILD_CTX" "$FETCH_DIR" "$KIND_CONFIG"
+  rm -rf "$BAKE_OUT" "$FETCH_DIR" "$KIND_CONFIG"
   echo "==> test-system: cleanup done"
 }
 trap cleanup EXIT
@@ -169,46 +168,18 @@ echo ""
 # STEP 2: Build Docker image with baked content
 # ═══════════════════════════════════════════════════════════════════════════════
 echo "==> step 2/7: build image $FULL_IMAGE"
-mkdir -p "$BUILD_CTX/dist"
-cp "$BAKE_OUT/data.json" "$BUILD_CTX/dist/"
-cp "$BAKE_OUT/index.html" "$BUILD_CTX/dist/"
 
-# Add nginx config to serve .json files (and set correct Content-Type)
-cat > "$BUILD_CTX/nginx.conf" << 'NF'
-server {
-    listen       8080;
-    server_name  localhost;
-    root   /usr/share/nginx/html;
-    index  index.html index.htm;
-
-    location / {
-        try_files $uri $uri/ =404;
-    }
-
-    location ~* \.json$ {
-        add_header Content-Type application/json;
-        try_files $uri =404;
-    }
-}
-NF
-
-# Fix permissions before COPY (bake tool creates 600 files, but nginx user needs read)
-chmod 644 "$BUILD_CTX/dist/"*
-
-cat > "$BUILD_CTX/Dockerfile" << 'DF'
-FROM nginxinc/nginx-unprivileged:1.27-alpine
-COPY dist/ /usr/share/nginx/html/
-COPY nginx.conf /etc/nginx/conf.d/default.conf
-DF
-
-# Pre-pull the base image so docker build doesn't need to pull it mid-stream
+# Pre-pull the base images so docker build doesn't need to pull them mid-stream
 # (the registry mirror can be flaky with large layer downloads during build)
-echo "  pre-pulling base image…"
+echo "  pre-pulling base images…"
+docker pull python:3.11-alpine 2>&1 | sed 's/^/  /' || echo "  (pre-pull failed — will try during build)"
 docker pull nginxinc/nginx-unprivileged:1.27-alpine 2>&1 | sed 's/^/  /' || echo "  (pre-pull failed — will try during build)"
 
-# Retry docker build up to 3 times (handles transient BuildKit transport errors in CI dind)
+# Build using the repo-root multi-stage Dockerfile (bake then serve)
+# The real Dockerfile runs the bake inside stage 1, so the image contains
+# freshly-baked artifacts — no separate dist copy needed.
 echo "  building image (up to 3 attempts)…"
-retry 3 docker build -t "$FULL_IMAGE" "$BUILD_CTX"
+retry 3 docker build -t "$FULL_IMAGE" .
 RC=$?
 if [ "$RC" -ne 0 ]; then
   echo "  ERROR: docker build failed after retries" >&2
@@ -390,29 +361,15 @@ else
   fi
 fi
 
-# 7b — inlined data equals baked data (CIR-BAKE-SELF-CONTAINED#inlined-data-equals-the-file)
+# 7b — inlined data equals served data.json (CIR-BAKE-SELF-CONTAINED#inlined-data-equals-the-file)
+# Both come from the same Docker build (the real Dockerfile bakes at build time),
+# so they share the same generated_at timestamp — no cross-bake mismatch.
 echo "  7b: inlined-data-equals-the-file"
-if [ -s "$FETCH_DIR/data.json" ]; then
-  # Check served data.json matches baked artifact
+if [ -s "$FETCH_DIR/data.json" ] && [ -f "$FETCH_DIR/index.html" ]; then
   if python3 -c '
 import json, sys
 with open("'"$FETCH_DIR"'/data.json") as f: served = json.load(f)
-with open("'"$BAKE_OUT"'/data.json") as f: baked = json.load(f)
-if served != baked:
-    sys.exit(1)
-' 2>/dev/null; then
-    assert_pass "served data.json matches baked artifact"
-  else
-    assert_fail "served data.json differs from baked artifact"
-  fi
-fi
-
-# Check inlined data equals the baked data (always the primary check even when data.json not served)
-if [ -f "$FETCH_DIR/index.html" ]; then
-  if python3 -c '
-import json, sys
 with open("'"$FETCH_DIR"'/index.html") as f: html = f.read()
-with open("'"$BAKE_OUT"'/data.json") as f: baked = json.load(f)
 marker = "<script id=\"artifact-data\" type=\"application/json\">"
 start = html.find(marker)
 if start < 0:
@@ -420,12 +377,31 @@ if start < 0:
 start = html.index(">", start) + 1
 end = html.index("</script>", start)
 inlined = json.loads(html[start:end].strip())
-if inlined != baked:
+if inlined != served:
     sys.exit(1)
 ' 2>/dev/null; then
-    assert_pass "inlined data matches baked artifact"
+    assert_pass "inlined data matches served data.json"
   else
-    assert_fail "inlined data does not match baked artifact"
+    assert_fail "inlined data does not match served data.json"
+  fi
+elif [ -f "$FETCH_DIR/index.html" ]; then
+  # data.json not served — check inlined data has the right structure
+  if python3 -c '
+import json, sys
+with open("'"$FETCH_DIR"'/index.html") as f: html = f.read()
+marker = "<script id=\"artifact-data\" type=\"application/json\">"
+start = html.find(marker)
+if start < 0:
+    sys.exit(1)
+start = html.index(">", start) + 1
+end = html.index("</script>", start)
+inlined = json.loads(html[start:end].strip())
+if "version" not in inlined or "rings" not in inlined:
+    sys.exit(1)
+' 2>/dev/null; then
+    assert_pass "inlined data has valid artifact structure"
+  else
+    assert_fail "inlined data missing required fields"
   fi
 else
   assert_fail "index.html was not fetched — cannot check inlined data"
