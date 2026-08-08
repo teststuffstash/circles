@@ -677,6 +677,23 @@ class TestDataSourcePath:
         with pytest.raises(ConfigError, match="absolute path"):
             _write_and_load(tmp_path, data)
 
+    def test_source_non_literal_parent_traversal(self, tmp_path: Path) -> None:
+        """CIR-DATA-SOURCE-PATH#source-non-literal-parent-traversal —
+        a source like 'sub/../../etc/hosts' does not start with '..' but
+        normalizes to an escape — must be caught as a config error."""
+        data = {
+            "person": "Test",
+            "rings": [{
+                "id": "a", "label": "A",
+                "items": [{
+                    "id": "x", "label": "X",
+                    "status": {"freshness": {"source": "sub/../../etc/hosts", "yellow_after": 7, "red_after": 30}},
+                }],
+            }],
+        }
+        with pytest.raises(ConfigError, match="escape"):
+            _write_and_load(tmp_path, data)
+
 
 # ===========================================================================
 # CIR-ADAPT-COMMAND — config-error rows only

@@ -1328,6 +1328,70 @@ class TestRenderArcShare:
         assert 'data-item="children/nova"' in html
         assert 'data-item="children/kit"' in html
 
+    def test_arc_share_single_item_ring(self) -> None:
+        """CIR-RENDER-ARC-SHARE#arc-share-single-item-ring —
+        a ring with exactly one item renders as a full 360° band
+        with no visible gap (CELL_GAP_DEG is not subtracted)."""
+        import yaml
+        import tempfile
+
+        config_data = {
+            "person": "Test",
+            "rings": [{
+                "id": "a", "label": "A",
+                "items": [{"id": "x", "label": "X", "status": {"manual": "green"}}],
+            }],
+        }
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False) as f:
+            yaml.dump(config_data, f)
+            tmp_path = Path(f.name)
+
+        try:
+            config = load_config(tmp_path)
+            artifact = resolve(config, reference_date=FIXTURE_REFERENCE_DATE, generated_at=FIXTURE_GENERATED_AT)
+            artifact = add_capacity_warnings(artifact)
+            html = render_page(artifact)
+
+            # The single item should span the full 360° — the arc path
+            # should start at -90° (12 o'clock) and end at 270° (also 12 o'clock).
+            # Extract all cell paths from the SVG.
+            import re as _re
+            cell_paths = _re.findall(
+                r'data-item="[^"]*"[^>]*>\s*<path d="([^"]+)"',
+                html,
+            )
+            assert len(cell_paths) == 1, \
+                f"Expected 1 cell path, got {len(cell_paths)}"
+
+            # Parse the path to extract start and end angles
+            path_d = cell_paths[0]
+            m = _re.match(
+                r'M\s+([\d.-]+)\s+([\d.-]+)\s+A\s+[\d.]+\s+[\d.]+\s+\d\s+\d\s+1\s+([\d.-]+)\s+([\d.-]+)',
+                path_d,
+            )
+            assert m is not None, f"Could not parse path: {path_d}"
+            x1o, y1o, x2o, y2o = map(float, m.groups())
+
+            import math
+            CX = 400.0
+            CY = 400.0
+
+            def _point_to_angle(x: float, y: float) -> float:
+                dx = x - CX
+                dy = CY - y
+                return math.degrees(math.atan2(dx, dy)) % 360
+
+            start_angle = _point_to_angle(x1o, y1o) % 360
+            end_angle = _point_to_angle(x2o, y2o) % 360
+
+            # The arc should span the full 360° (start ≈ end)
+            arc_deg = (end_angle - start_angle) % 360
+            # Allow small tolerance for floating point
+            assert abs(arc_deg - 360.0) < 1.0 or abs(arc_deg) < 1.0, \
+                f"Single-item ring arc spans {arc_deg:.2f}°, expected ~360° (full circle)"
+        finally:
+            tmp_path.unlink()
+
 
 # ===========================================================================
 # CIR-RENDER-RING-THICKNESS — the most important ring is the smallest
