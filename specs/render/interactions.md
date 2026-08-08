@@ -71,13 +71,15 @@ person who uses this page every day. The loser staying reachable is what makes t
 way.
 
 <details class="evidence-block">
-<summary>Evidence: 1 test case(s) — alex</summary>
+<summary>Evidence: 3 test case(s) — alex</summary>
 
 **Requirement:** CIR-RENDER-CLICK — **World:** alex
 
 | Case ID | Status | Detail |
 |---------|--------|--------|
+| `click-follows-link` | PASS | — |
 | `click-no-destination` | PASS | — |
+| `click-root-relative` | PASS | — |
 
 [View full report](../../specs-site/evidence)
 
@@ -169,7 +171,7 @@ pass. (c) is rejected: a page whose entire purpose is being glanced at and print
 depend on a script executing.
 
 <details class="evidence-block">
-<summary>Evidence: 3 test case(s) — alex</summary>
+<summary>Evidence: 4 test case(s) — alex</summary>
 
 **Requirement:** CIR-RENDER-NO-JS — **World:** alex
 
@@ -177,6 +179,7 @@ depend on a script executing.
 |---------|--------|--------|
 | `no-js-detail-lines-present` | PASS | — |
 | `no-js-is-not-blank` | PASS | — |
+| `no-js-links-work` | PASS | — |
 | `no-js-text-alternative-renders` | PASS | — |
 
 [View full report](../../specs-site/evidence)

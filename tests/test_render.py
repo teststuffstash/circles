@@ -15,6 +15,7 @@ from datetime import date, datetime, timezone
 from pathlib import Path
 
 import pytest
+import yaml
 
 from bake.config import load_config
 from bake.emit import write_artifact
@@ -23,6 +24,7 @@ from bake.resolve import resolve
 
 FIXTURES = Path(__file__).resolve().parent.parent / "fixtures"
 ALEX_YAML = FIXTURES / "alex" / "circles.yaml"
+CLICK_TABLE = FIXTURES / "click-destinations.yaml"
 FIXTURE_REFERENCE_DATE = date(2026, 8, 3)
 FIXTURE_GENERATED_AT = datetime(2026, 8, 3, 2, 0, 0, tzinfo=timezone.utc)
 
@@ -74,6 +76,54 @@ def _render_fixture() -> str:
     """Render the fixture artifact to HTML."""
     artifact = _resolve_fixture()
     return render_page(artifact)
+
+
+def _load_click_table() -> dict:
+    """Load the CIR-RENDER-CLICK destination table (fixtures/click-destinations.yaml)."""
+    with open(CLICK_TABLE, encoding="utf-8") as f:
+        return yaml.safe_load(f)
+
+
+def _render_click_row(row: dict, tmp_path: Path) -> str:
+    """Render a one-ring page for a click-destination table row.
+
+    The row's `item` block is spliced into a config for the fixture person at
+    runtime (CIR-PROC-TEST-FIXTURES#fixture-row-is-spec-row) — nothing about the
+    item is invented in test code.
+    """
+    table = _load_click_table()
+    data = {
+        "person": table["person"],
+        "rings": [{
+            "id": table["ring"]["id"],
+            "label": table["ring"]["label"],
+            "items": [row["item"]],
+        }],
+    }
+    config_path = tmp_path / "circles.yaml"
+    config_path.write_text(yaml.dump(data), encoding="utf-8")
+
+    config = load_config(config_path)
+    artifact = resolve(
+        config,
+        reference_date=FIXTURE_REFERENCE_DATE,
+        generated_at=FIXTURE_GENERATED_AT,
+    )
+    return render_page(add_capacity_warnings(artifact))
+
+
+def _cell_open_tag(html_text: str, full_id: str) -> tuple[str, str]:
+    """Return (tag_name, attributes) of the cell element for `full_id`.
+
+    Cells are emitted as `<g class="cell" …>` when they have no destination and
+    `<a class="cell cell-linked" href=… >` when they do (CIR-RENDER-CLICK).
+    """
+    m = re.search(
+        r'<(a|g)\s+([^>]*data-item="' + re.escape(full_id) + r'"[^>]*)>',
+        html_text,
+    )
+    assert m is not None, f"No cell element found for {full_id!r} in the rendered page"
+    return m.group(1), m.group(2)
 
 
 # ===========================================================================
@@ -418,6 +468,32 @@ class TestRenderNoJs:
         assert "unmonitored" in html
         assert "not evaluated" in html
 
+    def test_no_js_links_work(self, tmp_path: Path) -> None:
+        """CIR-RENDER-NO-JS#no-js-links-work —
+        configured links are plain anchors, so they navigate with scripting off.
+
+        Not named in issue #73, but the same coverage gap and unlocked by the same
+        change: before it, no `link:` reached the page at all, so the row could not
+        be asserted. Nothing here depends on the inline script running.
+        """
+        rows = {r["row_id"]: r for r in _load_click_table()["rows"]}
+        row = rows["click-follows-link"]
+        html_text = _render_click_row(row, tmp_path)
+
+        tag, attrs = _cell_open_tag(html_text, f"self/{row['item']['id']}")
+        assert tag == "a", "a configured link must be a plain anchor, not a scripted handler"
+        assert f'href="{row["expected"]["href"]}"' in attrs
+
+        # Navigation is the anchor's own, not the script's: no inline handler on the
+        # cell and no navigation anywhere in the page's script.
+        assert "onclick=" not in html_text
+        script = html_text[html_text.rindex("<script>"):]
+        for scripted_nav in ("location", "window.open", "navigate"):
+            assert scripted_nav not in script, (
+                f"the page script performs navigation ({scripted_nav}) — "
+                f"links must work with JS disabled"
+            )
+
 
 # ===========================================================================
 # CIR-RENDER-A11Y-TABLE — the accessible equivalent
@@ -673,16 +749,76 @@ class TestRenderKeyboard:
 # ===========================================================================
 
 class TestRenderClick:
-    """CIR-RENDER-CLICK — where a cell leads."""
+    """CIR-RENDER-CLICK — where a cell leads.
 
-    def test_click_no_destination(self) -> None:
-        """CIR-RENDER-CLICK#click-no-destination —
-        cells without links are not clickable (role=button but no href)."""
-        html = _render_fixture()
-        # Cells use role="button" not <a> tags
-        assert 'role="button"' in html
-        # No href attributes on cells
-        assert 'href="' not in html
+    One parametrised test over every row of fixtures/click-destinations.yaml
+    (CIR-PROC-TEST-ROWS#rows-parametrised-not-copied), not one function per row.
+
+    The P2 rows (`click-link-wins-over-detail`, `click-detail-when-no-link`) are
+    absent from the table on purpose: detail pages do not exist at P0, so there is
+    no behaviour to assert. They are deferred with the rest of P2 (#35).
+    """
+
+    @pytest.mark.parametrize(
+        "row",
+        _load_click_table()["rows"],
+        ids=lambda r: f"CIR-RENDER-CLICK#{r['row_id']}",
+    )
+    def test_click_destination(self, row: dict, tmp_path: Path) -> None:
+        """CIR-RENDER-CLICK — the cell's activation target is what the row declares.
+
+        Row ids are carried by the parametrised case id, so each row of the spec
+        table joins to its own evidence entry.
+        """
+        html_text = _render_click_row(row, tmp_path)
+        expected = row["expected"]
+        full_id = f"self/{row['item']['id']}"
+        tag, attrs = _cell_open_tag(html_text, full_id)
+
+        if not expected["clickable"]:
+            # No destination: not an anchor, no href anywhere, cursor stays default.
+            assert tag == "g", (
+                f"{full_id} has no destination but rendered as <{tag}> — "
+                f"a cell with neither link nor detail page must not be an anchor"
+            )
+            assert "href=" not in attrs, f"{full_id} must carry no href, got: {attrs}"
+            assert 'href="' not in html_text, (
+                "a destination-less page must contain no link at all"
+            )
+            assert "cell-linked" not in attrs, (
+                f"{full_id} must not carry the clickable class, got: {attrs}"
+            )
+            # The pointer cursor is an affordance for a destination that does not
+            # exist here — the base .cell rule must leave the cursor alone.
+            assert ".cell { cursor: default" in html_text, (
+                "cells without a destination must not show a pointer cursor"
+            )
+            return
+
+        assert tag == "a", (
+            f"{full_id} declares link={expected['href']!r} but rendered as <{tag}> — "
+            f"the destination is dropped, so the cell leads nowhere"
+        )
+        assert f'href="{expected["href"]}"' in attrs, (
+            f"{full_id}: expected href={expected['href']!r}, got: {attrs}"
+        )
+        assert "cell-linked" in attrs, f"{full_id}: expected the clickable class, got: {attrs}"
+        assert ".cell-linked { cursor: pointer" in html_text, (
+            "a cell with a destination must show the pointer cursor"
+        )
+
+        if expected["target"] is None:
+            # Root-relative: navigates in place — no new tab, so no rel needed either.
+            assert "target=" not in attrs, (
+                f"{full_id}: a root-relative link must navigate in place, got: {attrs}"
+            )
+        else:
+            assert f'target="{expected["target"]}"' in attrs, (
+                f"{full_id}: expected target={expected['target']!r}, got: {attrs}"
+            )
+            assert f'rel="{expected["rel"]}"' in attrs, (
+                f"{full_id}: a new-tab link must carry rel={expected['rel']!r}, got: {attrs}"
+            )
 
 
 # ===========================================================================
@@ -1092,6 +1228,85 @@ class TestRenderOneScreen:
         # The chart area uses flex layout
         assert "flex" in html
 
+    @pytest.mark.parametrize(
+        "viewport",
+        [
+            pytest.param((1920, 1080), id="CIR-RENDER-ONE-SCREEN#one-screen-larger-viewport"),
+            pytest.param((700, 500), id="CIR-RENDER-ONE-SCREEN#one-screen-smaller-viewport"),
+        ],
+    )
+    def test_one_screen_other_viewports_proxy(self, viewport: tuple[int, int]) -> None:
+        """CIR-RENDER-ONE-SCREEN — away from the reference viewport, the picture
+        scales rather than scrolls (⚖-R38).
+
+        PROXY CHECK ONLY (CIR-PROC-BROWSER-EVIDENCE): no browser measures a
+        scrollbar here. What is measurable from the built page is *why* no
+        scrollbar can appear at any size — the page is viewport-independent by
+        construction — so that is what this asserts. Real verification at
+        1920×1080 and 700×500 waits on the browser harness (deferred: #34).
+        """
+        width, height = viewport
+        html = _render_fixture()
+
+        # 1. The viewport never changes what is baked: one page serves every size,
+        #    which is what makes "scales, not scrolls" a property of the markup
+        #    rather than of a particular window.
+        assert html == _render_fixture(), "the render is not deterministic"
+        assert "@media (min-width" not in html and "@media (max-width" not in html, (
+            "a width breakpoint would make the composition viewport-conditional — "
+            "⚖-R38 rules scale-to-fit, not a responsive redesign"
+        )
+
+        # 2. The page box is exactly the viewport and clips rather than scrolls.
+        assert "height: 100vh" in html
+        assert "max-height: 100vh" in html
+        assert "overflow: hidden" in html
+
+        # 3. The chart is sized by its viewBox and capped at the space it is given,
+        #    so it scales both up (1920×1080) and down (700×500) with no intrinsic
+        #    pixel size to overflow.
+        assert 'viewBox="0 0 800 800"' in html
+        svg_open = re.search(r"<svg\b[^>]*>", html)
+        assert svg_open is not None
+        assert "width=" not in svg_open.group(0), (
+            f"a fixed svg width cannot scale to {width}×{height}: {svg_open.group(0)}"
+        )
+        assert "height=" not in svg_open.group(0), (
+            f"a fixed svg height cannot scale to {width}×{height}: {svg_open.group(0)}"
+        )
+        assert "#chart-area svg { max-width: 100%; max-height: 100%; }" in html
+
+    def test_one_screen_with_warnings_proxy(self) -> None:
+        """CIR-RENDER-ONE-SCREEN#one-screen-with-warnings —
+        with a warnings banner shown, the chart yields the space rather than the
+        page growing.
+
+        PROXY CHECK ONLY (CIR-PROC-BROWSER-EVIDENCE): the real assertion is "no
+        scrollbar at 1280×800 with the banner up", which needs a browser (#34).
+        The measurable proxy is that the banner lands inside the fixed-width,
+        independently-scrolling chrome column while the chart area stays the
+        flexible one — so banner height cannot extend the page box.
+        """
+        artifact = _resolve_fixture()
+        # Exactly 2 warnings, taken from the fixture's own (CIR-PROC-TEST-FIXTURES).
+        assert len(artifact["warnings"]) >= 2, "fixture should produce warnings to trim"
+        artifact = {**artifact, "warnings": artifact["warnings"][:2]}
+        html = render_page(artifact)
+
+        # The banner is shown, and says how many.
+        assert 'id="warnings"' in html
+        assert "2 warnings" in html
+
+        # It sits in the chrome column, which absorbs its own overflow …
+        chrome = html[html.index('<div id="chrome-panel">'):html.index('<details id="a11y-table">')]
+        assert 'id="warnings"' in chrome, "the banner must live in the chrome column"
+        assert "#chrome-panel { flex: 0 0 320px; overflow-y: auto;" in html
+
+        # … while the chart area is the flexible one that yields the space, inside a
+        # page box that is still exactly one viewport tall and clipped.
+        assert "#chart-area { flex: 1 1 60%;" in html
+        assert "#app { display: flex; flex-direction: row; height: 100vh; max-height: 100vh; overflow: hidden; }" in html
+
 
 # ===========================================================================
 # Fixture acceptance — the eight lights render correctly
@@ -1222,6 +1437,35 @@ class TestRenderReferenceViewport:
         Real verification requires a browser at 1280×800 (CIR-PROC-BROWSER-EVIDENCE)."""
         html = _render_fixture()
         assert 'name="viewport"' in html
+
+    def test_viewport_larger_passes_trivially_proxy(self) -> None:
+        """CIR-RENDER-REFERENCE-VIEWPORT#viewport-larger-passes-trivially —
+        at 1920×1080 the composition scales up and the gate does not re-run.
+
+        PROXY CHECK ONLY (CIR-PROC-BROWSER-EVIDENCE): a browser is what would
+        actually measure 1920×1080; that is deferred with the rest of the browser
+        evidence (#34). The half of the row that IS decidable from the built page
+        is the reason the gate need not re-run above the reference viewport — the
+        page has no size-conditional behaviour to re-test, and its own declared
+        gate size stays 1280×800 regardless.
+        """
+        html = _render_fixture()
+
+        # Nothing in the page branches on viewport size, so a larger viewport
+        # cannot produce a different composition to gate.
+        assert "@media (min-width" not in html and "@media (max-width" not in html
+        assert 'content="width=device-width, initial-scale=1"' in html, (
+            "the page must adopt the device's own width rather than pinning a size"
+        )
+
+        # The only fixed geometry is the SVG's own coordinate space, which scales
+        # to whatever box it is given — up as readily as down.
+        assert 'viewBox="0 0 800 800"' in html
+        assert "#chart-area svg { max-width: 100%; max-height: 100%; }" in html
+
+        # The scale-up path is scale, not reflow: the print path is the one place
+        # the layout changes, and it is media-gated on print rather than on width.
+        assert "@media print" in html
 
 
 # ===========================================================================

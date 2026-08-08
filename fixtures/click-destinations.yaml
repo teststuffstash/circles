@@ -1,0 +1,65 @@
+# Fixture table: where a cell leads — CIR-RENDER-CLICK (specs/render/interactions.md)
+#
+# The click rows are the one part of the render contract the fixture person's own
+# circles.yaml cannot carry: `fixtures/alex/circles.yaml` deliberately declares no
+# `link:` on any item, because CIR-RENDER-NO-EGRESS#no-third-party-origins-in-markup
+# is gated over the baked fixture page and an external destination would trip it.
+# So the click destinations live here instead — still synthetic, still Alex, still a
+# committed table rather than config invented inside test code
+# (CIR-PROC-TEST-FIXTURES#no-real-data, #fixture-row-is-spec-row).
+#
+# Each row is one row of the CIR-RENDER-CLICK decision table. `item` is spliced into
+# a one-ring config for the fixture person at test time; `expected` describes the
+# anchor the renderer must emit for that cell.
+#
+# The two destination values are the ones the spec table names verbatim:
+#   click-follows-link   → link: https://example.test/labs   (example.test is the
+#                          reserved-for-testing TLD — it resolves nowhere)
+#   click-root-relative  → link: /details/self-sleep.html
+---
+person: Alex Example
+ring:
+  id: self
+  label: "① Self"
+
+rows:
+  - description: External https link — new tab, rel=noopener, and the cell is clickable
+    row_id: click-follows-link
+    item:
+      id: labs
+      label: Quarterly labs
+      guardrail: "Blood panel every 90 days"
+      link: https://example.test/labs
+      status:
+        manual: red
+    expected:
+      clickable: true
+      href: https://example.test/labs
+      target: _blank
+      rel: noopener
+
+  - description: Root-relative link — in-place navigation, no new tab
+    row_id: click-root-relative
+    item:
+      id: sleep
+      label: Sleep
+      guardrail: "Lights out by 23:00 on weeknights"
+      link: /details/self-sleep.html
+      status:
+        manual: green
+    expected:
+      clickable: true
+      href: /details/self-sleep.html
+      target: null
+      rel: null
+
+  - description: Neither link nor detail page — no anchor, no pointer cursor, activation is a no-op
+    row_id: click-no-destination
+    item:
+      id: exercise
+      label: Exercise
+    expected:
+      clickable: false
+      href: null
+      target: null
+      rel: null

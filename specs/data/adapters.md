@@ -43,12 +43,13 @@ not take down the bake, because a failed bake means a stale page
 prevent.
 
 <details class="evidence-block">
-<summary>Evidence: 5 test case(s) — alex</summary>
+<summary>Evidence: 6 test case(s) — alex</summary>
 
 **Requirement:** CIR-ADAPT-CONTRACT — **World:** alex
 
 | Case ID | Status | Detail |
 |---------|--------|--------|
+| `adapter-cannot-return-grey` | PASS | — |
 | `adapter-failure-is-isolated` | PASS | — |
 | `adapter-never-reads-the-clock` | PASS | — |
 | `adapter-never-writes` | PASS | — |
@@ -78,12 +79,13 @@ and tests always inject the fixture reference date (`fixtures/README.md`, ⚖-R2
 | reference-date-fixture-pinned | any bake or test over `fixtures/alex` | injected `2026-08-03`, never the running day's calendar (⚖-R24) |
 
 <details class="evidence-block">
-<summary>Evidence: 4 test case(s) — alex</summary>
+<summary>Evidence: 5 test case(s) — alex</summary>
 
 **Requirement:** CIR-ADAPT-REFERENCE-DATE — **World:** alex
 
 | Case ID | Status | Detail |
 |---------|--------|--------|
+| `reference-date-crosses-midnight` | PASS | — |
 | `reference-date-default-is-config-timezone` | PASS | — |
 | `reference-date-fixture-pinned` | PASS | — |
 | `reference-date-injectable` | PASS | — |

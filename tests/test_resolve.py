@@ -16,6 +16,7 @@ from typing import Any
 
 import pytest
 
+import bake.resolve as resolve_module
 from bake.config import ConfigError, load_config
 from bake.emit import write_artifact
 from bake.resolve import (
@@ -117,6 +118,70 @@ class TestDataStatusResolution:
         assert "self/sleep" in warning_items
         assert "self/labs" in warning_items
         assert "wider/plants" in warning_items
+
+    # The table's five config-error rows. Their behaviour was already asserted
+    # under CIR-DATA-SCHEMA-ADAPTER-SLOT / CIR-DATA-STATUS-MANUAL-VALUES row ids,
+    # which left these five rows of *this* requirement unevidenced — the same
+    # behaviour can satisfy two requirements, but only the row ids actually cited
+    # join to evidence. `empty-status-block` had no citing test under any id.
+    #
+    # The shared claim is the asymmetry the spec calls out: a bad *config* fails
+    # the bake outright, rather than degrading to ⚪ the way a bad *command* does.
+    @pytest.mark.parametrize(
+        ("status_block", "message"),
+        [
+            pytest.param(
+                {"manual": "green",
+                 "freshness": {"source": "notes/sleep-log.md", "yellow_after": 7, "red_after": 30}},
+                "multiple adapter keys",
+                id="CIR-DATA-STATUS-RESOLUTION#two-adapters-on-one-item",
+            ),
+            pytest.param(
+                {}, "empty status block",
+                id="CIR-DATA-STATUS-RESOLUTION#empty-status-block",
+            ),
+            pytest.param(
+                {"manual": "amber"}, "not a valid manual value",
+                id="CIR-DATA-STATUS-RESOLUTION#manual-unknown-word",
+            ),
+            pytest.param(
+                {"manual": "grey"}, "grey",
+                id="CIR-DATA-STATUS-RESOLUTION#manual-declares-grey",
+            ),
+            pytest.param(
+                {"sqlite": {"query": "SELECT 1"}}, "unknown adapter",
+                id="CIR-DATA-STATUS-RESOLUTION#unknown-adapter-key",
+            ),
+        ],
+    )
+    def test_config_error_fails_the_bake(
+        self, status_block: dict, message: str, tmp_path: Path,
+    ) -> None:
+        """CIR-DATA-STATUS-RESOLUTION — a config error fails the bake and
+        publishes nothing; it must never degrade to ⚪.
+
+        Row ids are carried by the parametrised case id.
+        """
+        import yaml
+
+        data = {
+            "person": "Alex Example",
+            "rings": [{
+                "id": "self", "label": "① Self",
+                "items": [{"id": "sleep", "label": "Sleep", "status": status_block}],
+            }],
+        }
+        path = tmp_path / "circles.yaml"
+        path.write_text(yaml.dump(data))
+
+        with pytest.raises(ConfigError, match=message) as excinfo:
+            load_config(path)
+
+        # The error names where it is, so a human can fix it before anyone sees a
+        # wrong page — and nothing resolved, so no ⚪ was published in its place.
+        assert "self" in str(excinfo.value) or "sleep" in str(excinfo.value), (
+            f"config error should locate the offending item: {excinfo.value}"
+        )
 
 
 # ===========================================================================
@@ -558,6 +623,59 @@ class TestAdaptContract:
         with pytest.raises(ConfigError, match="unknown adapter"):
             load_config(path)
 
+    def test_adapter_cannot_return_grey(self, tmp_path: Path) -> None:
+        """CIR-ADAPT-CONTRACT#adapter-cannot-return-grey —
+        ⚪ is not in an adapter's return vocabulary; it comes only from absence
+        or failure (CIR-DATA-GREY-REASON).
+
+        Asserted from both ends: an adapter that *answers* never produces grey,
+        and an adapter that tries to declare grey is rejected before it can.
+        """
+        import yaml
+
+        data = {
+            "person": "Alex Example",
+            "rings": [{
+                "id": "self", "label": "① Self",
+                "items": [{"id": "x", "label": "X", "status": {"manual": "green"}}],
+            }],
+        }
+        path = tmp_path / "circles.yaml"
+
+        # 1. Every value an adapter can return resolves to a non-grey light.
+        for manual_value in ("green", "yellow", "red"):
+            data["rings"][0]["items"][0]["status"] = {"manual": manual_value}
+            path.write_text(yaml.dump(data))
+            artifact = resolve(
+                load_config(path),
+                reference_date=FIXTURE_REFERENCE_DATE,
+                generated_at=FIXTURE_GENERATED_AT,
+            )
+            item = _item_by_id(artifact, "self", "x")
+            assert item["status"] == manual_value
+            assert item["status"] != "grey", "an adapter's answer must never be grey"
+            assert item["grey_reason"] is None, "a non-grey item must carry no grey reason"
+
+        # 2. Grey is not expressible as an adapter answer at all — the one adapter
+        #    that states a status outright cannot state this one.
+        data["rings"][0]["items"][0]["status"] = {"manual": "grey"}
+        path.write_text(yaml.dump(data))
+        with pytest.raises(ConfigError, match="grey"):
+            load_config(path)
+
+        # 3. So every grey that does exist is attributed to absence or
+        #    non-evaluation, never to an adapter having answered ⚪.
+        for ring in _resolve_fixture()["rings"]:
+            for fixture_item in ring["items"]:
+                if fixture_item["status"] == "grey":
+                    assert fixture_item["grey_reason"] in (
+                        "by-choice", "by-failure", "not-evaluated",
+                    ), (
+                        f"{ring['id']}/{fixture_item['id']} is grey with reason "
+                        f"{fixture_item['grey_reason']!r} — grey must always name "
+                        f"the absence or failure it came from"
+                    )
+
     def test_adapter_failure_is_isolated(self) -> None:
         """CIR-ADAPT-CONTRACT#adapter-failure-is-isolated —
         one failing adapter does not affect other items (at P0, adapters are
@@ -602,6 +720,67 @@ class TestAdaptReferenceDate:
         # Identical (same generated_at since we inject it)
         import json
         assert json.dumps(art1, sort_keys=True) == json.dumps(art2, sort_keys=True)
+
+    def test_reference_date_crosses_midnight(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """CIR-ADAPT-REFERENCE-DATE#reference-date-crosses-midnight —
+        a bake that starts at 23:59:59 and runs past midnight dates every item
+        by the reference date captured at bake start, not by the day it finishes.
+
+        The bake entry point captures the date once, before resolution
+        (bake/__main__.py), and resolution is handed that value. This test pins
+        the other half: that resolution cannot reach around it to a wall clock
+        that has since rolled over.
+        """
+        bake_start = datetime(2026, 8, 3, 23, 59, 59, tzinfo=timezone.utc)
+        captured_date = bake_start.date()
+
+        class _RolledOverClock:
+            """The wall clock, already into the next day. Reading it is the defect."""
+
+            @staticmethod
+            def now(tz: Any = None) -> Any:
+                raise AssertionError(
+                    "resolution read the wall clock (now()) — it must use the "
+                    "reference date captured at bake start"
+                )
+
+            @staticmethod
+            def today() -> Any:
+                raise AssertionError(
+                    "resolution read the wall clock (today()) — it must use the "
+                    "reference date captured at bake start"
+                )
+
+        monkeypatch.setattr(resolve_module, "datetime", _RolledOverClock)
+        monkeypatch.setattr(resolve_module, "date", _RolledOverClock)
+
+        config = load_config(ALEX_YAML)
+        artifact = resolve(config, reference_date=captured_date, generated_at=bake_start)
+
+        # One date for the whole run, and it is bake start's — not 2026-08-04.
+        assert artifact["reference_date"] == "2026-08-03"
+        assert artifact["generated_at"] == "2026-08-03T23:59:59Z"
+
+        # Every item is dated by that one capture: no item carries a date of its
+        # own, so none of them can have aged against a different day.
+        for ring in artifact["rings"]:
+            for item in ring["items"]:
+                assert "reference_date" not in item
+                assert item["last_data_date"] is None or (
+                    item["last_data_date"] <= "2026-08-03"
+                ), (
+                    f"{ring['id']}/{item['id']} is dated {item['last_data_date']} — "
+                    f"after the reference date captured at bake start"
+                )
+
+        # Finishing a second later, on the far side of midnight, changes only the
+        # finish stamp we pass in — never an item.
+        finished_after_midnight = datetime(2026, 8, 4, 0, 0, 1, tzinfo=timezone.utc)
+        later = resolve(
+            config, reference_date=captured_date, generated_at=finished_after_midnight,
+        )
+        assert later["rings"] == artifact["rings"]
+        assert later["reference_date"] == artifact["reference_date"]
 
     def test_reference_date_fixture_pinned(self) -> None:
         """CIR-ADAPT-REFERENCE-DATE#reference-date-fixture-pinned —

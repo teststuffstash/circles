@@ -222,6 +222,39 @@ def _summary_text(counts: dict[str, int]) -> str:
 # ---------------------------------------------------------------------------
 
 
+def _cell_element(item: dict) -> tuple[str, str]:
+    """Return the (opening prefix, closing tag) for one cell, per CIR-RENDER-CLICK.
+
+    A cell's destination is its configured ``link`` if it has one, else its baked
+    detail page — the latter is P2, so only ``link`` is a destination here (⚖-R11
+    rules ``link`` the winner when both exist, which keeps this ordering stable when
+    P2 lands).  A cell with no destination is **not clickable**: it stays a
+    ``<g role="button">`` with no href and, via the stylesheet, no pointer cursor
+    (``#click-no-destination``).
+
+    A cell with a destination is rendered as the anchor itself rather than wrapped in
+    one, so it remains a single focus stop.  Absolute ``http(s)://`` destinations open
+    in a new tab with ``rel="noopener"`` (``#click-follows-link``); root-relative ones
+    navigate in place (``#click-root-relative``).  ``link:`` values are restricted to
+    those two shapes at bake time (CIR-DATA-SCHEMA-LINK), so no other case can arrive.
+
+    The opening prefix is returned unterminated — the caller appends the shared cell
+    attributes and the closing ``>``.
+    """
+    link = item.get("link")
+    if not link:
+        return '<g class="cell" role="button" ', "</g>"
+
+    href = html.escape(link, quote=True)
+    if link.startswith("http://") or link.startswith("https://"):
+        return (
+            f'<a class="cell cell-linked" role="link" href="{href}" '
+            f'target="_blank" rel="noopener" ',
+            "</a>",
+        )
+    return f'<a class="cell cell-linked" role="link" href="{href}" ', "</a>"
+
+
 def _render_svg(artifact: dict) -> str:
     """Render the sunburst SVG."""
     rings_data = artifact.get("rings", [])
@@ -336,10 +369,15 @@ def _render_svg(artifact: dict) -> str:
                     aria_label += ", adapter failing"
                 else:
                     aria_label += ", not evaluated"
+            # The cell's destination (CIR-RENDER-CLICK).  A cell with a `link:` IS
+            # the anchor rather than being wrapped in one, so a linked cell stays a
+            # single tab stop (CIR-RENDER-KEYBOARD#keyboard-no-trap) and navigates
+            # with scripting disabled (CIR-RENDER-NO-JS#no-js-links-work).
+            open_tag, close_tag = _cell_element(item)
             parts.append(
-                f'<g class="cell" data-item="{full_id}" data-detail="{detail_line}" '
+                f'{open_tag}data-item="{full_id}" data-detail="{detail_line}" '
                 f'data-label="{label}" data-status="{status}" '
-                f'tabindex="0" role="button" aria-label="{aria_label}">'
+                f'tabindex="0" aria-label="{aria_label}">'
             )
             parts.append(
                 f'<path d="{d}" fill="{color}" stroke="#fff" stroke-width="0.5"/>'
@@ -351,7 +389,7 @@ def _render_svg(artifact: dict) -> str:
                 f'transform="rotate({lrot:.1f} {lx:.2f} {ly:.2f})" '
                 f'pointer-events="none">{label}</text>'
             )
-            parts.append("</g>")
+            parts.append(close_tag)
 
             current_angle = end_angle + CELL_GAP_DEG
 
@@ -478,7 +516,10 @@ html, body { height: 100%; font-family: -apple-system, BlinkMacSystemFont, "Sego
 .warnings ul { margin: 6px 0 0 16px; }
 .warnings li { margin: 2px 0; color: #555; }
 /* Cell hover/focus */
-.cell { cursor: pointer; outline: none; }
+/* Only a cell with a destination gets the pointer cursor — a cell with neither a
+   link nor a detail page is not clickable (CIR-RENDER-CLICK#click-no-destination). */
+.cell { cursor: default; outline: none; }
+.cell-linked { cursor: pointer; }
 .cell:hover path, .cell:focus-visible path { stroke: #333; stroke-width: 2; }
 .cell:focus-visible path { stroke-dasharray: 3 2; }
 /* A11y table */

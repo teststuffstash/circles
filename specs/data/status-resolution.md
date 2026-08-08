@@ -52,17 +52,22 @@ failure (⚪ + warning), a bad word in the *config* is a config error. The confi
 before publishing; the command's output is not.
 
 <details class="evidence-block">
-<summary>Evidence: 5 test case(s) — alex</summary>
+<summary>Evidence: 10 test case(s) — alex</summary>
 
 **Requirement:** CIR-DATA-STATUS-RESOLUTION — **World:** alex
 
 | Case ID | Status | Detail |
 |---------|--------|--------|
 | `adapter-not-evaluated-this-phase` | PASS | — |
+| `empty-status-block` | PASS | — |
+| `manual-declares-grey` | PASS | — |
 | `manual-green` | PASS | — |
 | `manual-red` | PASS | — |
+| `manual-unknown-word` | PASS | — |
 | `manual-yellow` | PASS | — |
 | `no-adapter-declared` | PASS | — |
+| `two-adapters-on-one-item` | PASS | — |
+| `unknown-adapter-key` | PASS | — |
 
 [View full report](../../specs-site/evidence)
 

@@ -335,7 +335,11 @@ def main() -> int:
                 continue
             seen.add(case_id)
             case_ids.append(case_id)
-        manifest["requirements"][req_id] = case_ids
+        # Sorted, like the evidence blocks above: `cases` arrives in Allure result
+        # filename order, and those filenames are per-run UUIDs, so an unsorted list
+        # reshuffles this committed file on every run — ~100 lines of diff noise on
+        # every PR, and a working tree that is never clean after `devbox run ci`.
+        manifest["requirements"][req_id] = sorted(case_ids)
 
     manifest_path = args.specs_dir / "evidence-manifest.json"
     with open(manifest_path, "w") as f:
