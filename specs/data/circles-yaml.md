@@ -50,7 +50,23 @@ rings:                            # required, ≥1; inside-out order, index 0 = 
 | timezone-omitted | no `timezone:` key | freshness math anchors to UTC calendar dates |
 | timezone-valid | `timezone: Europe/Tallinn` | freshness math anchors to that zone's calendar date |
 
-_Evidence: none yet — unverified._
+<details class="evidence-block">
+<summary>Evidence: 6 test case(s) — alex</summary>
+
+**Requirement:** CIR-DATA-SCHEMA-TOPLEVEL — **World:** alex
+
+| Case ID | Status | Detail |
+|---------|--------|--------|
+| `minimal-valid-config` | PASS | — |
+| `person-missing` | PASS | — |
+| `rings-empty` | PASS | — |
+| `rings-order-is-inside-out` | PASS | — |
+| `timezone-omitted` | PASS | — |
+| `timezone-valid` | PASS | — |
+
+[View full report](../../specs-site/evidence)
+
+</details>
 
 ## CIR-DATA-SCHEMA-VERSION — `spec_version` guards the format
 
@@ -68,7 +84,20 @@ independently of the core schema. Options: (a) a single integer for the whole fi
 (b) `spec_version` plus per-adapter `api:` fields. **Ruled: (a)** — one integer until a
 third-party adapter exists; revisit with the first one.
 
-_Evidence: none yet — unverified._
+<details class="evidence-block">
+<summary>Evidence: 3 test case(s) — alex</summary>
+
+**Requirement:** CIR-DATA-SCHEMA-VERSION — **World:** alex
+
+| Case ID | Status | Detail |
+|---------|--------|--------|
+| `version-absent-defaults-zero` | PASS | — |
+| `version-from-the-future` | PASS | — |
+| `version-matches` | PASS | — |
+
+[View full report](../../specs-site/evidence)
+
+</details>
 
 ## CIR-DATA-SCHEMA-RING — ring fields
 
@@ -80,7 +109,22 @@ _Evidence: none yet — unverified._
 | ring-label-missing | ring without `label:` | config error, bake fails |
 | ring-label-glyphs | `label: "③ Children"` | accepted; labels are opaque Unicode, glyphs pass through untouched |
 
-_Evidence: none yet — unverified._
+<details class="evidence-block">
+<summary>Evidence: 5 test case(s) — alex</summary>
+
+**Requirement:** CIR-DATA-SCHEMA-RING — **World:** alex
+
+| Case ID | Status | Detail |
+|---------|--------|--------|
+| `ring-id-duplicate` | PASS | — |
+| `ring-id-not-slug` | PASS | — |
+| `ring-id-slug` | PASS | — |
+| `ring-label-glyphs` | PASS | — |
+| `ring-label-missing` | PASS | — |
+
+[View full report](../../specs-site/evidence)
+
+</details>
 
 ## CIR-DATA-SCHEMA-ITEM — item fields
 
@@ -92,7 +136,22 @@ _Evidence: none yet — unverified._
 | note-absent | no `note:` | nothing rendered; `note` never substitutes for a guardrail |
 | share-default | no `share:` | weight 1 (`CIR-DATA-SHARE`) |
 
-_Evidence: none yet — unverified._
+<details class="evidence-block">
+<summary>Evidence: 5 test case(s) — alex</summary>
+
+**Requirement:** CIR-DATA-SCHEMA-ITEM — **World:** alex
+
+| Case ID | Status | Detail |
+|---------|--------|--------|
+| `guardrail-absent` | PASS | — |
+| `item-id-duplicate-in-ring` | PASS | — |
+| `item-minimal` | PASS | — |
+| `note-absent` | PASS | — |
+| `share-default` | PASS | — |
+
+[View full report](../../specs-site/evidence)
+
+</details>
 
 ## CIR-DATA-IDENTITY — ids, uniqueness and the item ref
 
@@ -136,7 +195,21 @@ resolution; (c) items declared once in a top-level map and *referenced* by rings
 **Ruled: (a) for v0, with (b) as the named growth path** — (c) is a whole-file restructure that
 buys nothing until someone actually has a shared concern.
 
-_Evidence: none yet — unverified._
+<details class="evidence-block">
+<summary>Evidence: 4 test case(s) — alex</summary>
+
+**Requirement:** CIR-DATA-IDENTITY — **World:** alex
+
+| Case ID | Status | Detail |
+|---------|--------|--------|
+| `id-character-set` | PASS | — |
+| `id-missing` | PASS | — |
+| `id-with-space-or-slash` | PASS | — |
+| `same-id-different-rings` | PASS | — |
+
+[View full report](../../specs-site/evidence)
+
+</details>
 
 ## CIR-DATA-SCHEMA-ADAPTER-SLOT — the status map
 
@@ -150,7 +223,21 @@ watching; a typo'd adapter key wearing that grey is dangerous-green with extra s
 | status-unknown-adapter | `status: {sqlite: …}` on a v0 bake | config error, bake fails (the v0 adapter set is closed: `manual`, `freshness`, `command`) |
 | manual-invalid-word | `manual: blue` | config error, bake fails |
 
-_Evidence: none yet — unverified._
+<details class="evidence-block">
+<summary>Evidence: 4 test case(s) — alex</summary>
+
+**Requirement:** CIR-DATA-SCHEMA-ADAPTER-SLOT — **World:** alex
+
+| Case ID | Status | Detail |
+|---------|--------|--------|
+| `manual-invalid-word` | PASS | — |
+| `status-absent` | PASS | — |
+| `status-two-adapters` | PASS | — |
+| `status-unknown-adapter` | PASS | — |
+
+[View full report](../../specs-site/evidence)
+
+</details>
 
 ## CIR-DATA-SCHEMA-LINK — click-through targets
 
@@ -162,6 +249,7 @@ loudly at bake time, not silently at click time.
 | row id | inputs | expected |
 |---|---|---|
 | link-https | `link: https://example.test/labs` | accepted |
+| link-http | `link: http://example.test/page` | accepted |
 | link-root-relative | `link: /details/self-sleep.html` | accepted |
 | link-javascript-scheme | `link: javascript:alert(1)` | config error, bake fails |
 | link-data-scheme | `link: data:text/html,…` | config error, bake fails |
@@ -176,7 +264,24 @@ must fail where a human is watching (the bake) rather than where nobody is (the 
 relative paths are rejected rather than resolved because "relative to what" has two plausible
 answers here — the served page, or the config directory that every other path is relative to.
 
-_Evidence: none yet — unverified._
+<details class="evidence-block">
+<summary>Evidence: 7 test case(s) — alex</summary>
+
+**Requirement:** CIR-DATA-SCHEMA-LINK — **World:** alex
+
+| Case ID | Status | Detail |
+|---------|--------|--------|
+| `link-bare-relative` | PASS | — |
+| `link-data-scheme` | PASS | — |
+| `link-http` | PASS | — |
+| `link-https` | PASS | — |
+| `link-javascript-scheme` | PASS | — |
+| `link-root-relative` | PASS | — |
+| `link-scheme-relative` | PASS | — |
+
+[View full report](../../specs-site/evidence)
+
+</details>
 
 ## CIR-DATA-SHARE — arc weights within a ring
 
@@ -205,7 +310,23 @@ third. (b) rejects a config that is perfectly reasonable under (a); (c) makes th
 mean a fraction in one ring and a weight in another. The warning is the honest middle — the
 render stays predictable, and the person is told their ring is mixed.
 
-_Evidence: none yet — unverified._
+<details class="evidence-block">
+<summary>Evidence: 6 test case(s) — alex</summary>
+
+**Requirement:** CIR-DATA-SHARE — **World:** alex
+
+| Case ID | Status | Detail |
+|---------|--------|--------|
+| `share-negative` | PASS | — |
+| `share-zero` | PASS | — |
+| `shares-absent-equal` | PASS | — |
+| `shares-equal-halves` | PASS | — |
+| `shares-mixed` | PASS | — |
+| `shares-mixed-fractional` | PASS | — |
+
+[View full report](../../specs-site/evidence)
+
+</details>
 
 ## CIR-DATA-VALIDATION — fail vs warn
 
@@ -238,7 +359,22 @@ reads as *no such area*, which is a lie about the person's life. (a) blocks the 
 a state that is probably deliberate. Zero rings is still a config error
 (`CIR-DATA-SCHEMA-TOPLEVEL#rings-empty`): there is nothing to draw at all.
 
-_Evidence: none yet — unverified._
+<details class="evidence-block">
+<summary>Evidence: 5 test case(s) — alex</summary>
+
+**Requirement:** CIR-DATA-VALIDATION — **World:** alex
+
+| Case ID | Status | Detail |
+|---------|--------|--------|
+| `empty-ring` | PASS | — |
+| `one-bad-item-fails-bake` | PASS | — |
+| `unknown-item-key` | PASS | — |
+| `unknown-status-key` | PASS | — |
+| `unknown-toplevel-key` | PASS | — |
+
+[View full report](../../specs-site/evidence)
+
+</details>
 
 ## Proposed fixture rows (for the builder to land — not landed by this spec pass)
 

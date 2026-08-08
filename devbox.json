@@ -20,14 +20,15 @@
   "shell": {
     "init_hook": [],
     "scripts": {
-      "ci":             ["bash scripts/ci.sh"],
-      "test-chart":     ["bash scripts/test-chart.sh"],
+      "ci":             ["./scripts/ci.sh"],
+      "test-chart":     ["./scripts/test-chart.sh"],
+      "test-system":    ["./scripts/test-system.sh"],
       "scan-secrets":   ["gitleaks detect --source . --no-banner --verbose"],
-      "validate-chart": ["bash scripts/validate-chart.sh"],
-      "build-image":    ["bash scripts/build-image.sh"],
-      "package-chart":  ["bash scripts/package-chart.sh"],
-      "specs-build":    ["bash scripts/specs-build.sh"],
-      "specs-publish":  ["bash scripts/specs-publish.sh"]
+      "validate-chart": ["./scripts/validate-chart.sh"],
+      "build-image":    ["./scripts/build-image.sh"],
+      "package-chart":  ["./scripts/package-chart.sh"],
+      "specs-build":    ["./scripts/specs-build.sh"],
+      "specs-publish":  ["./scripts/specs-publish.sh"]
     }
   }
 }

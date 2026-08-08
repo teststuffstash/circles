@@ -51,7 +51,27 @@ Note the deliberate asymmetry in the last rows: a bad word from a *command* is a
 failure (⚪ + warning), a bad word in the *config* is a config error. The config is checkable
 before publishing; the command's output is not.
 
-_Evidence: none yet — unverified._
+<details class="evidence-block">
+<summary>Evidence: 10 test case(s) — alex</summary>
+
+**Requirement:** CIR-DATA-STATUS-RESOLUTION — **World:** alex
+
+| Case ID | Status | Detail |
+|---------|--------|--------|
+| `adapter-not-evaluated-this-phase` | PASS | — |
+| `empty-status-block` | PASS | — |
+| `manual-declares-grey` | PASS | — |
+| `manual-green` | PASS | — |
+| `manual-red` | PASS | — |
+| `manual-unknown-word` | PASS | — |
+| `manual-yellow` | PASS | — |
+| `no-adapter-declared` | PASS | — |
+| `two-adapters-on-one-item` | PASS | — |
+| `unknown-adapter-key` | PASS | — |
+
+[View full report](../../specs-site/evidence)
+
+</details>
 
 ## CIR-DATA-CONFIG-ERROR-FAILS — config errors publish nothing
 
@@ -66,7 +86,19 @@ never read — dangerous-green.
 | published-page-survives-failed-bake | published page exists, new bake hits a config error | old page still served; it ages and eventually trips [`CIR-BAKE-STALE-SELF`](data-json.md) |
 | message-names-the-item | error inside `children/kit` | message contains `children/kit` |
 
-_Evidence: none yet — unverified._
+<details class="evidence-block">
+<summary>Evidence: 2 test case(s) — alex</summary>
+
+**Requirement:** CIR-DATA-CONFIG-ERROR-FAILS — **World:** alex
+
+| Case ID | Status | Detail |
+|---------|--------|--------|
+| `config-error-aborts-whole-bake` | PASS | — |
+| `message-names-the-item` | PASS | — |
+
+[View full report](../../specs-site/evidence)
+
+</details>
 
 ## CIR-DATA-FAILURE-IS-GREY — the failure algebra
 
@@ -88,7 +120,19 @@ The last row is the one implementations get wrong. Carrying yesterday's light fo
 most attractive dangerous-green there is: the page looks healthy for weeks while the tooling
 rots. Yesterday's answer is available in yesterday's artifact; it is not a status today.
 
-_Evidence: none yet — unverified._
+<details class="evidence-block">
+<summary>Evidence: 2 test case(s) — alex</summary>
+
+**Requirement:** CIR-DATA-FAILURE-IS-GREY — **World:** alex
+
+| Case ID | Status | Detail |
+|---------|--------|--------|
+| `failure-never-green` | PASS | — |
+| `failure-never-red` | PASS | — |
+
+[View full report](../../specs-site/evidence)
+
+</details>
 
 ## CIR-DATA-GREY-REASON — one grey light, three reasons
 
@@ -140,7 +184,19 @@ following segment. **Ruled: (b).** The reader matches the detail line against th
 the glossary's one-definition-no-synonyms rule applies with extra force to strings a reader must
 visually join.
 
-_Evidence: none yet — unverified._
+<details class="evidence-block">
+<summary>Evidence: 2 test case(s) — alex</summary>
+
+**Requirement:** CIR-DATA-GREY-REASON — **World:** alex
+
+| Case ID | Status | Detail |
+|---------|--------|--------|
+| `unmonitored-by-choice` | PASS | — |
+| `unmonitored-not-evaluated` | PASS | — |
+
+[View full report](../../specs-site/evidence)
+
+</details>
 
 ## CIR-DATA-STATUS-MANUAL-VALUES — the manual adapter's vocabulary
 
@@ -154,7 +210,19 @@ deliberately leaves unmonitored declares no adapter, and its grey is then true.
 | manual-lowercase-only | `manual: Green` | config error |
 | manual-grey-rejected | `manual: grey` | config error, pointing at omitting `status:` |
 
-_Evidence: none yet — unverified._
+<details class="evidence-block">
+<summary>Evidence: 2 test case(s) — alex</summary>
+
+**Requirement:** CIR-DATA-STATUS-MANUAL-VALUES — **World:** alex
+
+| Case ID | Status | Detail |
+|---------|--------|--------|
+| `manual-grey-rejected` | PASS | — |
+| `manual-lowercase-only` | PASS | — |
+
+[View full report](../../specs-site/evidence)
+
+</details>
 
 ## CIR-DATA-NO-AGGREGATION — no roll-up, ever
 
@@ -173,7 +241,19 @@ area, which is the opposite of what the page is for.
 | fully-grey-ring | a ring whose items all lack adapters | the whole band renders ⚪; no special treatment |
 | centre-carries-no-status | any config | the centre disc carries name, stamp and counts, never a light (⚖-R9) |
 
-_Evidence: none yet — unverified._
+<details class="evidence-block">
+<summary>Evidence: 2 test case(s) — alex</summary>
+
+**Requirement:** CIR-DATA-NO-AGGREGATION — **World:** alex
+
+| Case ID | Status | Detail |
+|---------|--------|--------|
+| `centre-carries-no-status` | PASS | — |
+| `inner-red-outer-untouched` | PASS | — |
+
+[View full report](../../specs-site/evidence)
+
+</details>
 
 ## CIR-DATA-RESOLUTION-TIME — statuses resolve at bake time only
 
@@ -186,7 +266,20 @@ renderer of baked verdicts: no adapter code, no date math, no re-evaluation on l
 | p0-manual-roundtrip | P0 bake over a `manual:`-only config | statuses pass through unchanged into the artifact |
 | one-reference-date-per-bake | two freshness items in one bake | both age against the same reference date (`CIR-ADAPT-REFERENCE-DATE`) |
 
-_Evidence: none yet — unverified._
+<details class="evidence-block">
+<summary>Evidence: 3 test case(s) — alex</summary>
+
+**Requirement:** CIR-DATA-RESOLUTION-TIME — **World:** alex
+
+| Case ID | Status | Detail |
+|---------|--------|--------|
+| `one-reference-date-per-bake` | PASS | — |
+| `p0-manual-roundtrip` | PASS | — |
+| `page-never-reevaluates` | PASS | — |
+
+[View full report](../../specs-site/evidence)
+
+</details>
 
 ## CIR-DATA-DETAIL-LINE — what hover shows
 
@@ -203,4 +296,18 @@ carried as one string (⚖-R20), so print and no-JS paths render it without comp
 | failure-reason-is-shown | command timed out | line ends with the reason, not a stack trace ([`CIR-BAKE-EXPOSURE`](data-json.md)) |
 | detail-line-is-plain-text | any item | no markup; the same string serves hover, the accessible table, and print |
 
-_Evidence: none yet — unverified._
+<details class="evidence-block">
+<summary>Evidence: 4 test case(s) — alex</summary>
+
+**Requirement:** CIR-DATA-DETAIL-LINE — **World:** alex
+
+| Case ID | Status | Detail |
+|---------|--------|--------|
+| `detail-line-is-plain-text` | PASS | — |
+| `full-detail-line` | PASS | — |
+| `manual-item-has-no-data-date` | PASS | — |
+| `no-guardrail` | PASS | — |
+
+[View full report](../../specs-site/evidence)
+
+</details>
