@@ -59,3 +59,8 @@ rows:
       - {name: "[CIR-DATA-FRESHNESS-WINDOW#window-inside]", status: broken}
     expected:
       window-inside: BROKEN
+
+  - description: No row-id citation — _extract_case_id must hard-fail, not silently fall back to method name
+    cases:
+      - {name: "test_some_method", fullName: "test_some_method", status: passed}
+    expected: {}
