@@ -53,9 +53,20 @@ class TestEvidenceDedup:
         When two Allure results cite the same case id, the block should
         show the worst outcome (FAIL > BROKEN > SKIP > PASS). Distinct
         case ids are all shown.
+
+        When a case has no #<row-id> citation, _extract_case_id must
+        hard-fail (ValueError) rather than silently falling back to the
+        method name.
         """
         cases: list[dict] = row["cases"]
         expected: dict[str, str] = row["expected"]
+
+        if not expected:
+            # Row signals that _extract_case_id should hard-fail
+            import pytest
+            with pytest.raises(ValueError, match=r"#<row-id>"):
+                _build_evidence_block("CIR-DATA-FRESHNESS-WINDOW", cases, "../report/")
+            return
 
         # Build the block with a dummy report path
         block = _build_evidence_block("CIR-DATA-FRESHNESS-WINDOW", cases, "../report/")

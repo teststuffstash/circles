@@ -92,8 +92,12 @@ def _extract_case_id(r: dict) -> str:
     if m:
         return m.group(1)
 
-    # Fallback: method name
-    return r.get("fullName", "").split(".")[-1]
+    # Hard-fail: every test must carry a #<row-id> citation
+    raise ValueError(
+        f"Test {r.get('fullName', '?')!r} has no #<row-id> citation in its "
+        f"name or docstring — every test must cite its spec row via "
+        f"CIR-<AREA>-<NAME>#<row-id>"
+    )
 
 
 def _group_by_requirement(
