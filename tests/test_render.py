@@ -1328,7 +1328,7 @@ class TestRenderArcShare:
         assert 'data-item="children/nova"' in html
         assert 'data-item="children/kit"' in html
 
-def test_arc_share_single_item_ring(self) -> None:
+    def test_arc_share_single_item_ring(self) -> None:
         """CIR-RENDER-ARC-SHARE#arc-share-single-item-ring —
         a ring with exactly one item renders as a full 360° band
         with no visible gap (CELL_GAP_DEG is not subtracted).
