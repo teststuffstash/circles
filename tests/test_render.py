@@ -1472,12 +1472,70 @@ class TestRenderArcShare:
             mixed_warnings = [w for w in warnings if "mixes declared and undeclared" in w.get("message", "")]
             assert len(mixed_warnings) >= 1, f"Expected mixed-share warning, got: {warnings}"
 
-            # The large item (share 2) should get ~180°, the two small ones ~90° each
-            # We can't easily check exact SVG path angles, but we can verify the arcs
-            # exist and the big item is rendered first (12 o'clock position)
-            assert 'data-item="a/big"' in html
-            assert 'data-item="a/med"' in html
-            assert 'data-item="a/sml"' in html
+            # Verify arc proportions via SVG path geometry.
+            # Shares 2:1:1 → arcs ≈ 180° / 90° / 90° (minus inter-cell gaps).
+            import re as _re
+            import math
+
+            CX = 400.0
+            CY = 400.0
+
+            def _point_to_angle(x: float, y: float) -> float:
+                dx = x - CX
+                dy = CY - y
+                return math.degrees(math.atan2(dx, dy)) % 360
+
+            def _arc_sweep_degrees(path_d: str) -> float:
+                """Compute the angular sweep of a non-full-circle SVG arc path.
+
+                Each cell arc is a single sub-path: M start → A outer → L → A inner → Z.
+                The sweep is the clockwise angle from the M point to the first A endpoint.
+                """
+                m_match = _re.match(r'M\s+([\d.-]+)\s+([\d.-]+)', path_d)
+                assert m_match is not None, f"Could not parse M command in: {path_d}"
+                x0, y0 = float(m_match.group(1)), float(m_match.group(2))
+                a_endpoints = _re.findall(
+                    r'A\s+[\d.]+\s+[\d.]+\s+\d+\s+\d+\s+\d+\s+([\d.-]+)\s+([\d.-]+)',
+                    path_d,
+                )
+                assert len(a_endpoints) >= 1, f"Could not find A command in: {path_d}"
+                outer_end_x, outer_end_y = map(float, a_endpoints[0])
+                start_angle = _point_to_angle(x0, y0)
+                end_angle = _point_to_angle(outer_end_x, outer_end_y)
+                return (end_angle - start_angle) % 360
+
+            # Extract path d for each item by data-item attribute
+            big_match = _re.search(
+                r'data-item="a/big"[^>]*>\s*<path d="([^"]+)"', html,
+            )
+            med_match = _re.search(
+                r'data-item="a/med"[^>]*>\s*<path d="([^"]+)"', html,
+            )
+            sml_match = _re.search(
+                r'data-item="a/sml"[^>]*>\s*<path d="([^"]+)"', html,
+            )
+
+            assert big_match is not None, "Could not find SVG path for a/big"
+            assert med_match is not None, "Could not find SVG path for a/med"
+            assert sml_match is not None, "Could not find SVG path for a/sml"
+
+            big_sweep = _arc_sweep_degrees(big_match.group(1))
+            med_sweep = _arc_sweep_degrees(med_match.group(1))
+            sml_sweep = _arc_sweep_degrees(sml_match.group(1))
+
+            # With CELL_GAP_DEG=2.0 and 3 items, total arc space is 354°.
+            # Shares 2:1:1 → ≈177° / 88.5° / 88.5°.
+            assert abs(big_sweep - 180.0) < 5.0, \
+                f"Big item sweep {big_sweep:.2f}°, expected ≈180°"
+            assert abs(med_sweep - 90.0) < 5.0, \
+                f"Medium item sweep {med_sweep:.2f}°, expected ≈90°"
+            assert abs(sml_sweep - 90.0) < 5.0, \
+                f"Small item sweep {sml_sweep:.2f}°, expected ≈90°"
+
+            # Total arcs sum to 360° minus 3 × CELL_GAP_DEG (2.0°) ≈ 354°
+            total_sweep = big_sweep + med_sweep + sml_sweep
+            assert abs(total_sweep - 354.0) < 3.0, \
+                f"Total sweep {total_sweep:.2f}°, expected ≈354° (360° minus 3 × 2° gaps)"
         finally:
             tmp_path.unlink()
 
