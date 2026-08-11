@@ -33,3 +33,24 @@ rubric's direction stays the same.
 
 CI (`devbox run ci`, scan-secrets) runs separately and judges what a status check can — don't
 re-litigate those. You review the things a status check can't.
+
+## §Maturity — merge-forward (PRE-PROD)
+
+This is an **assembly PR** merging several child slices forward toward master, not a
+production-cut. The reviewer's role is to gate the merge-forward, not to re-audit every
+child. Apply the oracle-fleet §Maturity rule:
+
+**BLOCKING** (request changes):
+- A literal secret or credential value, anywhere.
+- A committed binary / base64 blob that should be a fixture-table row.
+- CI-red on the assembly diff (`devbox run ci`).
+- A regression that the child reviews demonstrably missed (a test that was green on each
+  slice but red when composed — the exact failure mode assembly reviews exist to catch).
+
+**Everything else** — naming, comment gaps, non-load-bearing duplication, a lint that
+exists but was not run, a minor spec gap that does not break the pipeline — is a
+**follow-up** in an approving review. File an issue, note it in the approval, and do not
+hold the merge-forward.
+
+This narrow veto is what makes assembly reviews converge in one round instead of
+surfacing a fresh disjoint blocking set each time (retro r3 F2).
