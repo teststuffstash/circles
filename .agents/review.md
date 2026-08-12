@@ -123,6 +123,16 @@ hold the merge-forward.
 
 This narrow veto is what makes assembly reviews converge in one round instead of
 surfacing a fresh disjoint blocking set each time (retro r3 F2).
+**How this interacts with steps 1–4 above (the PRE-PROD disposition rule):** the numbered steps
+say what to CHECK; §Maturity says what may HOLD the merge — their "blocks" verbs map INTO this
+set rather than adding to it. A seam that does not compose (step 2) IS the missed-regression
+bullet — green per slice, broken composed — and stays BLOCKING. An unowned requirement (step 1)
+blocks only until the owned deferral is filed: the ask is the issue, exactly as step 1 already
+prefers, and with it filed the finding rides an approving review. A contradicted
+delivered-claim (step 4) splits the same way: composed behavior broken → the regression bullet;
+wrong prose → follow-up issue. While this repo is PRE-PROD, where a step's wording and this
+section disagree, THIS SECTION is the disposition.
+
 
 ## Dependency / toolchain bumps (devbox, Renovate)
 
