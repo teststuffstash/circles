@@ -52,6 +52,11 @@ instructions: |
   Push a `fix/`-prefixed branch EARLY (right after the first meaningful commit) and keep pushing —
   banked WIP survives a round limit (the incremental-push rule).
 
+  Hard rules:
+  - WRITE FILES INCREMENTALLY: ≲50 lines per write/edit — never emit an entire file in one tool
+    call; create a skeleton, then extend in chunks; if the path exists, use in-place edit, not
+    recreate.
+
   Anomaly circuit-breaker (homelab FU-069 — same as the coordinator/reviewer): if at any point you
   detect the LOOP misbehaving — an open PR already exists for this issue and round, duplicate bot
   comments are piling up, or the issue's labels contradict the dispatch you were given — do NOT work
