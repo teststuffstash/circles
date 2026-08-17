@@ -80,7 +80,9 @@ instructions: |
     NEVER push to master.
   - If the bug is NOT reproducible in the current code, STOP and report that with the (passing) test
     you wrote as evidence — do not fabricate a fix or weaken an assertion to force green.
-  - The PR body must link the issue (PR body: `Fixes #{{ issue }}` ONLY if this PR delivers every acceptance item in the issue; if the round scoped any item out — including one the dispatch comment itself scoped out — write `Refs #{{ issue }}` instead, plus one line naming what remains.) and show the red->green row.
+  - PR body: `Fixes #{{ issue }}` ONLY if this PR delivers every acceptance item in the issue; if
+    the round scoped any item out — including one the dispatch comment itself scoped out — write
+    `Refs #{{ issue }}` instead, plus one line naming what remains. And show the red->green row.
 
 prompt: |
   Fix the bug in GitHub issue #{{ issue }} for this repo, following the instructions exactly.
