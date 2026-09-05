@@ -7,6 +7,13 @@
 #
 # All rows use the same Allure json shape: {"name": str, "status": str}
 # The `name` field carries the parametrized id (CIR-<REQ>#<case-id>).
+#
+# Row keys:
+#   description  — human-readable row name (used as the pytest id)
+#   cases        — Allure results fed to _build_evidence_block
+#   expected     — {case-id: STATUS} the generated block must show
+#   expect_error — true when the row must raise ValueError instead of producing
+#                  a block (such rows carry no `expected`)
 ---
 rows:
   - description: Single case — one PASS row shows PASS
@@ -63,4 +70,4 @@ rows:
   - description: No row-id citation — _extract_case_id must hard-fail, not silently fall back to method name
     cases:
       - {name: "test_some_method", fullName: "test_some_method", status: passed}
-    expected: {}
+    expect_error: true
