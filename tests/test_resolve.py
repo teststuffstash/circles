@@ -10,13 +10,16 @@
 from __future__ import annotations
 
 import json
+import os
+import time
 from datetime import date, datetime, timezone
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 import pytest
 
 import bake.resolve as resolve_module
+from bake.__main__ import default_reference_date
 from bake.config import ConfigError, load_config
 from bake.emit import write_artifact
 from bake.resolve import (
@@ -30,6 +33,7 @@ FIXTURES = Path(__file__).resolve().parent.parent / "fixtures"
 ALEX_YAML = FIXTURES / "alex" / "circles.yaml"
 FIXTURE_REFERENCE_DATE = date(2026, 8, 3)
 FIXTURE_GENERATED_AT = datetime(2026, 8, 3, 2, 0, 0, tzinfo=timezone.utc)
+AlexCopy = Callable[..., Path]  # the `alex_copy` factory fixture (tests/conftest.py)
 
 
 # ===========================================================================
@@ -40,10 +44,26 @@ def _resolve_fixture(
     *,
     reference_date: date = FIXTURE_REFERENCE_DATE,
     generated_at: datetime = FIXTURE_GENERATED_AT,
+    evaluate: bool = False,
+    config_path: Path = ALEX_YAML,
 ) -> dict:
-    """Load the fixture config and resolve it."""
-    config = load_config(ALEX_YAML)
-    return resolve(config, reference_date=reference_date, generated_at=generated_at)
+    """Load the fixture config and resolve it (adapters evaluated only on request)."""
+    config = load_config(config_path)
+    return resolve(config, reference_date=reference_date, generated_at=generated_at,
+                   evaluate=evaluate)
+
+
+def _sleep_failure(artifact: dict) -> str:
+    """The CIR-DATA-FAILURE-IS-GREY shape for self/sleep: ⚪ by-failure + one warning
+    naming the item, whose text is the detail line's reason segment (⚖-R51)."""
+    sleep = _item_by_id(artifact, "self", "sleep")
+    assert sleep["status"] == "grey"
+    assert sleep["grey_reason"] == "by-failure"
+    assert sleep["last_data_date"] is None
+    messages = [w["message"] for w in artifact["warnings"] if w["item"] == "self/sleep"]
+    assert len(messages) == 1, messages
+    assert messages[0] in sleep["detail_line"]
+    return messages[0]
 
 
 def _item_by_id(artifact: dict, ring_id: str, item_id: str) -> dict:
@@ -91,6 +111,61 @@ class TestDataStatusResolution:
         item = _item_by_id(artifact, "wider", "friends")
         assert item["status"] == "red"
         assert item["grey_reason"] is None
+
+    # The freshness rows run the fixture's sleep item (newest date 2026-08-01,
+    # yellow_after 7, red_after 30) with the adapter ON, moving the reference date so the
+    # newest entry lands at the row's age (CIR-PROC-TEST-FIXTURES): the committed note is
+    # never rewritten.
+
+    def test_freshness_inside_window(self) -> None:
+        """CIR-DATA-STATUS-RESOLUTION#freshness-inside-window — newest date 3d old,
+        yellow_after 7, red_after 30 → 🟢 (reference 2026-08-04 vs 2026-08-01)."""
+        artifact = _resolve_fixture(reference_date=date(2026, 8, 4), evaluate=True)
+        sleep = _item_by_id(artifact, "self", "sleep")
+        assert sleep["status"] == "green"
+        assert sleep["grey_reason"] is None
+        assert sleep["last_data_date"] == "2026-08-01"
+
+    def test_freshness_stale(self) -> None:
+        """CIR-DATA-STATUS-RESOLUTION#freshness-stale — newest date 10d old, yellow_after 7,
+        red_after 30 → 🟡 (reference 2026-08-11 vs 2026-08-01)."""
+        artifact = _resolve_fixture(reference_date=date(2026, 8, 11), evaluate=True)
+        sleep = _item_by_id(artifact, "self", "sleep")
+        assert sleep["status"] == "yellow"
+        assert sleep["grey_reason"] is None
+        assert "attention · last data 2026-08-01" in sleep["detail_line"]
+
+    def test_freshness_very_stale(self) -> None:
+        """CIR-DATA-STATUS-RESOLUTION#freshness-very-stale — newest date 45d old,
+        yellow_after 7, red_after 30 → 🔴 (reference 2026-09-15 vs 2026-08-01: 30 + 15)."""
+        artifact = _resolve_fixture(reference_date=date(2026, 9, 15), evaluate=True)
+        sleep = _item_by_id(artifact, "self", "sleep")
+        assert sleep["status"] == "red"
+        assert sleep["grey_reason"] is None
+        assert "act · last data 2026-08-01" in sleep["detail_line"]
+
+    def test_freshness_source_missing(self, alex_copy: AlexCopy) -> None:
+        """CIR-DATA-STATUS-RESOLUTION#freshness-source-missing — source: matches no file
+        → ⚪ + build warning, reason by-failure."""
+        artifact = _resolve_fixture(
+            evaluate=True, config_path=alex_copy(sleep_source="notes/absent.md"),
+        )
+        assert "missing source" in _sleep_failure(artifact)
+
+    def test_freshness_source_no_dates(self, alex_copy: AlexCopy) -> None:
+        """CIR-DATA-STATUS-RESOLUTION#freshness-source-no-dates — source file exists
+        (notes/empty-log.md), zero parseable dates → ⚪ + build warning."""
+        artifact = _resolve_fixture(
+            evaluate=True, config_path=alex_copy(sleep_source="notes/empty-log.md"),
+        )
+        assert "no dates found" in _sleep_failure(artifact)
+
+    def test_freshness_all_dates_future(self) -> None:
+        """CIR-DATA-STATUS-RESOLUTION#freshness-all-dates-future — every parseable date is
+        after the reference date → ⚪ + build warning (⚖-R8). Reference 2026-07-29: the
+        sleep-log's 07-30, 07-31 and 08-01 are all ahead of it."""
+        artifact = _resolve_fixture(reference_date=date(2026, 7, 29), evaluate=True)
+        assert "after the reference date" in _sleep_failure(artifact)
 
     def test_adapter_not_evaluated_this_phase(self) -> None:
         """CIR-DATA-STATUS-RESOLUTION#adapter-not-evaluated-this-phase —
@@ -237,6 +312,22 @@ class TestDataFailureIsGrey:
         artifact = _resolve_fixture()
         sleep = _item_by_id(artifact, "self", "sleep")
         assert sleep["status"] == "grey"  # not green
+
+
+    @pytest.mark.skipif(os.geteuid() == 0, reason="root reads mode-000 files")
+    def test_unreadable_source_is_grey(self, alex_copy: AlexCopy) -> None:
+        """CIR-DATA-FAILURE-IS-GREY#unreadable-source-is-grey — source exists, permission
+        denied → ⚪ + warning; never 🔴, never 🟢."""
+        config_path = alex_copy()
+        note = config_path.parent / "notes" / "sleep-log.md"
+        note.chmod(0o000)
+        try:
+            artifact = _resolve_fixture(evaluate=True, config_path=config_path)
+        finally:
+            note.chmod(0o644)
+        message = _sleep_failure(artifact)
+        assert "unreadable source" in message
+        assert "notes/sleep-log.md" in message
 
 
 # ===========================================================================
@@ -676,7 +767,7 @@ class TestAdaptContract:
                         f"the absence or failure it came from"
                     )
 
-    def test_adapter_failure_is_isolated(self) -> None:
+    def test_adapter_failure_is_isolated(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """CIR-ADAPT-CONTRACT#adapter-failure-is-isolated —
         one failing adapter does not affect other items (at P0, adapters are
         not-evaluated, so no failure cascades)."""
@@ -690,6 +781,24 @@ class TestAdaptContract:
         assert friends["status"] == "red"
         nova = _item_by_id(artifact, "children", "nova")
         assert nova["status"] == "green"
+
+        # With the adapter ON, an adapter that RAISES is fenced into ⚪ by-failure for its
+        # own item; the other nine resolve normally, and the exception text (which may
+        # carry host paths) is not forwarded — only its class name is.
+        def _explodes(*_args: Any, **_kwargs: Any) -> Any:
+            raise RuntimeError("/home/alex/secret/notes.md")
+
+        monkeypatch.setattr(resolve_module, "evaluate_freshness", _explodes)
+        exploded = _resolve_fixture(evaluate=True)
+        sleep = _item_by_id(exploded, "self", "sleep")
+        assert sleep["status"] == "grey"
+        assert sleep["grey_reason"] == "by-failure"
+        assert "adapter raised RuntimeError" in sleep["detail_line"]
+        messages = [w["message"] for w in exploded["warnings"] if w["item"] == "self/sleep"]
+        assert messages == ["adapter raised RuntimeError"]
+        assert _item_by_id(exploded, "wider", "friends")["status"] == "red"
+        assert _item_by_id(exploded, "children", "nova")["status"] == "green"
+        assert _item_by_id(exploded, "partner", "date-night")["status"] == "yellow"
 
 
 # ===========================================================================
@@ -789,12 +898,29 @@ class TestAdaptReferenceDate:
         assert artifact["reference_date"] == "2026-08-03"
         assert artifact["generated_at"] == "2026-08-03T02:00:00Z"
 
-    def test_reference_date_default_is_config_timezone(self) -> None:
+    def test_reference_date_default_is_config_timezone(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """CIR-ADAPT-REFERENCE-DATE#reference-date-default-is-config-timezone —
         the config provides a timezone; the host's local zone must not leak."""
-        # P0 default is UTC; test that the timezone field is present in the artifact
+        # The fixture declares no timezone → the config default UTC rides in the artifact
         artifact = _resolve_fixture()
         assert artifact["timezone"] == "UTC"
+
+        # The default reference date is the current instant reduced to a calendar date in
+        # the CONFIG's zone. At 2026-08-03T22:30Z it is still 08-03 in UTC and Los Angeles
+        # (15:30 PDT), but already 08-04 in Auckland (10:30 NZST, UTC+12).
+        now = datetime(2026, 8, 3, 22, 30, tzinfo=timezone.utc)
+        assert default_reference_date("UTC", now) == date(2026, 8, 3)
+        assert default_reference_date("America/Los_Angeles", now) == date(2026, 8, 3)
+        assert default_reference_date("Pacific/Auckland", now) == date(2026, 8, 4)
+
+        # A host running in Auckland does not move a UTC config's date.
+        monkeypatch.setenv("TZ", "Pacific/Auckland")
+        time.tzset()
+        try:
+            assert default_reference_date("UTC", now) == date(2026, 8, 3)
+        finally:
+            monkeypatch.delenv("TZ")
+            time.tzset()
 
 
 # ===========================================================================
@@ -907,6 +1033,27 @@ class TestBakeDeterminism:
         assert [i["id"] for i in artifact["rings"][0]["items"]] == ["sleep", "labs", "exercise"]
 
 
+    def test_host_timezone_does_not_leak(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        """CIR-BAKE-DETERMINISM#host-timezone-does-not-leak — the evaluated bake under a
+        non-UTC TZ is byte-identical to the UTC one; the config's timezone: governs."""
+        config = load_config(ALEX_YAML)
+        raw: dict[str, bytes] = {}
+        for host_tz in ("UTC", "Pacific/Auckland"):
+            monkeypatch.setenv("TZ", host_tz)
+            time.tzset()
+            try:
+                artifact = resolve(config, reference_date=FIXTURE_REFERENCE_DATE,
+                                   generated_at=FIXTURE_GENERATED_AT, evaluate=True)
+                write_artifact(artifact, tmp_path / host_tz.replace("/", "-"))
+            finally:
+                monkeypatch.delenv("TZ")
+                time.tzset()
+            raw[host_tz] = (tmp_path / host_tz.replace("/", "-") / "data.json").read_bytes()
+        assert raw["UTC"] == raw["Pacific/Auckland"]
+        # …and it is the evaluated artifact, not an accidentally unevaluated one.
+        assert _item_by_id(artifact, "self", "sleep")["last_data_date"] == "2026-08-01"
+
+
 # ===========================================================================
 # CIR-BAKE-EXPOSURE — everything in the artifact is public
 # ===========================================================================
@@ -914,7 +1061,7 @@ class TestBakeDeterminism:
 class TestBakeExposure:
     """CIR-BAKE-EXPOSURE — everything in the artifact is public."""
 
-    def test_no_absolute_host_paths(self) -> None:
+    def test_no_absolute_host_paths(self, alex_copy: AlexCopy) -> None:
         """CIR-BAKE-EXPOSURE#no-absolute-host-paths —
         warnings use config-relative paths only."""
         artifact = _resolve_fixture()
@@ -922,6 +1069,28 @@ class TestBakeExposure:
             if w["message"]:
                 assert "/home/" not in w["message"]
                 assert "/etc/" not in w["message"]
+
+        # A missing source under evaluation: the warning names `notes/absent.md`, never
+        # the absolute directory the config was loaded from.
+        config_path = alex_copy(sleep_source="notes/absent.md")
+        evaluated = _resolve_fixture(evaluate=True, config_path=config_path)
+        message = _sleep_failure(evaluated)
+        assert "notes/absent.md" in message
+        assert str(config_path.parent) not in json.dumps(evaluated)
+        assert "/home/" not in json.dumps(evaluated)
+
+    def test_no_source_content_in_the_artifact(self) -> None:
+        """CIR-BAKE-EXPOSURE#no-source-content-in-the-artifact — only the date is
+        carried from a freshness source, never the surrounding text."""
+        serialised = json.dumps(_resolve_fixture(evaluate=True), ensure_ascii=False)
+        assert "2026-08-01" in serialised  # the date is carried…
+        for note in ("sleep-log.md", "labs.md"):
+            for line in (FIXTURES / "alex" / "notes" / note).read_text(encoding="utf-8").splitlines():
+                if not line.startswith("- "):
+                    continue
+                # …but the entry's own words (`7h20m`, `panel done, all fine`) are not.
+                remainder = line.split("—", 1)[1].strip()
+                assert remainder not in serialised, f"{note}: {remainder!r} leaked"
 
 
 # ===========================================================================

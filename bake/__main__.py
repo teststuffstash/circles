@@ -3,6 +3,11 @@
 #
 # Usage:
 #   python -m bake --config fixtures/alex/circles.yaml --out dist/ [--reference-date YYYY-MM-DD]
+#                  [--evaluate]
+#
+# --evaluate is the P1 (nightly) switch: freshness: adapters are evaluated against their
+# sources. Without it the build-time bake behaves as at P0 — freshness:/command: items are
+# ⚪ not-evaluated (CIR-PROC-BAKE-ONE-PATH: one code path, differing only in configuration).
 #
 # The page slice extends this same entry point so one run writes both
 # dist/data.json and dist/index.html from the same in-memory artifact dict
@@ -17,11 +22,22 @@ import argparse
 import sys
 from datetime import date, datetime, timezone
 from pathlib import Path
+from zoneinfo import ZoneInfo
 
 from bake.config import ConfigError, load_config
 from bake.emit import write_artifact
 from bake.render import add_capacity_warnings, render_page
 from bake.resolve import resolve
+
+
+def default_reference_date(tz_name: str, now: datetime) -> date:
+    """Today, derived from the instant *now* in the config's timezone — never the host's.
+
+    CIR-ADAPT-REFERENCE-DATE#reference-date-default-is-config-timezone: an aware instant
+    converted to the config's IANA zone, then reduced to its calendar date. The host `TZ`
+    plays no part (CIR-BAKE-DETERMINISM#host-timezone-does-not-leak).
+    """
+    return now.astimezone(ZoneInfo(tz_name)).date()
 
 
 def main() -> None:
@@ -46,6 +62,13 @@ def main() -> None:
         default=None,
         help="Reference date YYYY-MM-DD (default: today in the config's timezone)",
     )
+    parser.add_argument(
+        "--evaluate",
+        action="store_true",
+        default=False,
+        help="Evaluate freshness: adapters (the nightly bake). Off: freshness/command "
+             "items are grey not-evaluated, as at image-build time",
+    )
     args = parser.parse_args()
 
     # Load and validate config
@@ -63,9 +86,13 @@ def main() -> None:
             print(f"Invalid reference date: {args.reference_date} — use YYYY-MM-DD", file=sys.stderr)
             sys.exit(1)
     else:
-        # Default: today in the config's timezone
-        # At P0 we use UTC as a simple default; P1 will use the config's timezone properly
-        reference_date = date.today()
+        # Default: today in the config's timezone (CIR-ADAPT-REFERENCE-DATE)
+        try:
+            reference_date = default_reference_date(config.timezone, datetime.now(timezone.utc))
+        except Exception as e:  # ZoneInfoNotFoundError / ValueError on a bad zone name
+            print(f"Config error: timezone '{config.timezone}' is unknown ({type(e).__name__})",
+                  file=sys.stderr)
+            sys.exit(1)
 
     # Capture generated_at at bake start (CIR-BAKE-GENERATED-AT)
     generated_at = datetime.now(timezone.utc)
@@ -76,6 +103,7 @@ def main() -> None:
             config,
             reference_date=reference_date,
             generated_at=generated_at,
+            evaluate=args.evaluate,
         )
     except Exception as e:
         print(f"Resolution error: {e}", file=sys.stderr)

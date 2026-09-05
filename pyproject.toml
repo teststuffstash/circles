@@ -9,6 +9,7 @@ description = "The circles P0 bake: circles.yaml -> a validated, typed config mo
 requires-python = ">=3.11"
 dependencies = [
     "PyYAML>=6.0",
+    "tzdata>=2026.3",
 ]
 
 [tool.setuptools.packages.find]

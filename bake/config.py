@@ -68,6 +68,7 @@ class Config:
     spec_version: int
     rings: tuple[Ring, ...]   # authored order preserved
     warnings: tuple[Warning, ...]
+    config_dir: Path          # the root every adapter source: resolves under (CIR-DATA-SOURCE-PATH)
 
 
 # ---------------------------------------------------------------------------
@@ -481,4 +482,5 @@ def load_config(path: Path) -> Config:
         spec_version=spec_version,
         rings=tuple(rings),
         warnings=tuple(warnings),
+        config_dir=config_dir,
     )

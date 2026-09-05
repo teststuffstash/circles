@@ -32,15 +32,20 @@ absoluteness is a syntactic property tested before resolution, so each row's mes
 independently triggerable.
 
 <details class="evidence-block">
-<summary>Evidence: 3 test case(s) — alex</summary>
+<summary>Evidence: 8 test case(s) — alex</summary>
 
 **Requirement:** CIR-DATA-SOURCE-PATH — **World:** alex
 
 | Case ID | Status | Detail |
 |---------|--------|--------|
 | `source-absolute-path` | PASS | — |
+| `source-glob-no-match` | PASS | — |
+| `source-glob-union` | PASS | — |
 | `source-non-literal-parent-traversal` | PASS | — |
 | `source-parent-traversal` | PASS | — |
+| `source-path-missing` | PASS | — |
+| `source-single-file` | PASS | — |
+| `source-unreadable` | PASS | — |
 
 [View full report](../../specs-site/evidence)
 
@@ -77,7 +82,27 @@ silently guess wrong on ambiguous strings, which is worse than not recognizing t
 config later demands a format, it is added to this list explicitly under a new requirement ID,
 never via heuristics.
 
-_Evidence: none yet — unverified._
+<details class="evidence-block">
+<summary>Evidence: 10 test case(s) — alex</summary>
+
+**Requirement:** CIR-DATA-DATE-PARSE — **World:** alex
+
+| Case ID | Status | Detail |
+|---------|--------|--------|
+| `date-anywhere-in-line` | PASS | — |
+| `date-datetime-form` | PASS | — |
+| `date-heading-prose` | PASS | — |
+| `date-impossible-calendar` | PASS | — |
+| `date-iso-calendar` | PASS | — |
+| `date-iso-substring` | PASS | — |
+| `date-newest-wins` | PASS | — |
+| `date-none-parseable` | PASS | — |
+| `date-slash-format` | PASS | — |
+| `date-written-month` | PASS | — |
+
+[View full report](../../specs-site/evidence)
+
+</details>
 
 ## CIR-DATA-AGE-CALENDAR — age is calendar days in the config's timezone
 
@@ -105,7 +130,25 @@ determinism — two people looking at the same page would see different lights �
 page to resolve, which it must not. Whole-day granularity makes the choice DST-immune either
 way; the ⚖ is only about *whose midnight*.
 
-_Evidence: none yet — unverified._
+<details class="evidence-block">
+<summary>Evidence: 8 test case(s) — alex</summary>
+
+**Requirement:** CIR-DATA-AGE-CALENDAR — **World:** alex
+
+| Case ID | Status | Detail |
+|---------|--------|--------|
+| `age-datetime-reduced-to-local-date` | PASS | — |
+| `age-dst-fall-back` | PASS | — |
+| `age-dst-spring-forward` | PASS | — |
+| `age-host-zone-irrelevant` | PASS | — |
+| `age-ignores-time-of-day` | PASS | — |
+| `age-same-day-is-zero` | PASS | — |
+| `age-year-boundary` | PASS | — |
+| `age-yesterday-is-one` | PASS | — |
+
+[View full report](../../specs-site/evidence)
+
+</details>
 
 ## CIR-DATA-FRESHNESS-WINDOW — thresholds and boundaries
 
@@ -198,7 +241,19 @@ tooling guess (`CIR-DATA-FAILURE-IS-GREY`). The build warning carries the signal
 who *can* tell the difference. Someone who genuinely wants "no entries ⇒ act" can express it
 today with `command:` — count the entries, print red when zero.
 
-_Evidence: none yet — unverified._
+<details class="evidence-block">
+<summary>Evidence: 2 test case(s) — alex</summary>
+
+**Requirement:** CIR-DATA-FRESHNESS-EMPTY — **World:** alex
+
+| Case ID | Status | Detail |
+|---------|--------|--------|
+| `source-file-empty` | PASS | — |
+| `source-no-parseable-dates` | PASS | — |
+
+[View full report](../../specs-site/evidence)
+
+</details>
 
 ## CIR-DATA-FRESHNESS-FUTURE — dates after the reference date
 
@@ -218,7 +273,20 @@ data. Note this is ruled without a skew tolerance: a single day of forward skew 
 exclude (the next-newest date is almost certainly today), while a one-day tolerance is exactly
 the window a typo slips through.
 
-_Evidence: none yet — unverified._
+<details class="evidence-block">
+<summary>Evidence: 3 test case(s) — alex</summary>
+
+**Requirement:** CIR-DATA-FRESHNESS-FUTURE — **World:** alex
+
+| Case ID | Status | Detail |
+|---------|--------|--------|
+| `future-date-mixed` | PASS | — |
+| `future-date-tomorrow` | PASS | — |
+| `future-dates-only` | PASS | — |
+
+[View full report](../../specs-site/evidence)
+
+</details>
 
 ## Proposed fixture rows (for the builder to land — not landed by this spec pass)
 
