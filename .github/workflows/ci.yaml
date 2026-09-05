@@ -31,6 +31,21 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
+  # ── e2e: the kind system-test tier, on the long-lived VM runner ─────────────────────────
+  # homelab docs/patterns/python-stack.md §CI job shape: the fast gate (ephemeral, no docker)
+  # runs IN PARALLEL with the kind e2e on the VM runner (docker daemon, two slots, ADR-082) —
+  # the merge-blocking wall is max(gate, e2e), never the sum. Before this job existed the
+  # system tier self-skipped on every PR run ("docker daemon not reachable") and was exercised
+  # only by docker-mode agent rides. The script is run-scoped + self-sweeping + mirror-wired per
+  # docs/patterns/kind-ci.md. Not yet a REQUIRED check (that is a homelab tofu/github ruleset
+  # change) — make it required once it has a green streak.
+  e2e:
+    runs-on: [self-hosted, proxmox-vm]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Kind system test (devbox run test-system)
+        run: devbox run test-system
+
   ci:
     runs-on: homelab-ephemeral
     steps:
