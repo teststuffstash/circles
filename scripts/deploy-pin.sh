@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # deploy-pin.sh — open/update the ONE deploy PR in circles-iac that bumps the circles chart pin
-# to $VERSION (the chart just published). Part of the FU-025 deploy pipeline (see .github/workflows/
+# (circles-iac apps/circles-page.yaml, the OCI chart Application) to $VERSION (the chart just
+# published). Part of the FU-025 deploy pipeline (see .github/workflows/
 # deploy.yaml + homelab docs/sleep-iac.md (the pipeline reference) §"Deploy pipeline").
 #
 # Why a fixed branch: GitHub allows only one open PR per head branch, so `deploy/circles`
@@ -19,7 +20,11 @@ set -euo pipefail
 IAC_REPO="teststuffstash/circles-iac"
 APP="circles"
 BRANCH="deploy/${APP}"
-APP_FILE="apps/${APP}.yaml"
+# The CHART Application (multi-source: ghcr OCI chart + $values). NOT apps/${APP}.yaml — that is
+# the circles-infra GIT-directory app (path circles/infra) whose targetRevision must stay `master`:
+# on 2026-08-08 this script wrote a chart CalVer there, ArgoCD sat "unable to resolve to a commit
+# SHA" (a -g<sha> is a circles commit, never a circles-iac ref) until circles-iac PR #71 reverted it.
+APP_FILE="apps/${APP}-page.yaml"
 : "${VERSION:?set VERSION}" "${GH_TOKEN:?set GH_TOKEN}"
 
 APP_REPO_DIR="$(git rev-parse --show-toplevel)"
