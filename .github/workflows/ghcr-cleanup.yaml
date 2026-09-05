@@ -28,7 +28,7 @@ jobs:
   cleanup:
     runs-on: homelab-ephemeral
     steps:
-      - uses: snok/container-retention-policy@v3
+      - uses: snok/container-retention-policy@v3.1.0 # no floating v3 tag exists upstream — every scheduled run failed to resolve it (2026-09-01)
         with:
           account: teststuffstash
           token: ${{ secrets.GITHUB_TOKEN }}
