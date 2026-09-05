@@ -73,7 +73,7 @@ The page's consumption-side requirements live in [../render/layout.md](../render
 | row id | inputs | expected |
 |---|---|---|
 | artifact-fixture-roundtrip | bake over `fixtures/alex/circles.yaml` | rings/items preserve config order and ids; `self/exercise` has `status: grey`, `grey_reason: by-choice`, `share: 1`, nulls for absent fields |
-| warnings-empty-array | fully healthy bake | `warnings: []` present, never omitted |
+| warnings-empty-array | fully healthy bake — `fixtures/alex/circles-clean.yaml`, every light hand-set | `warnings: []` present, never omitted |
 
 <details class="evidence-block">
 <summary>Evidence: 2 test case(s) — alex</summary>

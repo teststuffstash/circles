@@ -327,6 +327,22 @@ def check_fixture(repo: Path, f: Findings) -> None:
     if not config.exists():
         f.error(config, "fixture person's circles.yaml is missing")
         return
+    # Every fixture person's config and its variants (`circles-<variant>.yaml`, see
+    # fixtures/README.md) get the same source/command resolution check.
+    for config in sorted((repo / "fixtures").glob("*/circles*.yaml")):
+        _check_fixture_sources(config, f)
+
+    # DP-50: the fixture's freshness examples decay with the calendar. The dates are
+    # illustrative only if a reference date is declared alongside them; without one, the
+    # committed values silently stop demonstrating the light the spec claims for them.
+    readme = repo / "fixtures" / "README.md"
+    if readme.exists() and "reference date" not in readme.read_text(encoding="utf-8").lower():
+        f.error(readme, "fixture declares no reference date — freshness key examples "
+                        "decay against the calendar (⚖-R24)")
+
+
+def _check_fixture_sources(config: Path, f: Findings) -> None:
+    """Every `source:`/`command:` in one fixture config resolves under its directory."""
     text = config.read_text(encoding="utf-8")
     base = config.parent
 
@@ -349,14 +365,6 @@ def check_fixture(repo: Path, f: Findings) -> None:
             continue
         if not (base / target).exists():
             f.error(config, f"{kind}: {target!r} does not resolve under {base}")
-
-    # DP-50: the fixture's freshness examples decay with the calendar. The dates are
-    # illustrative only if a reference date is declared alongside them; without one, the
-    # committed values silently stop demonstrating the light the spec claims for them.
-    readme = repo / "fixtures" / "README.md"
-    if readme.exists() and "reference date" not in readme.read_text(encoding="utf-8").lower():
-        f.error(readme, "fixture declares no reference date — freshness key examples "
-                        "decay against the calendar (⚖-R24)")
 
 
 def main() -> int:

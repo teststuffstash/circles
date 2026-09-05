@@ -10,7 +10,13 @@ synthetic tables, never production data). The fixture person "Alex" exists so th
 - bug reports cross the boundary as new fixture rows, not as real data.
 
 Layout: one directory per fixture person (`alex/` today) — `circles.yaml` plus whatever fake
-source files their adapters read (`notes/`).
+source files their adapters read (`notes/`). A person may carry **variants** — sibling
+`circles-<variant>.yaml` files for the same person that exercise a case the main config cannot:
+
+- `alex/circles-clean.yaml` — the **bake-clean** variant: every light hand-set (`manual:`), no
+  `freshness:`/`command:` items (those bake to ⚪ not-evaluated plus a warning at P0), so it is
+  the one config here that resolves to `warnings: []` — the key example for
+  `CIR-BAKE-ARTIFACT#warnings-empty-array`. "Clean" describes the bake, not the lights.
 
 ## The fixture reference date — 2026-08-03
 
