@@ -184,12 +184,20 @@ EOF
 
 wire_mirrors() {
   local wired=0
+  # Docker-mode rides export REGISTRY_MIRROR_*; the VM runner does not — there the contract says
+  # "default the LAN VIPs" (homelab SERVICES.md §Registry mirrors, ADR-091). containerd falls back
+  # to the upstream `server` when a mirror is unreachable, so an off-LAN run still works, slowly;
+  # REGISTRY_MIRROR_NONE=1 skips the wiring entirely.
+  if [ "${REGISTRY_MIRROR_NONE:-}" = "1" ]; then
+    echo "  REGISTRY_MIRROR_NONE=1 — kind node will pull registries directly"; return 0
+  fi
+  : "${REGISTRY_MIRROR_DOCKER_IO:=http://192.168.40.20}"
+  : "${REGISTRY_MIRROR_GHCR:=http://192.168.40.21}"
+  : "${REGISTRY_MIRROR_MCR:=http://192.168.40.31}"
   if [ -n "${REGISTRY_MIRROR_DOCKER_IO:-}" ]; then kind_mirror docker.io "$REGISTRY_MIRROR_DOCKER_IO"; wired=$((wired + 1)); fi
   if [ -n "${REGISTRY_MIRROR_GHCR:-}" ];      then kind_mirror ghcr.io "$REGISTRY_MIRROR_GHCR";          wired=$((wired + 1)); fi
   if [ -n "${REGISTRY_MIRROR_MCR:-}" ];       then kind_mirror mcr.microsoft.com "$REGISTRY_MIRROR_MCR"; wired=$((wired + 1)); fi
-  if [ "$wired" -eq 0 ]; then
-    echo "  no REGISTRY_MIRROR_* set — kind node will pull registries directly (CI runners export them; local runs may not)"
-  fi
+  echo "  mirrors wired: $wired (docker.io=$REGISTRY_MIRROR_DOCKER_IO ghcr=$REGISTRY_MIRROR_GHCR mcr=$REGISTRY_MIRROR_MCR)"
 }
 
 # ═══════════════════════════════════════════════════════════════════════════════
