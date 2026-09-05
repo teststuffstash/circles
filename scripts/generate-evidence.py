@@ -77,7 +77,9 @@ def _extract_case_id(r: dict) -> str:
     Priority:
     1. Parametrized id: ``CIR-<AREA>-<NAME>#<row-id>`` in the test name brackets
     2. Docstring: ``CIR-<AREA>-<NAME>#<row-id>`` in the description
-    3. Fallback: the test method name
+
+    Raises ``ValueError`` when neither carries a ``#<row-id>`` citation — there
+    is no fallback to the test method name; every test must cite its spec row.
     """
     name = r.get("name", "")
     desc = r.get("description", "") or ""
