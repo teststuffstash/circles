@@ -1,0 +1,46 @@
+# The synthetic fixture person, bake-clean variant (see fixtures/README.md — everything invented).
+# Same person as circles.yaml, every light hand-set (`manual:` — the v0 mode). Nothing here
+# reaches for a source file or a command, so the bake has nothing to warn about: this is the
+# key example for "fully healthy bake → warnings: []" (CIR-BAKE-ARTIFACT#warnings-empty-array).
+# "Clean" is a claim about the bake, not the lights — friends is 🔴 on purpose.
+#
+# Keep it warning-free: no `freshness:`/`command:` items (⚪ not-evaluated + a warning at P0),
+# no empty ring, no unknown keys, no ring that mixes declared and undeclared shares.
+person: Alex Example
+rings:
+  - id: self
+    label: "① Self"
+    items:
+      - id: sleep
+        label: Sleep
+        guardrail: "Lights out by 23:00 on weeknights"
+        status:
+          manual: green
+  - id: partner
+    label: "② Partner"
+    items:
+      - id: date-night
+        label: Date night
+        guardrail: "Protected evening, twice a month"
+        status:
+          manual: yellow
+  - id: children
+    label: "③ Children"
+    items:
+      - id: nova
+        label: "◀ Nova"
+        share: 0.5
+        status:
+          manual: green
+      - id: kit
+        label: "Kit ▶"
+        share: 0.5
+        status:
+          manual: green
+  - id: wider
+    label: "④ Wider life"
+    items:
+      - id: friends
+        label: Friends
+        status:
+          manual: red

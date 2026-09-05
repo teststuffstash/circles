@@ -28,6 +28,7 @@ from bake.resolve import (
 
 FIXTURES = Path(__file__).resolve().parent.parent / "fixtures"
 ALEX_YAML = FIXTURES / "alex" / "circles.yaml"
+ALEX_CLEAN_YAML = FIXTURES / "alex" / "circles-clean.yaml"  # bake-clean variant (fixtures/README.md)
 FIXTURE_REFERENCE_DATE = date(2026, 8, 3)
 FIXTURE_GENERATED_AT = datetime(2026, 8, 3, 2, 0, 0, tzinfo=timezone.utc)
 
@@ -38,11 +39,12 @@ FIXTURE_GENERATED_AT = datetime(2026, 8, 3, 2, 0, 0, tzinfo=timezone.utc)
 
 def _resolve_fixture(
     *,
+    config_path: Path = ALEX_YAML,
     reference_date: date = FIXTURE_REFERENCE_DATE,
     generated_at: datetime = FIXTURE_GENERATED_AT,
 ) -> dict:
-    """Load the fixture config and resolve it."""
-    config = load_config(ALEX_YAML)
+    """Load the fixture config (or one of its variants) and resolve it."""
+    config = load_config(config_path)
     return resolve(config, reference_date=reference_date, generated_at=generated_at)
 
 
@@ -381,30 +383,13 @@ class TestBakeArtifact:
 
     def test_warnings_empty_array(self) -> None:
         """CIR-BAKE-ARTIFACT#warnings-empty-array —
-        warnings is always present, even when empty."""
-        # Build a minimal config with no adapters (no warnings)
-        from bake.config import load_config
-        import yaml
-        import tempfile
-
-        minimal = {
-            "person": "Test",
-            "rings": [{
-                "id": "a", "label": "A",
-                "items": [{"id": "x", "label": "X"}],
-            }],
-        }
-        with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False) as f:
-            yaml.dump(minimal, f)
-            tmp_path = Path(f.name)
-
-        try:
-            config = load_config(tmp_path)
-            artifact = resolve(config, reference_date=FIXTURE_REFERENCE_DATE, generated_at=FIXTURE_GENERATED_AT)
-            assert "warnings" in artifact
-            assert isinstance(artifact["warnings"], list)
-        finally:
-            tmp_path.unlink()
+        warnings is always present, even when empty: the fixture person's bake-clean
+        variant (fixtures/alex/circles-clean.yaml — every light hand-set, nothing to warn
+        about) resolves to `warnings: []`, not to a missing key."""
+        artifact = _resolve_fixture(config_path=ALEX_CLEAN_YAML)
+        assert "warnings" in artifact
+        assert isinstance(artifact["warnings"], list)
+        assert artifact["warnings"] == []
 
 
 # ===========================================================================
