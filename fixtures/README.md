@@ -31,6 +31,8 @@ So a claim like "sleep is 🟢" is never a claim about now. It is a claim about
 reproduces by injecting the reference date into the bake (`CIR-ADAPT-REFERENCE-DATE`). The
 committed dates stay fixed and readable; nothing rewrites them at test time.
 
-When the fixture gains dated rows, they are chosen relative to this date. Moving the reference
+`notes/future-date.md` (one entry dated 2099-01-01, one dated 2026-08-01) and
+`notes/empty-log.md` (a heading, no dated lines) are the future-date and no-dates key examples,
+read against this same reference date. When the fixture gains dated rows, they are chosen relative to this date. Moving the reference
 date is a fixture change like any other: it changes which lights the examples produce, so the
 spec rows that cite them move with it.

@@ -2,13 +2,15 @@
 #
 # This module owns the resolution logic: every item's status, grey_reason, detail_line,
 # and the artifact envelope. It does NOT read files, run commands, or touch the clock —
-# those are adapter concerns that P1 will wire in.
+# those are adapter concerns (bake/adapters.py), called from here only under
+# `evaluate=True` (the P1 nightly bake, issue #33). Command execution lands in issue #33
+# slice B; until then `command:` resolves not-evaluated in every build.
 #
 # Requirements owned:
 #   CIR-ADAPT-CONTRACT, CIR-ADAPT-REFERENCE-DATE, CIR-ADAPT-MANUAL, CIR-ADAPT-NO-PAGE-LOGIC
 #   CIR-DATA-STATUS-RESOLUTION, CIR-DATA-STATUS-MANUAL-VALUES, CIR-DATA-GREY-REASON,
 #   CIR-DATA-FAILURE-IS-GREY, CIR-DATA-NO-AGGREGATION, CIR-DATA-RESOLUTION-TIME,
-#   CIR-DATA-DETAIL-LINE (⚖-R51), CIR-DATA-FRESHNESS-WINDOW (predicate only)
+#   CIR-DATA-DETAIL-LINE (⚖-R51), CIR-DATA-FRESHNESS-WINDOW (predicate + wiring)
 #   CIR-BAKE-ARTIFACT, -STATUS-VALUES, -VERSION, -GENERATED-AT, -WARNINGS,
 #   -DETAIL-FIELDS, -DETERMINISM, -EXPOSURE, -PAGE-DOES-NOT-RESOLVE
 #   CIR-BAKE-STALE-SELF (stale_after_hours: null at P0)
@@ -18,8 +20,10 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import date, datetime, timezone
+from pathlib import Path
 from typing import Literal
 
+from bake.adapters import AdapterResult, evaluate_freshness
 from bake.config import Config, Item, Ring
 
 # ---------------------------------------------------------------------------
@@ -79,10 +83,9 @@ def window_status(age_days: int, yellow_after: int, red_after: int) -> Status:
       - yellow_after < age ≤ red_after → 🟡
       - age > red_after     → 🔴
 
-    This is a PURE PREDICATE ONLY. It is NOT called from resolve() at P0
-    (CIR-PROC-PHASE-P0#p0-unevaluated-adapters-are-grey). It exists so
-    CIR-DATA-FRESHNESS-WINDOW carries generated evidence with parametrised
-    tests citing the spec rows.
+    A pure predicate: the freshness adapter (bake/adapters.py) calls it with the
+    calendar age it computed, and resolve() reaches it only under `evaluate=True`
+    (CIR-PROC-PHASE-P0#p0-unevaluated-adapters-are-grey keeps the P0 build clear of it).
     """
     if age_days <= yellow_after:
         return "green"
@@ -103,12 +106,36 @@ def _resolve_manual(adapter_raw: dict) -> Status:
 
 
 def _resolve_not_evaluated() -> tuple[Status, GreyReason, str]:
-    """Resolve a freshness or command adapter at P0.
+    """Resolve an adapter this build deliberately does not run.
 
     Per CIR-PROC-PHASE-P0#p0-unevaluated-adapters-are-grey and ⚖-R50:
     the adapter is not evaluated in this build → ⚪ with grey_reason: not-evaluated.
+    Reached for freshness: and command: without `evaluate`, and for command: even
+    with it — command execution lands in issue #33 slice B.
     """
     return "grey", "not-evaluated", "adapter not evaluated in this build"
+
+
+def _run_adapter(
+    kind: str,
+    raw: dict,
+    *,
+    config_dir: Path,
+    reference_date: date,
+    tz_name: str,
+) -> AdapterResult:
+    """Call the adapter for *kind*, fencing any unexpected exception into a failure.
+
+    CIR-ADAPT-CONTRACT#adapter-failure-is-isolated: one adapter raising must not take
+    the bake down. The exception's text is NOT forwarded — it may carry host paths
+    (CIR-BAKE-EXPOSURE#no-absolute-host-paths); only its class name is.
+    """
+    try:
+        if kind == "freshness":
+            return evaluate_freshness(raw, config_dir, reference_date, tz_name)
+        raise ValueError(f"no evaluator for adapter kind {kind!r}")
+    except Exception as e:  # noqa: BLE001 — the isolation boundary
+        return AdapterResult.failed(f"adapter raised {type(e).__name__}")
 
 
 def _resolve_no_adapter() -> tuple[Status, GreyReason]:
@@ -170,12 +197,24 @@ def _build_detail_line(
     return " · ".join(parts)
 
 
-def _resolve_item(item: Item, ring_id: str) -> tuple[ResolvedItem, ArtifactWarning | None]:
+def _resolve_item(
+    item: Item,
+    ring_id: str,
+    *,
+    config_dir: Path,
+    reference_date: date,
+    tz_name: str,
+    evaluate: bool,
+) -> tuple[ResolvedItem, ArtifactWarning | None]:
     """Resolve a single item to its artifact entry.
 
     Args:
         item: The item to resolve.
         ring_id: The id of the ring this item belongs to (for warning refs).
+        config_dir: The root every adapter source resolves under.
+        reference_date: The one injected date every adapter ages against.
+        tz_name: The config's timezone (IANA name).
+        evaluate: Run the freshness adapter (P1). False keeps the P0 behaviour.
 
     Returns (resolved_item, optional_warning).
     """
@@ -184,6 +223,7 @@ def _resolve_item(item: Item, ring_id: str) -> tuple[ResolvedItem, ArtifactWarni
     grey_reason: GreyReason | None = None
     last_data_date: str | None = None
     failure_message: str | None = None
+    ref = f"{ring_id}/{item.id}"
 
     if item.adapter is None:
         # No adapter → ⚪ by-choice (CIR-DATA-STATUS-RESOLUTION#no-adapter-declared)
@@ -191,6 +231,21 @@ def _resolve_item(item: Item, ring_id: str) -> tuple[ResolvedItem, ArtifactWarni
     elif item.adapter.kind == "manual":
         # Manual adapter → declared status (CIR-ADAPT-MANUAL)
         status = _resolve_manual(item.adapter.raw)
+    elif item.adapter.kind == "freshness" and evaluate:
+        # P1: the freshness adapter answers, or fails into ⚪ by-failure
+        # (CIR-ADAPT-FRESHNESS, CIR-DATA-FAILURE-IS-GREY)
+        result = _run_adapter(
+            "freshness", item.adapter.raw,
+            config_dir=config_dir, reference_date=reference_date, tz_name=tz_name,
+        )
+        if result.failure is not None:
+            status, grey_reason, failure_message = "grey", "by-failure", result.failure
+            warning = ArtifactWarning(item=ref, message=result.failure)
+        else:
+            status = result.status  # type: ignore[assignment]  # never grey (AdapterResult)
+            last_data_date = result.data_date.isoformat()  # type: ignore[union-attr]
+            if result.note:
+                warning = ArtifactWarning(item=ref, message=result.note)
     elif item.adapter.kind in ("freshness", "command"):
         # P0: not evaluated (CIR-PROC-PHASE-P0#p0-unevaluated-adapters-are-grey)
         status, grey_reason, failure_message = _resolve_not_evaluated()
@@ -244,6 +299,7 @@ def resolve(
     *,
     reference_date: date,
     generated_at: datetime,
+    evaluate: bool = False,
 ) -> dict:
     """Return the CIR-BAKE-ARTIFACT dict, exactly as serialised to data.json.
 
@@ -252,6 +308,10 @@ def resolve(
         reference_date: The single date every adapter ages against
             (CIR-ADAPT-REFERENCE-DATE). For fixture bakes this is 2026-08-03.
         generated_at: The UTC timestamp of the bake run.
+        evaluate: False (the default, the image-build bake) leaves freshness: and
+            command: items ⚪ not-evaluated. True (the nightly bake, issue #33)
+            evaluates freshness: adapters; command execution lands in issue #33 slice B,
+            so command: items stay not-evaluated either way.
 
     Returns:
         A dict matching the CIR-BAKE-ARTIFACT schema, ready for JSON serialisation.
@@ -262,7 +322,13 @@ def resolve(
     for ring in config.rings:
         resolved_items: list[dict] = []
         for item in ring.items:
-            resolved, warning = _resolve_item(item, ring.id)
+            resolved, warning = _resolve_item(
+                item, ring.id,
+                config_dir=config.config_dir,
+                reference_date=reference_date,
+                tz_name=config.timezone,
+                evaluate=evaluate,
+            )
             if warning is not None:
                 all_warnings.append({"item": warning.item, "message": warning.message})
 

@@ -333,12 +333,13 @@ last good artifact stays live. A half-written file must never be observable by t
 | host-timezone-does-not-leak | bake under a non-UTC `TZ` | identical output; the config's `timezone:` governs |
 
 <details class="evidence-block">
-<summary>Evidence: 2 test case(s) — alex</summary>
+<summary>Evidence: 3 test case(s) — alex</summary>
 
 **Requirement:** CIR-BAKE-DETERMINISM — **World:** alex
 
 | Case ID | Status | Detail |
 |---------|--------|--------|
+| `host-timezone-does-not-leak` | PASS | — |
 | `ordering-is-stable` | PASS | — |
 | `two-bakes-agree` | PASS | — |
 
@@ -360,13 +361,14 @@ anything the UI merely does not display**.
 | no-source-content-in-the-artifact | freshness source with private notes | only the date is carried, never the surrounding text |
 
 <details class="evidence-block">
-<summary>Evidence: 1 test case(s) — alex</summary>
+<summary>Evidence: 2 test case(s) — alex</summary>
 
 **Requirement:** CIR-BAKE-EXPOSURE — **World:** alex
 
 | Case ID | Status | Detail |
 |---------|--------|--------|
 | `no-absolute-host-paths` | PASS | — |
+| `no-source-content-in-the-artifact` | PASS | — |
 
 [View full report](../../specs-site/evidence)
 

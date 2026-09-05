@@ -78,12 +78,13 @@ statement about (source dates, reference date), which is a complete and time-ind
 CI outage, failing unrelated PRs on a date nobody chose.
 
 <details class="evidence-block">
-<summary>Evidence: 1 test case(s) — alex</summary>
+<summary>Evidence: 2 test case(s) — alex</summary>
 
 **Requirement:** CIR-PROC-TEST-FIXTURES — **World:** alex
 
 | Case ID | Status | Detail |
 |---------|--------|--------|
+| `dates-relative-to-injected-reference` | PASS | — |
 | `fixture-validates-against-the-schema` | PASS | — |
 
 [View full report](../../specs-site/evidence)

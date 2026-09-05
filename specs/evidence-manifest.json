@@ -15,6 +15,11 @@
       "adapter-resolves-one-item",
       "adapter-unknown-name"
     ],
+    "CIR-ADAPT-FRESHNESS": [
+      "freshness-reads-never-executes",
+      "freshness-reports-its-data-date",
+      "freshness-sandboxed-to-config-dir"
+    ],
     "CIR-ADAPT-MANUAL": [
       "manual-available-in-every-phase",
       "manual-has-no-data-date",
@@ -43,11 +48,13 @@
       "structured-fields-also-present"
     ],
     "CIR-BAKE-DETERMINISM": [
+      "host-timezone-does-not-leak",
       "ordering-is-stable",
       "two-bakes-agree"
     ],
     "CIR-BAKE-EXPOSURE": [
-      "no-absolute-host-paths"
+      "no-absolute-host-paths",
+      "no-source-content-in-the-artifact"
     ],
     "CIR-BAKE-PAGE-DOES-NOT-RESOLVE": [
       "page-contains-no-adapter-code"
@@ -72,9 +79,31 @@
       "config-level-warning-has-null-item",
       "warning-carries-cell-ref"
     ],
+    "CIR-DATA-AGE-CALENDAR": [
+      "age-datetime-reduced-to-local-date",
+      "age-dst-fall-back",
+      "age-dst-spring-forward",
+      "age-host-zone-irrelevant",
+      "age-ignores-time-of-day",
+      "age-same-day-is-zero",
+      "age-year-boundary",
+      "age-yesterday-is-one"
+    ],
     "CIR-DATA-CONFIG-ERROR-FAILS": [
       "config-error-aborts-whole-bake",
       "message-names-the-item"
+    ],
+    "CIR-DATA-DATE-PARSE": [
+      "date-anywhere-in-line",
+      "date-datetime-form",
+      "date-heading-prose",
+      "date-impossible-calendar",
+      "date-iso-calendar",
+      "date-iso-substring",
+      "date-newest-wins",
+      "date-none-parseable",
+      "date-slash-format",
+      "date-written-month"
     ],
     "CIR-DATA-DETAIL-LINE": [
       "detail-line-is-plain-text",
@@ -84,7 +113,17 @@
     ],
     "CIR-DATA-FAILURE-IS-GREY": [
       "failure-never-green",
-      "failure-never-red"
+      "failure-never-red",
+      "unreadable-source-is-grey"
+    ],
+    "CIR-DATA-FRESHNESS-EMPTY": [
+      "source-file-empty",
+      "source-no-parseable-dates"
+    ],
+    "CIR-DATA-FRESHNESS-FUTURE": [
+      "future-date-mixed",
+      "future-date-tomorrow",
+      "future-dates-only"
     ],
     "CIR-DATA-FRESHNESS-THRESHOLDS": [
       "threshold-fractional",
@@ -174,8 +213,13 @@
     ],
     "CIR-DATA-SOURCE-PATH": [
       "source-absolute-path",
+      "source-glob-no-match",
+      "source-glob-union",
       "source-non-literal-parent-traversal",
-      "source-parent-traversal"
+      "source-parent-traversal",
+      "source-path-missing",
+      "source-single-file",
+      "source-unreadable"
     ],
     "CIR-DATA-STATUS-MANUAL-VALUES": [
       "manual-grey-rejected",
@@ -184,6 +228,12 @@
     "CIR-DATA-STATUS-RESOLUTION": [
       "adapter-not-evaluated-this-phase",
       "empty-status-block",
+      "freshness-all-dates-future",
+      "freshness-inside-window",
+      "freshness-source-missing",
+      "freshness-source-no-dates",
+      "freshness-stale",
+      "freshness-very-stale",
       "manual-declares-grey",
       "manual-green",
       "manual-red",
@@ -212,6 +262,7 @@
       "p0-unevaluated-adapters-are-grey"
     ],
     "CIR-PROC-TEST-FIXTURES": [
+      "dates-relative-to-injected-reference",
       "fixture-validates-against-the-schema"
     ],
     "CIR-RENDER-A11Y-TABLE": [

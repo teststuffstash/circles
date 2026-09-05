@@ -132,7 +132,20 @@ Behavior is [freshness.md](freshness.md); interface-level obligations only here.
 | freshness-reports-its-data-date | newest date 2026-08-01 | `data_date: 2026-08-01` in the detail line |
 | freshness-sandboxed-to-config-dir | any `source:` | resolved per [`CIR-DATA-SOURCE-PATH`](freshness.md) |
 
-_Evidence: none yet — unverified._
+<details class="evidence-block">
+<summary>Evidence: 3 test case(s) — alex</summary>
+
+**Requirement:** CIR-ADAPT-FRESHNESS — **World:** alex
+
+| Case ID | Status | Detail |
+|---------|--------|--------|
+| `freshness-reads-never-executes` | PASS | — |
+| `freshness-reports-its-data-date` | PASS | — |
+| `freshness-sandboxed-to-config-dir` | PASS | — |
+
+[View full report](../../specs-site/evidence)
+
+</details>
 
 ## CIR-ADAPT-COMMAND — the escape hatch
 
