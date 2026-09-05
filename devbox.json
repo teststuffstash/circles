@@ -23,6 +23,7 @@
       "ci":             ["./scripts/ci.sh"],
       "test-chart":     ["./scripts/test-chart.sh"],
       "test-system":    ["./scripts/test-system.sh"],
+      "test-browser":   ["./scripts/test-browser.sh"],
       "scan-secrets":   ["gitleaks detect --source . --no-banner --verbose"],
       "validate-chart": ["./scripts/validate-chart.sh"],
       "build-image":    ["./scripts/build-image.sh"],

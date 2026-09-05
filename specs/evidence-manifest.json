@@ -203,6 +203,9 @@
     "CIR-PROC-BAKE-ONE-PATH": [
       "bake-same-code-both-triggers"
     ],
+    "CIR-PROC-GATE": [
+      "gate-no-dangling-spec-reference"
+    ],
     "CIR-PROC-PHASE-P0": [
       "p0-config-stays-valid",
       "p0-manual-end-to-end",
