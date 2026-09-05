@@ -15,6 +15,10 @@ dependencies = [
 include = ["bake*"]
 
 [dependency-groups]
+browser = [
+    "playwright==1.62.0",
+    "pypdf>=6.17.0",
+]
 dev = [
     "allure-pytest>=2.16.0",
     "pytest>=8.0",
@@ -22,3 +26,10 @@ dev = [
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+# The browser tier (tests/browser, CIR-PROC-BROWSER-EVIDENCE) needs headless Chromium and a
+# served page; the unit run in scripts/ci.sh (`pytest tests/`) must not collect it. The harness
+# `scripts/test-browser.sh` overrides this with `-o addopts=` when it targets tests/browser.
+addopts = "--ignore=tests/browser"
+markers = [
+    "browser: system-tier browser evidence (CIR-PROC-BROWSER-EVIDENCE, ⚖-R48) — run via `devbox run test-browser`",
+]

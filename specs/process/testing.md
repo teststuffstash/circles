@@ -157,6 +157,8 @@ this requirement that is a **proxy, not evidence** — useful as a fast regressi
 as satisfaction of `render-requirements-state-their-path`. Until the browser harness lands (its
 own issue: which browser image, how it installs, how it wires into `devbox`), a proxy check must
 be labelled as such in its test id or docstring, so the evidence chain cannot silently count it.
+The harness is `devbox run test-browser` (`scripts/test-browser.sh`, `tests/browser/`), a
+system-tier gate that needs a browser (local Playwright or the Microsoft Playwright image in CI).
 
 **⚖-R48 — where do browser checks live in the ruled tiers?** Options: (a) call them *unit* tests
 over a headless browser, since no cluster is involved — which stretches "pure logic" past
