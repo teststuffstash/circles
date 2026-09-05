@@ -381,30 +381,17 @@ class TestBakeArtifact:
 
     def test_warnings_empty_array(self) -> None:
         """CIR-BAKE-ARTIFACT#warnings-empty-array —
-        warnings is always present, even when empty."""
-        # Build a minimal config with no adapters (no warnings)
-        from bake.config import load_config
-        import yaml
-        import tempfile
-
-        minimal = {
-            "person": "Test",
-            "rings": [{
-                "id": "a", "label": "A",
-                "items": [{"id": "x", "label": "X"}],
-            }],
-        }
-        with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False) as f:
-            yaml.dump(minimal, f)
-            tmp_path = Path(f.name)
-
-        try:
-            config = load_config(tmp_path)
-            artifact = resolve(config, reference_date=FIXTURE_REFERENCE_DATE, generated_at=FIXTURE_GENERATED_AT)
-            assert "warnings" in artifact
-            assert isinstance(artifact["warnings"], list)
-        finally:
-            tmp_path.unlink()
+        a fully healthy bake carries `warnings: []` — present, never omitted."""
+        # The zero-warning variant of the fixture person: every monitored item is
+        # `manual:` (nothing left unevaluated at P0), both half-arc siblings declare
+        # `share:` (no ⚖-R12 mixed-share warning), and the one adapter-less item is an
+        # honest ⚪ by-choice, which is not a warning
+        # (CIR-DATA-STATUS-RESOLUTION#no-adapter-declared). Expected from the spec row:
+        # `warnings: []` — the empty array itself, not merely "some list".
+        config = load_config(FIXTURES / "alex" / "circles-zero-warnings.yaml")
+        artifact = resolve(config, reference_date=FIXTURE_REFERENCE_DATE, generated_at=FIXTURE_GENERATED_AT)
+        assert "warnings" in artifact
+        assert artifact["warnings"] == []
 
 
 # ===========================================================================
