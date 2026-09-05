@@ -1,0 +1,65 @@
+# Fixture variant: the bake-clean configuration — CIR-BAKE-ARTIFACT#warnings-empty-array
+# (specs/data/data-json.md) and CIR-BAKE-WARNINGS#no-warnings-no-banner.
+#
+# This is the SAME fixture person as `fixtures/alex/circles.yaml` (same rings, same ids,
+# same labels, same guardrails) — a VARIANT of Alex, not a second synthetic person
+# (CIR-PROC-TEST-FIXTURES#fixture-row-is-spec-row, #no-real-data). The main fixture cannot
+# be the zero-warning key example: its freshness and command adapters are not evaluated at
+# P0 (CIR-PROC-PHASE-P0#p0-unevaluated-adapters-are-grey), and every unevaluated adapter
+# raises an "adapter not evaluated in this build" warning. So here every monitored item is
+# hand-set (`manual:`), and the two half-arc siblings BOTH declare `share:` (no ⚖-R12
+# mixed-share warning). `exercise` keeps no adapter on purpose: ⚪ by-choice is an honest
+# grey, not a warning (CIR-DATA-STATUS-RESOLUTION#no-adapter-declared).
+#
+# Resolving this file at the FIXTURE REFERENCE DATE 2026-08-03 (⚖-R24) yields
+# `warnings: []` — the strong claim the citing tests assert.
+person: Alex Example
+rings:
+  - id: self
+    label: "① Self"
+    items:
+      - id: sleep
+        label: Sleep
+        guardrail: "Lights out by 23:00 on weeknights"
+        status:
+          manual: green
+      - id: labs
+        label: Quarterly labs
+        guardrail: "Blood panel every 90 days"
+        status:
+          manual: red
+      - id: exercise
+        label: Exercise
+        # no adapter → ⚪ unmonitored (by-choice) — produces no warning
+  - id: partner
+    label: "② Partner"
+    items:
+      - id: date-night
+        label: Date night
+        guardrail: "Protected evening, twice a month"
+        status:
+          manual: yellow
+  - id: children
+    label: "③ Children"
+    items:
+      - id: nova
+        label: "◀ Nova"
+        share: 0.5 # both siblings declare share → no mixed-share warning (⚖-R12)
+        status:
+          manual: green
+      - id: kit
+        label: "Kit ▶"
+        share: 0.5
+        status:
+          manual: green
+  - id: wider
+    label: "④ Wider life"
+    items:
+      - id: friends
+        label: Friends
+        status:
+          manual: red
+      - id: plants
+        label: Plants
+        status:
+          manual: yellow
