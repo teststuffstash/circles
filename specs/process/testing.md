@@ -124,7 +124,18 @@ and chart unit tests. As the product lands it must gain, in this order, cheapest
 | gate-no-dangling-spec-reference | a `CIR-*` cited in code or tests that no longer exists | fails, so a superseded id cannot rot silently |
 | gate-secrets-scan-clean | any change | `devbox run scan-secrets` |
 
-_Evidence: none yet — unverified._
+<details class="evidence-block">
+<summary>Evidence: 1 test case(s) — alex</summary>
+
+**Requirement:** CIR-PROC-GATE — **World:** alex
+
+| Case ID | Status | Detail |
+|---------|--------|--------|
+| `gate-no-dangling-spec-reference` | PASS | — |
+
+[View full report](../../specs-site/evidence)
+
+</details>
 
 ## CIR-PROC-BROWSER-EVIDENCE — the render requirements need a browser
 
