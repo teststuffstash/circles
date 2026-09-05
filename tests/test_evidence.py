@@ -59,14 +59,14 @@ class TestEvidenceDedup:
         method name.
         """
         cases: list[dict] = row["cases"]
-        expected: dict[str, str] = row["expected"]
 
-        if not expected:
+        if row.get("expect_error"):
             # Row signals that _extract_case_id should hard-fail
-            import pytest
             with pytest.raises(ValueError, match=r"#<row-id>"):
                 _build_evidence_block("CIR-DATA-FRESHNESS-WINDOW", cases, "../report/")
             return
+
+        expected: dict[str, str] = row["expected"]
 
         # Build the block with a dummy report path
         block = _build_evidence_block("CIR-DATA-FRESHNESS-WINDOW", cases, "../report/")
