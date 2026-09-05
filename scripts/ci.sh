@@ -2,6 +2,10 @@
 # ci.sh — CI entry point for the circles project
 cd "$(dirname "$0")/.."
 
+# Run-scoped Allure results dir (kind-ci.md rule 1 applied to the unit tier): a fixed
+# /tmp/allure-raw races when two CI runs share a host. Override with ALLURE_RAW to keep it.
+ALLURE_RAW="${ALLURE_RAW:-$(mktemp -d /tmp/allure-raw.XXXXXX)}"
+
 echo "=== validate-chart ==="
 ./scripts/validate-chart.sh
 
@@ -12,8 +16,8 @@ echo "=== specs-build ==="
 ./scripts/specs-build.sh
 
 echo "=== bake unit tests (with Allure evidence) ==="
-rm -rf /tmp/allure-raw
-uv run --frozen pytest tests/ -v --tb=short --alluredir=/tmp/allure-raw
+rm -rf "${ALLURE_RAW:?}"/*
+uv run --frozen pytest tests/ -v --tb=short --alluredir="$ALLURE_RAW"
 
 echo "=== bake artifact-schema check ==="
 # Build the artifact from the fixture and validate its structure
@@ -47,9 +51,9 @@ print('  artifact schema check: PASS')
 echo "=== generate evidence fragments ==="
 # Generate the Allure HTML report and inject evidence blocks into spec pages
 mkdir -p specs-site/evidence
-python3 scripts/generate-allure-report.py /tmp/allure-raw specs-site/evidence
+python3 scripts/generate-allure-report.py "$ALLURE_RAW" specs-site/evidence
 python3 scripts/generate-evidence.py \
-  --allure-dir /tmp/allure-raw \
+  --allure-dir "$ALLURE_RAW" \
   --report-dir ../specs-site/evidence \
   --specs-dir specs/ \
   --inject
@@ -162,6 +166,7 @@ print('  page-content-check: PASS')
 
 # Clean up
 rm -rf /tmp/circles-bake-test
+rm -rf "$ALLURE_RAW"
 
 echo ""
 echo "=== test-system (skippable: set CIRCLES_SYSTEM_TEST_SKIP=1) ==="

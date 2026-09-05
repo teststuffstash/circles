@@ -7,11 +7,19 @@
 # Environment:
 #   CIRCLES_SYSTEM_TEST_SKIP  — set to "1" to skip (e.g. when no Docker daemon)
 #   CIRCLES_IMAGE             — image repository (default: circles-system-test)
-#   CIRCLES_TAG               — image tag (default: test-$(git rev-parse --short HEAD))
+#   CIRCLES_TAG               — image tag (default: test-<git sha>-<run tag>)
+#   CIRCLES_PF_PORT           — local port-forward port (default: strided by run tag)
+#   KEEP                      — set to "1" to keep the kind cluster after the run (local poking)
+#   GITHUB_RUN_ID             — CI run id; scopes cluster/image/port names (falls back to $$)
+#   REGISTRY_MIRROR_DOCKER_IO / REGISTRY_MIRROR_GHCR / REGISTRY_MIRROR_MCR
+#                             — registry mirrors wired into the kind node (ADR-091 env contract)
 #
 # The script bakes a real artifact from the fixture, builds an image containing it,
 # creates a kind cluster, installs the chart, fetches the page, and asserts the baked
 # content is served — not the vanilla bootstrap placeholder.
+#
+# The cluster runs on a SHARED docker daemon (two CI runner slots on one host) — it is
+# run-scoped, self-sweeping and mirror-wired per homelab docs/patterns/kind-ci.md.
 #
 # Requirements evidenced (system tier):
 #   CIR-PROC-PHASE-P0#p0-page-replaces-placeholder
@@ -20,6 +28,10 @@
 #   CIR-PROC-DEPLOY-SEAM#image-buildable-from-this-repo-alone
 
 cd "$(dirname "$0")/.."
+
+# devbox↔uv seam: pin uv to the project venv before any `uv run` (homelab
+# docs/patterns/python-stack.md, the fleet#316 scar; kind-ci.md rule 7).
+export UV_PROJECT_ENVIRONMENT=.venv
 
 # ── skip guard ──────────────────────────────────────────────────────────────────
 if [ "${CIRCLES_SYSTEM_TEST_SKIP:-}" = "1" ]; then
@@ -43,16 +55,26 @@ fi
 
 # ── config ──────────────────────────────────────────────────────────────────────
 REFERENCE_DATE="2026-08-03"
-CLUSTER_NAME="circles-test"
+# Run-scoped names (kind-ci.md rule 1): cluster, image tag and local port all carry the
+# run id so two runner slots on one docker daemon never collide. The `circles-test`
+# PREFIX is load-bearing — the platform's hourly kind-janitor matches it.
+RUN_TAG="${GITHUB_RUN_ID:-$$}"
+CLUSTER_PREFIX="circles-test"
+CLUSTER_NAME="${CLUSTER_PREFIX}-${RUN_TAG}"
+NODE_NAME="${CLUSTER_NAME}-control-plane"
 IMG="${CIRCLES_IMAGE:-circles-system-test}"
-TAG="${CIRCLES_TAG:-test-$(git rev-parse --short HEAD 2>/dev/null || echo 'local')}"
+TAG="${CIRCLES_TAG:-test-$(git rev-parse --short HEAD 2>/dev/null || echo 'local')-${RUN_TAG}}"
 FULL_IMAGE="${IMG}:${TAG}"
-PF_PORT=${CIRCLES_PF_PORT:-8888}
+PF_PORT=${CIRCLES_PF_PORT:-$((20000 + (RUN_TAG % 5000) * 2))}
+STALE_AFTER_S=$((2 * 3600))   # own-prefix clusters older than this are swept pre-create (rule 2)
 
 # Temp dirs (cleaned up by trap)
 BAKE_OUT=$(mktemp -d /tmp/circles-bake.XXXXXX)
 FETCH_DIR=$(mktemp -d /tmp/circles-fetch.XXXXXX)
-KIND_CONFIG=$(mktemp /tmp/kind-config.XXXXXX.yaml)
+# Per-run kubeconfig: kind/helm/kubectl otherwise share ~/.kube/config, and the other
+# slot's `kind create` would flip current-context under us mid-run.
+KUBECONFIG=$(mktemp /tmp/circles-kubeconfig.XXXXXX)
+export KUBECONFIG
 
 FAIL_COUNT=0
 
@@ -66,12 +88,19 @@ cleanup() {
     kill "$PF_PID" 2>/dev/null || true
     wait "$PF_PID" 2>/dev/null || true
   fi
-  # Delete kind cluster
+  # Delete OWN kind cluster only (rule 3) — never the other slot's; KEEP=1 skips for local poking
   if kind get clusters 2>/dev/null | grep -q "^${CLUSTER_NAME}$"; then
+    if [ "${KEEP:-}" = "1" ]; then
+      echo "  KEEP=1: leaving cluster '$CLUSTER_NAME' running (KUBECONFIG=$KUBECONFIG)"
+      echo "  delete it with: kind delete cluster --name $CLUSTER_NAME"
+      rm -rf "$BAKE_OUT" "$FETCH_DIR"
+      echo "==> test-system: cleanup done"
+      return
+    fi
     kind delete cluster --name "$CLUSTER_NAME" 2>&1 | sed 's/^/  /'
   fi
   # Clean temp dirs
-  rm -rf "$BAKE_OUT" "$FETCH_DIR" "$KIND_CONFIG"
+  rm -rf "$BAKE_OUT" "$FETCH_DIR" "$KUBECONFIG"
   echo "==> test-system: cleanup done"
 }
 trap cleanup EXIT
@@ -106,6 +135,61 @@ retry() {
   done
   echo "  RETRY FAILED after $max_attempts attempt(s): $*" >&2
   return "$rc"
+}
+
+# ── stale-cluster sweep (kind-ci.md rule 2) ─────────────────────────────────────
+# Teardown traps do not run when CI cancels/times out a job, so leaked clusters pile
+# up on the shared daemon until it starves (inotify, disk). Before creating, delete
+# own-prefix clusters whose control-plane container is older than STALE_AFTER_S.
+# Younger ones are NEVER touched — they may be the other runner slot's live cluster.
+sweep_stale_clusters() {
+  local name created created_s age now swept=0
+  now=$(date +%s)
+  for name in $(kind get clusters 2>/dev/null | grep "^${CLUSTER_PREFIX}-" || true); do
+    [ "$name" = "$CLUSTER_NAME" ] && continue
+    created=$(docker inspect -f '{{.Created}}' "${name}-control-plane" 2>/dev/null || true)
+    if [ -z "$created" ] || ! created_s=$(date -d "$created" +%s 2>/dev/null); then
+      echo "  sweep: keeping '$name' (could not determine age)"
+      continue
+    fi
+    age=$((now - created_s))
+    if [ "$age" -gt "$STALE_AFTER_S" ]; then
+      echo "  sweep: deleting stale cluster '$name' (age $((age / 60)) min)"
+      kind delete cluster --name "$name" 2>&1 | sed 's/^/    /' || true
+      swept=$((swept + 1))
+    else
+      echo "  sweep: keeping '$name' (age $((age / 60)) min — may be another slot's live cluster)"
+    fi
+  done
+  echo "  sweep: $swept stale cluster(s) removed"
+}
+
+# ── registry mirrors for the kind NODE (kind-ci.md rule 4) ──────────────────────
+# The node's containerd pulls registries directly — that hangs under enforced egress
+# (agent rides) and burns WAN + ghcr limits (VM). Write a hosts.toml per mirror into
+# the node; kindest/node preconfigures containerd's config_path, so no restart needed.
+# Usage: kind_mirror <registry> <mirror-url>
+kind_mirror() {
+  local registry="$1" mirror="$2" server="https://$1"
+  [ "$registry" = "docker.io" ] && server="https://registry-1.docker.io"
+  docker exec "$NODE_NAME" mkdir -p "/etc/containerd/certs.d/${registry}"
+  docker exec -i "$NODE_NAME" sh -c "cat > /etc/containerd/certs.d/${registry}/hosts.toml" <<EOF
+server = "${server}"
+
+[host."${mirror}"]
+  capabilities = ["pull", "resolve"]
+EOF
+  echo "  mirror: ${registry} -> ${mirror}"
+}
+
+wire_mirrors() {
+  local wired=0
+  if [ -n "${REGISTRY_MIRROR_DOCKER_IO:-}" ]; then kind_mirror docker.io "$REGISTRY_MIRROR_DOCKER_IO"; wired=$((wired + 1)); fi
+  if [ -n "${REGISTRY_MIRROR_GHCR:-}" ];      then kind_mirror ghcr.io "$REGISTRY_MIRROR_GHCR";          wired=$((wired + 1)); fi
+  if [ -n "${REGISTRY_MIRROR_MCR:-}" ];       then kind_mirror mcr.microsoft.com "$REGISTRY_MIRROR_MCR"; wired=$((wired + 1)); fi
+  if [ "$wired" -eq 0 ]; then
+    echo "  no REGISTRY_MIRROR_* set — kind node will pull registries directly (CI runners export them; local runs may not)"
+  fi
 }
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -171,19 +255,20 @@ echo "==> step 2/7: build image $FULL_IMAGE"
 
 # Pre-pull the base images so docker build doesn't need to pull them mid-stream
 # (the registry mirror can be flaky with large layer downloads during build)
-echo "  pre-pulling base images…"
-docker pull python:3.11-alpine 2>&1 | sed 's/^/  /' || echo "  (pre-pull failed — will try during build)"
-docker pull nginxinc/nginx-unprivileged:1.27-alpine 2>&1 | sed 's/^/  /' || echo "  (pre-pull failed — will try during build)"
+echo "  pre-pulling base images (up to 3 attempts each)…"
+retry 3 docker pull python:3.11-alpine 2>&1 | sed 's/^/  /' || echo "  (pre-pull failed — will try during build)"
+retry 3 docker pull nginxinc/nginx-unprivileged:1.27-alpine 2>&1 | sed 's/^/  /' || echo "  (pre-pull failed — will try during build)"
 
 # Build using the repo-root multi-stage Dockerfile (bake then serve)
 # The real Dockerfile runs the bake inside stage 1, so the image contains
 # freshly-baked artifacts — no separate dist copy needed.
+# Registry manifest HEADs flake (docker.io 500s) — a bounded retry on the BUILD is
+# honest (kind-ci.md rule 5). Called inside `if !` so `set -e` cannot abort the retry
+# loop on the first failed attempt.
 echo "  building image (up to 3 attempts)…"
-retry 3 docker build -t "$FULL_IMAGE" .
-RC=$?
-if [ "$RC" -ne 0 ]; then
+if ! retry 3 docker build -t "$FULL_IMAGE" .; then
   echo "  ERROR: docker build failed after retries" >&2
-  exit "$RC"
+  exit 1
 fi
 
 # Verify the image actually exists (catches cases where docker build exits 0 but
@@ -201,23 +286,21 @@ echo "  image built and verified: $FULL_IMAGE"
 echo ""
 echo "==> step 3/7: create kind cluster '$CLUSTER_NAME'"
 
-# Configure the kind node's containerd to use the LAN mirrors before the node starts.
-# The node's own image pulls (e.g. for the pause image) go through these mirrors too.
-cat > "$KIND_CONFIG" << YAML
-kind: Cluster
-apiVersion: kind.x-k8s.io/v1alpha4
-name: ${CLUSTER_NAME}
-containerdConfigPatches:
-- |-
-  [plugins."io.containerd.grpc.v1.cri".registry.mirrors."docker.io"]
-    endpoint = ["http://192.168.40.20"]
-- |-
-  [plugins."io.containerd.grpc.v1.cri".registry.mirrors."ghcr.io"]
-    endpoint = ["http://192.168.40.21"]
-YAML
+# Sweep STALE own-prefix clusters first (rule 2) — never a shared name, never a young one.
+echo "  sweeping stale '${CLUSTER_PREFIX}-*' clusters…"
+sweep_stale_clusters
 
-kind create cluster --config "$KIND_CONFIG" 2>&1 | sed 's/^/  /'
+# NOT retried (rule 5): a failing `kind create` means the daemon is sick (inotify,
+# disk) — fail loudly and let the janitor/alerting own it.
+if ! kind create cluster --name "$CLUSTER_NAME" 2>&1 | sed 's/^/  /'; then
+  echo "  ERROR: kind create cluster '$CLUSTER_NAME' failed — not retried, the docker daemon is likely sick (inotify/disk); see homelab docs/patterns/kind-ci.md rule 5-6" >&2
+  exit 1
+fi
 echo "  kind cluster created"
+
+# Wire the node's containerd at the registry mirrors (rule 4) before anything pulls.
+echo "  wiring registry mirrors into node '$NODE_NAME'…"
+wire_mirrors
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # STEP 4: Load image into kind
@@ -231,7 +314,6 @@ fi
 
 # Verify the image made it into the cluster (kind stores it as a cluster-side image)
 echo "  verifying image in kind node…"
-NODE_NAME="${CLUSTER_NAME}-control-plane"
 if docker exec "$NODE_NAME" crictl images 2>/dev/null | grep -q "${IMG}"; then
   echo "  image loaded: $FULL_IMAGE"
 else
