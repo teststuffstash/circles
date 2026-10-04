@@ -79,6 +79,14 @@ Chart \`${VERSION}\` (image tag defaults to the chart appVersion — circles-iac
 fi
 echo "→ deploy PR #${PR} for ${APP} ${VERSION}"
 
+# homelab FU-151: label the bump PR so the -iac review reflex SKIPS it by classification, not by
+# timing (it skips `automerge`-labelled PRs; unlabelled, a slow ci hands every one-line pin to an
+# LLM reviewer session). The upsert above reuses an open PR on the long-lived branch, so label on
+# every run, not only at create (donor: sleep-tracking scripts/deploy-pin.sh). Non-fatal: an
+# unlabelled pin costs one wasted reviewer session, not the deploy.
+gh pr edit "$PR" --repo "$IAC_REPO" --add-label automerge --add-label dependencies \
+  || echo "::warning::could not label ${IAC_REPO}#${PR} — the review reflex will not skip it"
+
 # Arm GitHub auto-merge, then we're done. circles-iac gates on ci ONLY (no required-approval — dropped in
 # tofu/github because an App's Integration bypass can't waive an approval on a merge), so GitHub squash-
 # merges the PR the moment ci goes green — no polling, the deploy job ends here (delete_branch_on_merge

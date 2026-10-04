@@ -97,5 +97,9 @@ if [ -z "$PR" ]; then
   PR="$(gh pr create --repo "$IAC_REPO" --base master --head "$BRANCH" \
     --title "$TITLE" --body "$BODY" | grep -oE '[0-9]+$')"
 fi
+# homelab FU-151: label so the -iac review reflex skips this mechanical route PR by classification,
+# not by timing (same block as deploy-pin.sh). Non-fatal: an unlabelled PR costs one reviewer session.
+gh pr edit "$PR" --repo "$IAC_REPO" --add-label automerge --add-label dependencies \
+  || echo "::warning::could not label ${IAC_REPO}#${PR} — the review reflex will not skip it"
 gh pr merge "$PR" --repo "$IAC_REPO" --auto --squash
 echo "→ circles-iac PR #${PR} (${ACTION} route for circles PR #${N}) — auto-merge armed"
