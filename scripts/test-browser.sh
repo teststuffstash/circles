@@ -35,6 +35,8 @@
 #   CIR-RENDER-REFERENCE-VIEWPORT    (both rows)
 #   CIR-RENDER-A4#print-single-a4-portrait, #print-margins-are-declared, #print-chrome-complete
 #   CIR-BAKE-STALE-SELF, CIR-RENDER-STALE-MARK (all rows)
+#   the render rows of tests/browser/test_render_rows.py (keyboard, hover, click, palette,
+#   no-JS, legend, summary, grey, status encoding, chrome, a11y table, stamp, egress, …)
 
 cd "$(dirname "$0")/.."
 
@@ -87,6 +89,17 @@ uv run --frozen python -m bake \
   --config fixtures/alex/circles.yaml \
   --out "$BAKE_OUT" \
   --reference-date "$REFERENCE_DATE" | sed 's/^/  /'
+
+# The evaluated variant: the same fixture baked the way the nightly bake runs it (--evaluate):
+# its freshness/command adapters resolve, so self/sleep carries the guardrail + last-data
+# detail line of CIR-RENDER-HOVER#hover-full-line and the artifact has no warnings
+# (CIR-RENDER-CHROME#chrome-banner-hidden-when-clean). tests/browser/test_render_rows.py.
+uv run --frozen python -m bake \
+  --config fixtures/alex/circles.yaml \
+  --out "$BAKE_OUT/evaluated" \
+  --reference-date "$REFERENCE_DATE" --evaluate | sed 's/^/  /'
+cp "$BAKE_OUT/evaluated/index.html" "$BAKE_OUT/index-evaluated.html"
+echo "  Wrote $BAKE_OUT/index-evaluated.html (--evaluate)"
 
 # The 2-warnings variant: the same artifact with its own warnings sliced to exactly two
 # (CIR-RENDER-ONE-SCREEN#one-screen-with-warnings, tests/browser/test_one_screen.py).
@@ -151,6 +164,43 @@ manual = resolve(
 path = out / "index-stale-manual.html"
 path.write_text(render_page({**manual, "stale_after_hours": 36}), encoding="utf-8")
 print(f"  Wrote {path} (manual items only, stale_after_hours: 36)")
+
+# Only-green: the same config with every item but the `manual: green` ones dropped
+# (CIR-RENDER-LEGEND#legend-all-four — "artifact with only green items").
+green_rings = tuple(
+    dataclasses.replace(ring, items=tuple(
+        i for i in ring.items
+        if i.adapter is not None and i.adapter.kind == "manual" and i.adapter.raw.get("manual") == "green"))
+    for ring in config.rings
+)
+green = resolve(
+    dataclasses.replace(config, rings=tuple(r for r in green_rings if r.items)),
+    reference_date=reference_date,
+    generated_at=datetime(2026, 8, 3, 2, 0, 0, tzinfo=timezone.utc),
+)
+assert {i["status"] for r in green["rings"] for i in r["items"]} == {"green"}
+path = out / "index-only-green.html"
+path.write_text(render_page(add_capacity_warnings(green)), encoding="utf-8")
+print(f"  Wrote {path} (manual: green items only)")
+
+# The click-destination rows (CIR-RENDER-CLICK, fixtures/click-destinations.yaml): each row's
+# `item` spliced into a one-ring config for the fixture person — the same splice the table's
+# header describes — one page per row: index-click-<row_id>.html.
+import tempfile
+import yaml
+table = yaml.safe_load(Path("fixtures/click-destinations.yaml").read_text(encoding="utf-8"))
+for row in table["rows"]:
+    one_ring = {"person": table["person"], "rings": [{**table["ring"], "items": [row["item"]]}]}
+    with tempfile.TemporaryDirectory() as tmp:
+        cfg = Path(tmp) / "circles.yaml"
+        cfg.write_text(yaml.dump(one_ring, allow_unicode=True), encoding="utf-8")
+        art = add_capacity_warnings(resolve(
+            load_config(cfg), reference_date=reference_date,
+            generated_at=datetime(2026, 8, 3, 2, 0, 0, tzinfo=timezone.utc),
+        ))
+    path = out / f"index-click-{row['row_id']}.html"
+    path.write_text(render_page(art), encoding="utf-8")
+    print(f"  Wrote {path} (click row {row['row_id']})")
 PY
 
 # ── step 2: run the browser tier ─────────────────────────────────────────────────────
