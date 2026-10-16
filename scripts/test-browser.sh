@@ -20,7 +20,8 @@
 #
 # The script bakes the fixture person at the fixture reference date (2026-08-03) into a temp
 # dir, writes a second page variant with exactly 2 warnings (the artifact's own warnings,
-# sliced — CIR-PROC-TEST-FIXTURES), serves both to the browser via tests/browser/conftest.py
+# sliced — CIR-PROC-TEST-FIXTURES) and the stale-threshold variants (index-stale*.html, the
+# fixture with stale_after_hours: 36), serves them to the browser via tests/browser/conftest.py
 # (real HTTP, not file://) and runs pytest tests/browser with Allure raw results in
 # browser-evidence/<timestamp>/.
 #
@@ -28,6 +29,7 @@
 #   CIR-RENDER-ONE-SCREEN            (all 4 rows)
 #   CIR-RENDER-REFERENCE-VIEWPORT    (both rows)
 #   CIR-RENDER-A4#print-single-a4-portrait, #print-margins-are-declared, #print-chrome-complete
+#   CIR-BAKE-STALE-SELF, CIR-RENDER-STALE-MARK (all rows)
 
 cd "$(dirname "$0")/.."
 
@@ -83,6 +85,7 @@ uv run --frozen python -m bake \
 # The 2-warnings variant: the same artifact with its own warnings sliced to exactly two —
 # the construction tests/test_render.py::test_one_screen_with_warnings_proxy uses.
 uv run --frozen python - "$BAKE_OUT" "$REFERENCE_DATE" <<'PY'
+import dataclasses
 import sys
 from datetime import date, datetime, timezone
 from pathlib import Path
@@ -103,6 +106,45 @@ artifact = {**artifact, "warnings": artifact["warnings"][:2]}
 path = out / "index-2-warnings.html"
 path.write_text(render_page(artifact), encoding="utf-8")
 print(f"  Wrote {path} ({len(artifact['warnings'])} warnings)")
+
+# The stale-threshold variants (CIR-BAKE-STALE-SELF, CIR-RENDER-STALE-MARK): the fixture
+# artifact as baked above (generated_at 2026-08-03T02:00:00Z) with the cadence the P1
+# nightly bake will declare — stale_after_hours: 36. Fresh vs stale is decided by the
+# browser clock the test sets, not by the bytes.
+fixture = add_capacity_warnings(resolve(
+    config, reference_date=reference_date,
+    generated_at=datetime(2026, 8, 3, 2, 0, 0, tzinfo=timezone.utc),
+))
+# P0 as baked (stale_after_hours: null), at the same fixed generated_at so the test clock
+# can be set relative to it (index.html carries the wall-clock bake time).
+assert fixture["stale_after_hours"] is None
+path = out / "index-no-threshold.html"
+path.write_text(render_page(fixture), encoding="utf-8")
+print(f"  Wrote {path} (stale_after_hours: null)")
+path = out / "index-stale.html"
+path.write_text(render_page({**fixture, "stale_after_hours": 36}), encoding="utf-8")
+print(f"  Wrote {path} (stale_after_hours: 36)")
+# A second cadence, so a threshold hard-coded in the page cannot pass for one read from the
+# artifact (CIR-BAKE-STALE-SELF#threshold-comes-from-the-artifact).
+path = out / "index-stale-72.html"
+path.write_text(render_page({**fixture, "stale_after_hours": 72}), encoding="utf-8")
+print(f"  Wrote {path} (stale_after_hours: 72)")
+
+# Manual-only: the same config with every non-`manual:` item dropped
+# (CIR-BAKE-STALE-SELF#manual-items-are-stale-too).
+manual_rings = tuple(
+    dataclasses.replace(ring, items=tuple(
+        i for i in ring.items if i.adapter is not None and i.adapter.kind == "manual"))
+    for ring in config.rings
+)
+manual_config = dataclasses.replace(config, rings=tuple(r for r in manual_rings if r.items))
+manual = resolve(
+    manual_config, reference_date=reference_date,
+    generated_at=datetime(2026, 8, 3, 2, 0, 0, tzinfo=timezone.utc),
+)
+path = out / "index-stale-manual.html"
+path.write_text(render_page({**manual, "stale_after_hours": 36}), encoding="utf-8")
+print(f"  Wrote {path} (manual items only, stale_after_hours: 36)")
 PY
 
 # ── step 2: run the browser tier ─────────────────────────────────────────────────────

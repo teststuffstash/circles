@@ -6,7 +6,8 @@
 #   -RENDERER, -PALETTE, -GREY-VISIBLE, -STATUS-ENCODING, -LEGEND, -A11Y-TABLE,
 #   -CHROME, -GENERATED-AT, -BOOT-FAILURE, -NO-EGRESS, -ASSET-BUDGET,
 #   -NO-JS, -HOVER, -KEYBOARD, -TOUCH, -CLICK,
-#   -ONE-SCREEN, -REFERENCE-VIEWPORT
+#   -ONE-SCREEN, -REFERENCE-VIEWPORT, -STALE-MARK
+#   CIR-BAKE-STALE-SELF (the page judges its own staleness at view time)
 #   CIR-PROC-GATE#gate-asset-budget, CIR-PROC-GATE#gate-no-external-origins
 
 from __future__ import annotations
@@ -269,6 +270,14 @@ def _render_svg(artifact: dict) -> str:
     counts = _compute_summary(artifact)
     summary = html.escape(_summary_text(counts))
 
+    # Hatch pattern for the stale overlay (CIR-RENDER-STALE-MARK, ⚖-R42). Lines, not
+    # paths, so the cell-path count stays the arc count.
+    parts.append(
+        '<defs><pattern id="stale-hatch" width="12" height="12" '
+        'patternUnits="userSpaceOnUse" patternTransform="rotate(45)">'
+        '<line x1="0" y1="0" x2="0" y2="12" stroke="#ffffff" stroke-width="5" '
+        'stroke-opacity="0.55"/></pattern></defs>'
+    )
     parts.append(f'<circle cx="{CX}" cy="{CY}" r="{CENTRE_RADIUS}" fill="#f8f8f8" stroke="#ccc" stroke-width="1"/>')
     parts.append(f'<text x="{CX}" y="{CY - 8}" text-anchor="middle" dominant-baseline="central" font-size="11" font-weight="bold" fill="#333">{person}</text>')
     parts.append(f'<text x="{CX}" y="{CY + 10}" text-anchor="middle" dominant-baseline="central" font-size="8" fill="#666">{summary}</text>')
@@ -393,6 +402,16 @@ def _render_svg(artifact: dict) -> str:
 
             current_angle = end_angle + CELL_GAP_DEG
 
+    # Stale overlay (CIR-RENDER-STALE-MARK#stale-is-not-a-fifth-colour): one hatched disc
+    # over the whole picture, a separate visual channel ON TOP of the cells — the cells'
+    # fills are never touched. Hidden by the stylesheet unless the page script marks the
+    # page stale; pointer-events none so hover/focus/click still reach the cells.
+    outer = radii[-1][1] if radii else CENTRE_RADIUS
+    parts.append(
+        f'<circle id="stale-overlay" cx="{CX}" cy="{CY}" r="{outer:.2f}" '
+        f'fill="url(#stale-hatch)" pointer-events="none" aria-hidden="true"/>'
+    )
+
     return "\n".join(parts)
 
 
@@ -408,6 +427,12 @@ def _render_chrome(artifact: dict) -> str:
     generated_at = html.escape(artifact.get("generated_at", ""))
 
     lines: list[str] = []
+
+    # --- Stale banner (CIR-BAKE-STALE-SELF, CIR-RENDER-STALE-MARK) ---
+    # Baked empty and hidden; the page script fills and shows it at VIEW time when the
+    # browser's clock says `generated_at` is older than the artifact's
+    # `stale_after_hours`. First in the chrome column so it is the first thing read.
+    lines.append('<div id="stale-banner" class="chrome-section stale-banner" role="alert" hidden></div>')
 
     # --- Ring key ---
     lines.append('<div id="ring-key" class="chrome-section">')
@@ -512,6 +537,13 @@ html, body { height: 100%; font-family: -apple-system, BlinkMacSystemFont, "Sego
 .detail-active { font-size: 13px; color: #222; font-weight: 500; }
 .stamp { font-size: 11px; color: #999; }
 .warnings { font-size: 12px; }
+/* Stale treatment (CIR-RENDER-STALE-MARK, ⚖-R42 (a)): banner + desaturation + hatched
+   overlay, all keyed off one class the page script sets. Statuses keep their colours
+   (fills are untouched); never red — a dead pipeline is not "act on your life". */
+.stale-banner { font-size: 12px; font-weight: 600; color: #333; background: #eeeeee; border-left: 4px solid #666; padding: 6px 8px; }
+#stale-overlay { display: none; }
+#app.is-stale #chart-area svg { filter: saturate(0.35); }
+#app.is-stale #stale-overlay { display: inline; }
 .warnings summary { cursor: pointer; color: #b22222; font-weight: 500; }
 .warnings ul { margin: 6px 0 0 16px; }
 .warnings li { margin: 2px 0; color: #555; }
@@ -542,7 +574,8 @@ html, body { height: 100%; font-family: -apple-system, BlinkMacSystemFont, "Sego
      chrome packs into two columns — ring key | legend — with the stamp, warnings and the
      text alternative spanning full width. The detail strip is hover-only, not paper. */
   #chrome-panel { border-left: none; padding: 6px 0 0; overflow: visible; display: grid; grid-template-columns: 1fr 1fr; gap: 6px 16px; }
-  #stamp, #warnings, #a11y-table { grid-column: 1 / -1; }
+  #stale-banner, #stamp, #warnings, #a11y-table { grid-column: 1 / -1; }
+  .stale-banner { padding: 3px 6px; font-size: 10px; }
   #detail-strip { display: none; }
   .cell:hover path, .cell:focus-visible path { stroke: #fff; stroke-width: 0.5; }
   .cell:focus-visible path { stroke-dasharray: none; }
@@ -562,8 +595,33 @@ html, body { height: 100%; font-family: -apple-system, BlinkMacSystemFont, "Sego
 
 
 def _render_script() -> str:
-    """Render the inline JS for hover/focus interaction."""
-    return """(function() {
+    """Render the inline JS: the view-time stale check, then hover/focus interaction."""
+    return """// Page self-staleness (CIR-BAKE-STALE-SELF, CIR-RENDER-STALE-MARK). Judged at VIEW
+// time: the browser's clock against the artifact's generated_at, past the artifact's own
+// stale_after_hours (threshold-comes-from-the-artifact — no number lives in this code).
+// null (P0) => no banner, no overlay; the stamp is shown regardless. This check needs JS:
+// with scripting off the page renders exactly as baked (no stale chrome), and everything
+// else — picture, stamp, links, text alternative — still works without it.
+(function() {
+  var data;
+  try { data = JSON.parse(document.getElementById('artifact-data').textContent); }
+  catch (e) { return; }
+  var limit = data && data.stale_after_hours;
+  if (typeof limit !== 'number' || !isFinite(limit)) return;
+  var built = Date.parse(data.generated_at);
+  if (isNaN(built)) return;
+  var ageMs = Date.now() - built;
+  if (ageMs <= limit * 3600000) return;
+  var n = Math.floor(ageMs / 3600000);
+  var banner = document.getElementById('stale-banner');
+  var app = document.getElementById('app');
+  if (!banner || !app) return;
+  banner.textContent = 'this page was built ' + n + (n === 1 ? ' hour' : ' hours') +
+    ' ago; the lights below are history';
+  banner.hidden = false;
+  app.className = (app.className ? app.className + ' ' : '') + 'is-stale';
+})();
+(function() {
   var strip = document.getElementById('detail-content');
   if (!strip) return;
   var cells = document.querySelectorAll('.cell');

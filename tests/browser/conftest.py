@@ -6,8 +6,11 @@
 #
 # Inputs come from scripts/test-browser.sh, which bakes the fixture person into
 # CIRCLES_PAGES_DIR (`index.html` — the fixture at reference date 2026-08-03 — and
-# `index-2-warnings.html` — the same artifact with exactly 2 warnings). Tests never invent
-# a second person (CIR-PROC-TEST-FIXTURES).
+# `index-2-warnings.html` — the same artifact with exactly 2 warnings — and the
+# stale-threshold variants at a fixed generated_at: `index-no-threshold.html` (null),
+# `index-stale.html` / `index-stale-72.html` (stale_after_hours 36 / 72) and
+# `index-stale-manual.html` (manual items only, 36)). Tests never invent a second
+# person (CIR-PROC-TEST-FIXTURES).
 #
 # Not collected by the unit run: pyproject.toml addopts carries `--ignore=tests/browser`;
 # the harness overrides it with `-o addopts=`.
@@ -44,7 +47,8 @@ def pages_dir() -> Path:
             "`devbox run test-browser` (scripts/test-browser.sh bakes the pages)"
         )
     path = Path(raw)
-    for name in ("index.html", "index-2-warnings.html"):
+    for name in ("index.html", "index-2-warnings.html", "index-no-threshold.html",
+                 "index-stale.html", "index-stale-72.html", "index-stale-manual.html"):
         if not (path / name).is_file():
             pytest.fail(f"CIRCLES_PAGES_DIR={raw} has no {name} — bake step missing")
     return path
