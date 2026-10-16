@@ -52,7 +52,7 @@ jobs:
     env:
       CIRCLES_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
       - name: Kind system test (devbox run test-system)
         run: devbox run test-system
       # Browser evidence tier (CIR-PROC-BROWSER-EVIDENCE, #34): headless Chromium in the
@@ -67,7 +67,7 @@ jobs:
       # uploads what it has; an absent artifact renders the browser rows as ∅ there, never PASS.
       - name: Upload browser Allure results
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: e2e-allure-results
           path: allure-results-browser/
@@ -82,7 +82,7 @@ jobs:
     env:
       CIRCLES_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
       # No toolchain install: the ARC runner image bakes single-user Nix + devbox + the LAN
       # nix substituter (homelab docker/arc-runner/, FU-015).
@@ -99,7 +99,7 @@ jobs:
 
       - name: Upload unit Allure results
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: unit-allure-results
           path: allure-results/
@@ -119,11 +119,11 @@ jobs:
     if: always()
     runs-on: homelab-ephemeral
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
       - name: Download unit + browser Allure results
         continue-on-error: true
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           pattern: "*-allure-results"
           path: allure-merged/
@@ -136,7 +136,7 @@ jobs:
 
       - name: Upload the evidence pack
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: circles-evidence
           path: allure-evidence/
