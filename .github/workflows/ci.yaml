@@ -46,6 +46,11 @@ jobs:
     timeout-minutes: 30
     # a PR head and its identical push:master sha never hold two VM slots at once (oracle-fleet)
     concurrency: e2e-${{ github.sha }}
+    # The evidence stamp (tests/conftest.py → environment.properties git.commit): the PR HEAD, not
+    # the test-merge commit GITHUB_SHA names on pull_request (allure-behavior-snippets CONVENTIONS
+    # § The head/artifact stamp).
+    env:
+      CIRCLES_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
     steps:
       - uses: actions/checkout@v4
       - name: Kind system test (devbox run test-system)
@@ -71,6 +76,11 @@ jobs:
 
   ci:
     runs-on: homelab-ephemeral
+    # The evidence stamp (tests/conftest.py → environment.properties git.commit): the PR HEAD, not
+    # the test-merge commit GITHUB_SHA names on pull_request (allure-behavior-snippets CONVENTIONS
+    # § The head/artifact stamp).
+    env:
+      CIRCLES_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
     steps:
       - uses: actions/checkout@v4
 
