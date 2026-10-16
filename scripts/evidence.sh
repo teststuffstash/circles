@@ -12,7 +12,7 @@
 # <out-dir> is the WHOLE reviewer pack:
 #   allure-results/ a copy of the raw results (attachments, environment.properties, …)
 #   evidence.json   every labelled record across the run
-#   digest.md       every spec rule in page order — tables, findings (incl. the --spec join's
+#   digest.md       the run's **Stamp:** line (git.commit vs this head), then every spec rule in page order — tables, findings (incl. the --spec join's
 #                   ROW_UNPROVEN / CELL_MISMATCH / ROW_UNSPECIFIED) and the **Hygiene:** block
 #   <RULE>.md       one fragment per rule: the spec page's tables joined to the evidence where
 #                   the tool can join them (`--spec`), the plain evidence table otherwise
@@ -52,8 +52,30 @@ echo "== evidence: suite-wide evidence.json + fragments ($RESULTS → $OUT)"
 allure_evidence --results "$RESULTS" --out "$OUT" --rules "$(csv "${all_rules[@]}")"
 rm -f "$OUT/digest.md"   # rebuilt below, page by page, with the spec join
 
+# The head/artifact stamp (CONVENTIONS § The head/artifact stamp): the run's git.commit (written
+# by tests/conftest.py at session end) against the head this pack is for — CIRCLES_HEAD_SHA (CI:
+# the PR head), else HEAD. Same wording as the tool's evidence-pack digest.
+prop() { sed -nE "s/^$1=(.*)$/\1/p" "$RESULTS/environment.properties" 2>/dev/null | tail -1; }
+run_commit=$(prop 'git\.commit')
+run_digest=$(prop 'image\.digest')
+head=${CIRCLES_HEAD_SHA:-$(git rev-parse HEAD 2>/dev/null || true)}
+if [ -z "$run_commit" ]; then
+  stamp="**Stamp:** the run names no \`git.commit\` — it cannot be tied to head ${head:0:12}; every row is unproven at this head (E-STALE)."
+elif [ -n "$head" ] && [ "${#run_commit}" -ge 7 ] && { [[ "$head" == "$run_commit"* ]] || [[ "$run_commit" == "$head"* ]]; }; then
+  stamp="**Stamp:** run at \`git.commit=${run_commit:0:12}\` = this head."
+else
+  stamp="**Stamp:** run at \`git.commit=${run_commit:0:12}\` ≠ head ${head:0:12} — stale; every row is unproven at this head (E-STALE)."
+fi
+if [ -n "$run_digest" ]; then
+  stamp+=" Artifact: \`image.digest=${run_digest}\`."
+else
+  stamp+=" No \`image.digest\`: this is PR-head evidence, not built-artifact evidence."
+fi
+
 {
   echo "# circles evidence digest"
+  echo
+  echo "$stamp"
   echo
   if [ -f "$RESULTS/environment.properties" ]; then
     echo '```properties'
@@ -84,6 +106,7 @@ cp -r "$RESULTS" "$OUT/allure-results"
 rm -rf "$SITE_FRAGMENTS" && mkdir -p "$SITE_FRAGMENTS"
 cp "$OUT"/CIR-*.md "$SITE_FRAGMENTS"/ 2>/dev/null || true
 
+echo "== evidence: ${stamp//\*\*/}"
 echo "== evidence: codes across digest.md"
 for code in NO_EVIDENCE FAILED BARE_ROW STEP_FLAT STEP_NOISE UNIT_ONLY_CANDIDATE ATTACH_BULK PARAM_BLOB \
             NAME_BLANK THREAD_BROKEN ROW_UNPROVEN CELL_MISMATCH ROW_UNSPECIFIED; do
