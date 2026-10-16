@@ -349,7 +349,10 @@ def _render_svg(artifact: dict) -> str:
                 break
             # Continue loop — newly floored arcs will be handled next iteration
 
-        current_angle = -90.0  # 12 o'clock
+        # 0° IS 12 o'clock in this frame (x = cx + r·sin, y = cy − r·cos); -90 started every ring
+        # at 9 o'clock (CIR-RENDER-SIBLING-ORDER#sibling-order-clockwise-from-noon, caught by the
+        # browser tier in circles#103).
+        current_angle = 0.0
 
         for item, arc_deg in zip(items, raw_arcs):
             start_angle = current_angle
