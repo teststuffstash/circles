@@ -129,6 +129,8 @@ else
   fi
   # The image's browsers match the pip package of the same version — pin from the tag.
   PW_VERSION="${IMAGE##*:v}"
+  # pytest also loads tests/conftest.py (the unit tier's), which imports the project's runtime
+  # deps — keep this list in step with pyproject.toml [project].dependencies.
   docker run --rm \
     -v "$PWD:/work" -w /work \
     -v "$BAKE_OUT:/pages:ro" \
@@ -136,7 +138,7 @@ else
     -e PYTHONDONTWRITEBYTECODE=1 \
     -e PIP_ROOT_USER_ACTION=ignore \
     "$IMAGE_REF" \
-    bash -c "pip install -q 'playwright==${PW_VERSION}' 'pytest==8.*' allure-pytest pypdf \
+    bash -c "pip install -q 'playwright==${PW_VERSION}' 'pytest==8.*' allure-pytest pypdf 'PyYAML>=6.0' tzdata \
       && python -m pytest $(printf '%q ' "${PYTEST_ARGS[@]}")" || RC=$?
 fi
 

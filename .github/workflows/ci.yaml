@@ -45,6 +45,14 @@ jobs:
       - uses: actions/checkout@v4
       - name: Kind system test (devbox run test-system)
         run: devbox run test-system
+      # Browser evidence tier (CIR-PROC-BROWSER-EVIDENCE, #34): headless Chromium in the
+      # Playwright image renders the baked page and asserts the CIR-RENDER rows. Runner forced
+      # to docker so a missing daemon is a red step, never the script's graceful SKIP.
+      - name: Browser evidence (devbox run test-browser)
+        if: always()
+        env:
+          CIRCLES_BROWSER_RUNNER: docker
+        run: devbox run test-browser
 
   ci:
     runs-on: homelab-ephemeral
