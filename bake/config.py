@@ -10,6 +10,7 @@ command: blocks validate at P0 and evaluate at P1, with no config migration in b
 
 from __future__ import annotations
 
+import errno
 import os
 import re
 from dataclasses import dataclass
@@ -164,7 +165,17 @@ def _validate_freshness(raw: dict, path: str, config_dir: Path) -> None:
     # Normalize and check containment — catches non-literal escapes like
     # 'sub/../../etc/hosts' that don't start with '..' but resolve outside
     # the config directory (CIR-DATA-SOURCE-PATH).
-    resolved = (config_dir / source).resolve()
+    # A symlink loop cannot be resolved at all: RuntimeError on Python ≤ 3.12, OSError (ELOOP)
+    # on newer ones. It is a config error naming the item and the config-relative source only —
+    # the exception text carries host paths (CIR-DATA-SOURCE-PATH#source-symlink-loop,
+    # CIR-BAKE-EXPOSURE#no-absolute-host-paths).
+    try:
+        resolved = (config_dir / source).resolve()
+    except (RuntimeError, OSError) as e:
+        why = ("is a symlink loop — it resolves to no file"
+               if isinstance(e, RuntimeError) or getattr(e, "errno", None) == errno.ELOOP
+               else f"cannot be resolved ({type(e).__name__})")
+        raise ConfigError(f"{path}.status.freshness.source: '{source}' {why}") from None
     try:
         resolved.relative_to(config_dir)
     except ValueError:

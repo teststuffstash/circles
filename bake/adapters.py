@@ -183,7 +183,12 @@ def _source_files(source: str, config_dir: Path) -> list[Path]:
         candidates = [root / source]
     contained: list[Path] = []
     for candidate in candidates:
-        resolved = candidate.resolve()
+        try:
+            resolved = candidate.resolve()
+        except (RuntimeError, OSError):
+            # A symlink loop among the glob hits is no file: skipped like any other non-file,
+            # so the rest of the union is still judged (CIR-DATA-SOURCE-PATH#source-glob-symlink-loop).
+            continue
         try:
             resolved.relative_to(root)
         except ValueError:
