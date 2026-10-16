@@ -8,6 +8,7 @@ version = "0.1.0"
 description = "The circles P0 bake: circles.yaml -> a validated, typed config model"
 requires-python = ">=3.11"
 dependencies = [
+    "jsonschema>=4.23",
     "PyYAML>=6.0",
     "tzdata>=2026.3",
 ]

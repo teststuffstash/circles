@@ -10,6 +10,10 @@ Status resolution semantics live in [status-resolution.md](status-resolution.md)
 `freshness:` adapter in [freshness.md](freshness.md); the adapter contract in
 [adapters.md](adapters.md).
 
+**Machine half:** [`circles-yaml.schema.json`](circles-yaml.schema.json) — the file's shape
+(RULES rule 7), annotated with the rules below (`x-requirements`). `bake/config.py` still owns
+the exact config-error messages and the cross-field checks a schema cannot express.
+
 **World: alex** — every table on this page states behavior against the fixture person.
 
 ## Shape (v0)

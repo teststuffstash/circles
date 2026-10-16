@@ -110,6 +110,9 @@ what `scripts/lint-specs.sh` enforces today; it is the reason the conventions su
 | spec-world-declared | a page with tables and no `World:` line | gate fails |
 | spec-ambiguity-indexed | a `⚖-R<n>` not listed in `open-questions.md` | gate fails |
 | spec-fixture-sources-resolve | a fixture `source:` pointing nowhere | gate fails |
+| spec-contract-page-has-schema | a contract page (declared once, `CONTRACT_PAGES` in `scripts/lib/lint_specs.py`) without its sibling `<name>.schema.json`, or a `*.schema.json` beside an undeclared page | gate fails — RULES rule 7: the machine half exists exactly for contract pages |
+| spec-schema-annotations-resolve | an `x-requirements` entry naming no rule heading (`CIR-NOPE`) | gate fails — an orphan annotation |
+| spec-contract-rules-coupled | a rule on a contract page neither in its schema's `x-requirements` nor in the schema's `x-not-schema-shaped` map, or in both | gate fails — an orphan rule; every rule is either shape or says why it is not |
 
 <details markdown="1"><summary>Evidence — latest run</summary>
 

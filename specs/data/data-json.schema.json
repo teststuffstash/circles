@@ -1,0 +1,198 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "data.json — the baked artifact (version 1)",
+  "description": "The machine half of data-json.md (RULES rule 7): the shape the bake writes. bake/emit.py imports and validates against this before writing — a violation is a bake bug. The page owns why/when; this file owns shape. Closed at every level: the field table is the complete list of what the artifact carries.",
+  "x-requirements": ["CIR-BAKE-ARTIFACT"],
+  "x-not-schema-shaped": {
+    "CIR-BAKE-SELF-CONTAINED": "a property of index.html (inlined copy, no fetch), not of this file's shape",
+    "CIR-BAKE-ATOMIC-WRITE": "publishing discipline (temp file + rename, mode 0644) — behaviour of the write, not shape",
+    "CIR-BAKE-DETERMINISM": "same inputs → same bytes: a property across two bakes",
+    "CIR-BAKE-EXPOSURE": "what a warning message may say (sanitized, bounded) — content, and the spec names no numeric cap",
+    "CIR-BAKE-PAGE-DOES-NOT-RESOLVE": "a property of the page's code, not of the artifact"
+  },
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "version",
+    "spec_version",
+    "person",
+    "generated_at",
+    "reference_date",
+    "timezone",
+    "stale_after_hours",
+    "rings",
+    "warnings"
+  ],
+  "properties": {
+    "version": {
+      "description": "Integer artifact-schema version, currently 1; bumped on any breaking shape change.",
+      "x-requirements": ["CIR-BAKE-VERSION"],
+      "const": 1
+    },
+    "spec_version": {
+      "description": "The config format version this bake read.",
+      "x-requirements": ["CIR-BAKE-ARTIFACT", "CIR-DATA-SCHEMA-VERSION"],
+      "type": "integer",
+      "minimum": 0
+    },
+    "person": {
+      "description": "Display name from circles.yaml.",
+      "x-requirements": ["CIR-BAKE-ARTIFACT"],
+      "type": "string"
+    },
+    "generated_at": {
+      "description": "RFC 3339 UTC timestamp of the bake run — the honesty stamp, displayed verbatim.",
+      "x-requirements": ["CIR-BAKE-GENERATED-AT"],
+      "type": "string",
+      "format": "date-time",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(\\.[0-9]+)?Z$"
+    },
+    "reference_date": {
+      "description": "The single ISO date every adapter aged against.",
+      "x-requirements": ["CIR-ADAPT-REFERENCE-DATE"],
+      "type": "string",
+      "format": "date",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"
+    },
+    "timezone": {
+      "description": "The IANA zone the reference date was computed in.",
+      "x-requirements": ["CIR-BAKE-ARTIFACT"],
+      "type": "string",
+      "minLength": 1
+    },
+    "stale_after_hours": {
+      "description": "The page banners itself stale past this age; null at P0, where no cadence exists (⚖-R15).",
+      "x-requirements": ["CIR-BAKE-STALE-SELF"],
+      "type": ["integer", "null"],
+      "minimum": 1
+    },
+    "rings": {
+      "description": "Config order preserved (inside-out); ring/item ids and labels pass through.",
+      "x-requirements": ["CIR-BAKE-ARTIFACT"],
+      "type": "array",
+      "items": { "$ref": "#/$defs/ring" }
+    },
+    "warnings": {
+      "description": "Always present, possibly empty — never omitted.",
+      "x-requirements": ["CIR-BAKE-WARNINGS"],
+      "type": "array",
+      "items": { "$ref": "#/$defs/warning" }
+    }
+  },
+  "$defs": {
+    "slug": {
+      "x-requirements": ["CIR-DATA-IDENTITY"],
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9-]*$"
+    },
+    "ring": {
+      "x-requirements": ["CIR-BAKE-ARTIFACT"],
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "label", "items"],
+      "properties": {
+        "id": { "$ref": "#/$defs/slug" },
+        "label": { "type": "string" },
+        "items": { "type": "array", "items": { "$ref": "#/$defs/item" } }
+      }
+    },
+    "item": {
+      "x-requirements": ["CIR-BAKE-ARTIFACT", "CIR-BAKE-DETAIL-FIELDS"],
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "label",
+        "status",
+        "grey_reason",
+        "guardrail",
+        "note",
+        "link",
+        "share",
+        "last_data_date",
+        "detail_line",
+        "detail_page"
+      ],
+      "properties": {
+        "id": { "$ref": "#/$defs/slug" },
+        "label": { "type": "string" },
+        "status": {
+          "description": "Wire values, not display words and never emoji (⚖-R19).",
+          "x-requirements": ["CIR-BAKE-STATUS-VALUES"],
+          "enum": ["green", "yellow", "red", "grey"]
+        },
+        "grey_reason": {
+          "description": "Why an item is grey; null whenever status is not grey (⚖-R50).",
+          "x-requirements": ["CIR-DATA-GREY-REASON"],
+          "enum": ["by-choice", "by-failure", "not-evaluated", null]
+        },
+        "guardrail": {
+          "description": "null when absent in config — no placeholder strings.",
+          "x-requirements": ["CIR-BAKE-ARTIFACT"],
+          "type": ["string", "null"]
+        },
+        "note": {
+          "x-requirements": ["CIR-BAKE-ARTIFACT"],
+          "type": ["string", "null"]
+        },
+        "link": {
+          "description": "Passes through from config: https?:// or root-relative, else null.",
+          "x-requirements": ["CIR-BAKE-ARTIFACT", "CIR-DATA-SCHEMA-LINK"],
+          "type": ["string", "null"],
+          "pattern": "^(https?://|/(?!/))"
+        },
+        "share": {
+          "description": "The effective weight (default 1 made explicit).",
+          "x-requirements": ["CIR-DATA-SHARE"],
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "last_data_date": {
+          "description": "ISO date, present only when the adapter observed one.",
+          "x-requirements": ["CIR-BAKE-ARTIFACT", "CIR-BAKE-DETAIL-FIELDS"],
+          "type": ["string", "null"],
+          "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"
+        },
+        "detail_line": {
+          "description": "The composed one-line summary, baked — authoritative over page-side composition (⚖-R20).",
+          "x-requirements": ["CIR-BAKE-DETAIL-FIELDS"],
+          "type": "string",
+          "minLength": 1
+        },
+        "detail_page": {
+          "description": "Path of the per-item detail payload (details/<ring-id>--<item-id>.json, ⚖-R34), else null (P2).",
+          "x-requirements": ["CIR-BAKE-DETAIL-FILES"],
+          "type": ["string", "null"],
+          "pattern": "^details/[a-z0-9][a-z0-9-]*--[a-z0-9][a-z0-9-]*\\.json$"
+        }
+      },
+      "allOf": [
+        {
+          "description": "grey_reason is set exactly when status is grey.",
+          "x-requirements": ["CIR-DATA-GREY-REASON"],
+          "if": { "properties": { "status": { "const": "grey" } } },
+          "then": { "properties": { "grey_reason": { "type": "string" } } },
+          "else": { "properties": { "grey_reason": { "type": "null" } } }
+        }
+      ]
+    },
+    "warning": {
+      "x-requirements": ["CIR-BAKE-WARNINGS"],
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["item", "message"],
+      "properties": {
+        "item": {
+          "description": "The <ring>/<item> ref, null for config-level warnings.",
+          "x-requirements": ["CIR-BAKE-WARNINGS", "CIR-DATA-IDENTITY"],
+          "type": ["string", "null"],
+          "pattern": "^[a-z0-9][a-z0-9-]*/[a-z0-9][a-z0-9-]*$"
+        },
+        "message": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    }
+  }
+}

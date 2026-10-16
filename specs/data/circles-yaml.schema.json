@@ -1,0 +1,137 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "circles.yaml — the person's configuration (spec_version 0)",
+  "description": "The machine half of circles-yaml.md (RULES rule 7): the config file's shape. Open where the page rules unknown keys a build warning (top level, items — ⚖-R7), closed inside status: (an unknown adapter is a config error). Cross-field and filesystem checks (unique ids, yellow_after < red_after, source containment, argv[0] exists and is executable, a known IANA zone) are not expressible here and stay in bake/config.py, which also owns the exact config-error messages (⚖-R52).",
+  "x-requirements": ["CIR-DATA-SCHEMA-TOPLEVEL", "CIR-DATA-VALIDATION"],
+  "type": "object",
+  "additionalProperties": true,
+  "required": ["person", "rings"],
+  "properties": {
+    "spec_version": {
+      "description": "Optional; absent means 0. A version newer than the bake understands is a config error.",
+      "x-requirements": ["CIR-DATA-SCHEMA-VERSION"],
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 0,
+      "default": 0
+    },
+    "person": {
+      "description": "Whose circles these are (display name).",
+      "x-requirements": ["CIR-DATA-SCHEMA-TOPLEVEL"],
+      "type": "string"
+    },
+    "timezone": {
+      "description": "IANA zone name anchoring freshness math (⚖-R18); default UTC.",
+      "x-requirements": ["CIR-DATA-SCHEMA-TOPLEVEL"],
+      "type": "string",
+      "default": "UTC"
+    },
+    "rings": {
+      "description": "≥1 ring; inside-out order, index 0 = innermost.",
+      "x-requirements": ["CIR-DATA-SCHEMA-TOPLEVEL"],
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/ring" }
+    }
+  },
+  "$defs": {
+    "slug": {
+      "description": "Ring and item ids; the slash is excluded because it is the <ring>/<item> ref separator.",
+      "x-requirements": ["CIR-DATA-IDENTITY"],
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9-]*$"
+    },
+    "ring": {
+      "x-requirements": ["CIR-DATA-SCHEMA-RING"],
+      "type": "object",
+      "required": ["id", "label", "items"],
+      "properties": {
+        "id": { "$ref": "#/$defs/slug" },
+        "label": {
+          "description": "Opaque Unicode text; glyphs pass through untouched.",
+          "type": "string"
+        },
+        "items": {
+          "description": "Required key; may be empty — an empty band plus a build warning (⚖-R13).",
+          "x-requirements": ["CIR-DATA-VALIDATION"],
+          "type": "array",
+          "items": { "$ref": "#/$defs/item" }
+        }
+      }
+    },
+    "item": {
+      "x-requirements": ["CIR-DATA-SCHEMA-ITEM"],
+      "type": "object",
+      "additionalProperties": true,
+      "required": ["id", "label"],
+      "properties": {
+        "id": { "$ref": "#/$defs/slug" },
+        "label": { "type": "string" },
+        "guardrail": { "type": "string" },
+        "note": { "type": "string" },
+        "link": {
+          "description": "An absolute http(s) URL or a root-relative path; javascript:, data:, //… and bare relative paths are config errors (⚖-R16).",
+          "x-requirements": ["CIR-DATA-SCHEMA-LINK"],
+          "type": "string",
+          "pattern": "^(https?://|/(?!/))"
+        },
+        "share": {
+          "description": "Relative arc weight within the ring, > 0, default 1.",
+          "x-requirements": ["CIR-DATA-SHARE"],
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "default": 1
+        },
+        "status": { "$ref": "#/$defs/status" }
+      }
+    },
+    "status": {
+      "description": "Exactly one adapter key from the closed v0 set; absent status means unmonitored. Unknown keys inside status: are config errors (⚖-R7).",
+      "x-requirements": ["CIR-DATA-SCHEMA-ADAPTER-SLOT", "CIR-DATA-VALIDATION"],
+      "type": "object",
+      "additionalProperties": false,
+      "minProperties": 1,
+      "maxProperties": 1,
+      "properties": {
+        "manual": {
+          "description": "A hand-set light; grey is not a manual value (omit status: instead).",
+          "x-requirements": ["CIR-ADAPT-MANUAL", "CIR-DATA-STATUS-MANUAL-VALUES"],
+          "enum": ["green", "yellow", "red"]
+        },
+        "freshness": { "$ref": "#/$defs/freshness" },
+        "command": {
+          "description": "An argv array, never a shell string; ≥1 element.",
+          "x-requirements": ["CIR-ADAPT-COMMAND"],
+          "type": "array",
+          "minItems": 1,
+          "items": { "type": "string" }
+        }
+      }
+    },
+    "freshness": {
+      "x-requirements": ["CIR-ADAPT-FRESHNESS"],
+      "type": "object",
+      "required": ["source", "yellow_after", "red_after"],
+      "properties": {
+        "source": {
+          "description": "Path or glob relative to the config directory; absolute paths and leading parent traversal are rejected (full containment is checked by bake/config.py).",
+          "x-requirements": ["CIR-DATA-SOURCE-PATH"],
+          "type": "string",
+          "pattern": "^(?!/)(?!\\.\\.)"
+        },
+        "yellow_after": {
+          "description": "Whole days, ≥ 1, strictly less than red_after (the cross-field half is config.py's).",
+          "x-requirements": ["CIR-DATA-FRESHNESS-THRESHOLDS"],
+          "type": "integer",
+          "minimum": 1
+        },
+        "red_after": {
+          "description": "Whole days, > yellow_after.",
+          "x-requirements": ["CIR-DATA-FRESHNESS-THRESHOLDS"],
+          "type": "integer",
+          "minimum": 2
+        }
+      }
+    }
+  }
+}
