@@ -1,10 +1,15 @@
-# Tests for bake/render.py — the self-contained page renderer
+# Tests for bake/render.py — the self-contained page renderer.
 #
-# Requirements owned:
-#   CIR-BAKE-SELF-CONTAINED, CIR-RENDER-*, CIR-PROC-GATE#gate-*
-#
-# Every decision row of every owned requirement has a citing test with the row id
-# verbatim, parametrised, built from fixtures/ at runtime.
+# Evidence split (circles#103 step 2, allure-behavior-snippets CONVENTIONS § Allure taxonomy):
+#   - CIR-BAKE-SELF-CONTAINED's artifact rows are proven HERE at the bake's CLI boundary
+#     (`python -m bake` → out/index.html + out/data.json; tests/evidence_helpers.py), world alex;
+#   - every CIR-RENDER-* row is proven by the browser tier (tests/browser/, CIR-PROC-BROWSER-
+#     EVIDENCE#render-requirements-state-their-path) — the in-process tests below that used to
+#     claim those rows are unlabelled unit guards now, or were deleted where the browser case
+#     carries the same assertion;
+#   - the CIR-RENDER-* tests still labelled here (capacity, min-arc, arc-share, partition,
+#     thickness, renderer, boot-failure, touch, budget growth) are UNIT_ONLY pending their
+#     browser case — the next round of circles#103 step 2.
 
 from __future__ import annotations
 
@@ -18,10 +23,10 @@ import pytest
 import yaml
 
 from bake.config import load_config
-from bake.emit import write_artifact
 from bake.render import add_capacity_warnings, render_page
 from bake.resolve import resolve
 
+from evidence_helpers import given_alex, verdict, when_bake
 from rules import rule
 
 FIXTURES = Path(__file__).resolve().parent.parent / "fixtures"
@@ -128,65 +133,43 @@ def _cell_open_tag(html_text: str, full_id: str) -> tuple[str, str]:
     return m.group(1), m.group(2)
 
 
+def _inlined_artifact(index_html: Path) -> dict:
+    """The artifact a baked index.html carries in `<script id="artifact-data">`."""
+    page = index_html.read_text(encoding="utf-8")
+    m = re.search(r'<script id="artifact-data" type="application/json">(.*?)</script>', page, re.S)
+    assert m is not None, "artifact data script tag not found"
+    return json.loads(m.group(1))
+
+
 # ===========================================================================
 # CIR-BAKE-SELF-CONTAINED — one bake run yields both artifacts
 # ===========================================================================
 
 class TestBakeSelfContained:
-    """CIR-BAKE-SELF-CONTAINED — one bake run yields both artifacts."""
+    """CIR-BAKE-SELF-CONTAINED — one bake run yields both artifacts (world alex, the bake CLI).
+
+    Its browser row (#page-renders-with-no-network) is tests/browser/test_render_rows.py."""
 
     @rule("CIR-BAKE-SELF-CONTAINED")
-    def test_inlined_data_equals_file(self, tmp_path: Path) -> None:
-        """CIR-BAKE-SELF-CONTAINED#inlined-data-equals-the-file —
-        the inlined JSON in index.html is identical to data.json."""
-        config = load_config(ALEX_YAML)
-        artifact = resolve(config, reference_date=FIXTURE_REFERENCE_DATE, generated_at=FIXTURE_GENERATED_AT)
-        artifact = add_capacity_warnings(artifact)
-
-        # Write data.json
-        write_artifact(artifact, tmp_path)
-        data_path = tmp_path / "data.json"
-        assert data_path.exists()
-
-        # Render page
-        html = render_page(artifact)
-
-        # Extract inlined JSON
-        marker = '<script id="artifact-data" type="application/json">'
-        start = html.find(marker)
-        assert start >= 0, "artifact data script tag not found"
-        start = html.index(">", start) + 1
-        end = html.index("</script>", start)
-        inlined = json.loads(html[start:end].strip())
-
-        # Read file
-        file_data = json.loads(data_path.read_text(encoding="utf-8"))
-
-        assert inlined == file_data, "inlined data does not match data.json"
+    def test_inlined_data_equals_the_file(self, alex_copy) -> None:
+        """CIR-BAKE-SELF-CONTAINED#inlined-data-equals-the-file — `index.html` vs `data.json` from
+        one bake: identical data."""
+        config = given_alex(alex_copy)
+        run = when_bake(config)
+        verdict("exit code", run.exit_code, 0)
+        verdict("index.html inlined artifact", _inlined_artifact(run.out_dir / "index.html"), run.data)
 
     @rule("CIR-BAKE-SELF-CONTAINED")
-    def test_page_renders_with_no_network(self) -> None:
-        """CIR-BAKE-SELF-CONTAINED#page-renders-with-no-network —
-        the page contains zero external resource references."""
-        html = _render_fixture()
-        # No external URLs (allow w3.org SVG namespace which is a local identifier)
-        urls = re.findall(r'https?://[^"\'<>\s]+', html)
-        non_svg_urls = [u for u in urls if "w3.org" not in u]
-        assert len(non_svg_urls) == 0, f"Found external URLs: {non_svg_urls}"
-        # No external stylesheets
-        assert 'href="http' not in html
-        assert 'src="http' not in html
-        # No @import
-        assert "@import" not in html
-
-    @rule("CIR-BAKE-SELF-CONTAINED")
-    def test_page_has_both_artifacts(self, tmp_path: Path) -> None:
-        """CIR-BAKE-SELF-CONTAINED#page-has-both-artifacts —
-        the page contains both the SVG chart and the data script."""
-        html = _render_fixture()
-        assert '<svg' in html
-        assert '<script id="artifact-data"' in html
-        assert 'data.json' not in html  # no file reference, it's inlined
+    def test_page_has_both_artifacts(self, alex_copy) -> None:
+        """CIR-BAKE-SELF-CONTAINED#page-has-both-artifacts — one bake run: `index.html` contains
+        both the SVG chart and the inlined `<script id="artifact-data">`."""
+        config = given_alex(alex_copy)
+        run = when_bake(config)
+        page = (run.out_dir / "index.html").read_text(encoding="utf-8")
+        verdict("artifact files in out/", run.artifact_files, ["data.json", "index.html"])
+        verdict("index.html", page, "<svg", op="contains")
+        verdict("index.html", page, '<script id="artifact-data" type="application/json">', op="contains")
+        verdict("index.html", page, "data.json", op="not contains")
 
 
 # ===========================================================================
@@ -260,176 +243,26 @@ class TestInlinedJsonScriptEscape:
 
 
 # ===========================================================================
-# CIR-RENDER-RING-ORDER — rings read inside-out
-# ===========================================================================
-
-class TestRenderRingOrder:
-    """CIR-RENDER-RING-ORDER — rings read inside-out."""
-
-    @rule("CIR-RENDER-RING-ORDER")
-    def test_ring_order_innermost_first(self) -> None:
-        """CIR-RENDER-RING-ORDER#ring-order-innermost-first —
-        self is innermost, wider is outermost."""
-        html = _render_fixture()
-        # The ring key lists rings inside-out
-        # Find the ring key list items
-        ring_key_section = re.search(r'<div id="ring-key".*?</div>', html, re.DOTALL)
-        assert ring_key_section is not None
-        key_html = ring_key_section.group()
-        # Extract list items
-        items = re.findall(r'<li>(.*?)</li>', key_html)
-        assert len(items) >= 4
-        # Inside-out order: self, partner, children, wider
-        assert "Self" in items[0]
-        assert "Partner" in items[1]
-        assert "Children" in items[2]
-        assert "Wider" in items[3]
-
-
-# ===========================================================================
-# CIR-RENDER-PALETTE — the four fills
-# ===========================================================================
-
-class TestRenderPalette:
-    """CIR-RENDER-PALETTE — the four fills."""
-
-    @rule("CIR-RENDER-PALETTE")
-    def test_palette_exact_fills(self) -> None:
-        """CIR-RENDER-PALETTE#palette-exact-fills —
-        the four fills are exactly the pinned hexes."""
-        html = _render_fixture()
-        assert "#00916A" in html  # green
-        assert "#F2B300" in html  # yellow
-        assert "#B22222" in html  # red
-        assert "#9E9E9E" in html  # grey
-
-    @rule("CIR-RENDER-PALETTE")
-    def test_palette_label_contrast(self) -> None:
-        """CIR-RENDER-PALETTE#palette-label-contrast —
-        labels use correct contrasting colours."""
-        html = _render_fixture()
-        # Black labels on green, yellow, grey
-        # White labels on red
-        # Check that the SVG text elements use the assigned fill colours
-        # Extract text fill attributes from the SVG
-        import re
-        # Find all text elements with fill attribute that are NOT the centre disc text
-        text_fills = re.findall(
-            r'<text[^>]*?fill="([^"]+)"[^>]*>',
-            html,
-        )
-        # We expect at least one of each: #000000 (black) for green/yellow/grey labels,
-        # and #FFFFFF (white) for red labels
-        assert "#000000" in text_fills or "black" in html.lower(), \
-            "Expected black label text on light backgrounds"
-        assert "#FFFFFF" in text_fills, \
-            "Expected white label text on red background (#FFFFFF)"
-        # The fixture has wider/friends as red, so check that white fill exists
-        red_fill_text = re.search(
-            r'data-item="wider/friends"[^>]*>.*?<text[^>]*?fill="(#FFFFFF)"',
-            html,
-            re.DOTALL,
-        )
-        assert red_fill_text is not None, \
-            "Expected white text (#FFFFFF) on the red (wider/friends) cell"
-
-
-# ===========================================================================
-# CIR-RENDER-LEGEND — the key
-# ===========================================================================
-
-class TestRenderLegend:
-    """CIR-RENDER-LEGEND — the key."""
-
-    @rule("CIR-RENDER-LEGEND")
-    def test_legend_all_four(self) -> None:
-        """CIR-RENDER-LEGEND#legend-all-four —
-        the legend shows all four entries even when not all are used."""
-        html = _render_fixture()
-        assert "ok" in html
-        assert "attention" in html
-        assert "act" in html
-        assert "unmonitored" in html
-
-    @rule("CIR-RENDER-LEGEND")
-    def test_legend_words(self) -> None:
-        """CIR-RENDER-LEGEND#legend-words —
-        legend text uses the exact display words."""
-        html = _render_fixture()
-        # Find the legend section (inside chrome-panel)
-        legend_section = re.search(r'<div id="legend"[^>]*>(.*?)</div>\s*<div id="detail-strip', html, re.DOTALL)
-        assert legend_section is not None, "Legend section not found"
-        legend_html = legend_section.group(1)
-        assert "ok" in legend_html
-        assert "attention" in legend_html
-        assert "act" in legend_html
-        assert "unmonitored" in legend_html
-
-
-# ===========================================================================
-# CIR-RENDER-GENERATED-AT — the honesty stamp
-# ===========================================================================
-
-class TestRenderGeneratedAt:
-    """CIR-RENDER-GENERATED-AT — the honesty stamp."""
-
-    @rule("CIR-RENDER-GENERATED-AT")
-    def test_stamp_verbatim(self) -> None:
-        """CIR-RENDER-GENERATED-AT#stamp-verbatim —
-        the generated_at string appears verbatim on the page."""
-        html = _render_fixture()
-        assert "2026-08-03T02:00:00Z" in html
-
-    @rule("CIR-RENDER-GENERATED-AT")
-    def test_stamp_on_screen(self) -> None:
-        """CIR-RENDER-GENERATED-AT#stamp-verbatim —
-        the stamp is visible in the chrome with the verbatim string."""
-        html = _render_fixture()
-        assert "Built:" in html
-        assert "2026-08-03T02:00:00Z" in html
-
-
-# ===========================================================================
 # CIR-RENDER-NO-EGRESS — the page talks to nobody
 # ===========================================================================
 
-class TestRenderNoEgress:
-    """CIR-RENDER-NO-EGRESS — the page talks to nobody."""
+class TestRenderNoEgressGuard:
+    """Unit guard (unlabelled): the rendered markup names no external resource. The rows are
+    proven in the browser — CIR-RENDER-NO-EGRESS, CIR-BAKE-SELF-CONTAINED#page-renders-with-
+    no-network, CIR-RENDER-PRINT-COLOR#print-stylesheet-is-inline (tests/browser/)."""
 
-    @rule("CIR-RENDER-NO-EGRESS")
-    def test_no_external_requests_at_runtime(self) -> None:
-        """CIR-RENDER-NO-EGRESS#no-external-requests-at-runtime —
-        no external URLs in the page (allow w3.org SVG namespace)."""
+    def test_markup_references_no_external_resource(self) -> None:
         html = _render_fixture()
+        # No external URLs (the SVG namespace w3.org is an identifier, not a fetch)
         urls = re.findall(r'https?://[^"\'<>\s]+', html)
-        non_svg_urls = [u for u in urls if "w3.org" not in u]
-        assert len(non_svg_urls) == 0, f"Found external URLs: {non_svg_urls}"
-
-    @rule("CIR-RENDER-NO-EGRESS")
-    def test_no_third_party_origins(self) -> None:
-        """CIR-RENDER-NO-EGRESS#no-third-party-origins-in-markup —
-        no CDN, font, analytics or tile references."""
-        html = _render_fixture()
-        assert "fonts.googleapis" not in html
-        assert "cdn." not in html
-        assert "analytics" not in html
-
-    @rule("CIR-RENDER-NO-EGRESS")
-    def test_fonts_are_system(self) -> None:
-        """CIR-RENDER-NO-EGRESS#fonts-are-system-or-inlined —
-        no webfont fetch."""
-        html = _render_fixture()
+        assert [u for u in urls if "w3.org" not in u] == [], f"Found external URLs: {urls}"
+        assert 'href="http' not in html
+        assert 'src="' not in html
+        assert "@import" not in html
         assert "@font-face" not in html
-        assert "font-family:" not in html or "system-ui" in html or "-apple-system" in html
-
-    @rule("CIR-RENDER-NO-EGRESS")
-    def test_page_works_from_file_url(self) -> None:
-        """CIR-RENDER-NO-EGRESS#page-works-from-file-url —
-        the page is fully self-contained."""
-        html = _render_fixture()
-        # No relative or absolute resource references that would fail from file://
-        assert 'src="' not in html  # no external scripts
-        assert 'href="http' not in html  # no external stylesheets
+        assert '<link rel="stylesheet"' not in html
+        for host in ("fonts.googleapis", "cdn.", "analytics"):
+            assert host not in html
 
 
 # ===========================================================================
@@ -437,15 +270,8 @@ class TestRenderNoEgress:
 # ===========================================================================
 
 class TestRenderAssetBudget:
-    """CIR-RENDER-ASSET-BUDGET — small enough to be one file."""
-
-    @rule("CIR-RENDER-ASSET-BUDGET")
-    def test_budget_built_page_is_small(self) -> None:
-        """CIR-RENDER-ASSET-BUDGET#budget-built-page-is-small —
-        the single index.html is within 250 KB budget."""
-        html = _render_fixture()
-        size = len(html.encode("utf-8"))
-        assert size <= 250_000, f"index.html is {size} bytes, exceeds 250 KB budget"
+    """CIR-RENDER-ASSET-BUDGET — #budget-built-page-is-small is the browser's
+    (tests/browser/test_render_rows.py); #budget-growth-is-linear is UNIT_ONLY pending."""
 
     @rule("CIR-RENDER-ASSET-BUDGET")
     def test_budget_growth_is_linear(self) -> None:
@@ -458,336 +284,13 @@ class TestRenderAssetBudget:
 
 
 # ===========================================================================
-# CIR-RENDER-NO-JS — the page still says something
-# ===========================================================================
-
-class TestRenderNoJs:
-    """CIR-RENDER-NO-JS — the page still says something."""
-
-    @rule("CIR-RENDER-NO-JS")
-    def test_no_js_text_alternative_renders(self) -> None:
-        """CIR-RENDER-NO-JS#no-js-text-alternative-renders —
-        the a11y table is present in the HTML."""
-        html = _render_fixture()
-        assert "Text alternative" in html
-        assert "<table>" in html
-        assert "<th>Ring</th>" in html
-
-    @rule("CIR-RENDER-NO-JS")
-    def test_no_js_is_not_blank(self) -> None:
-        """CIR-RENDER-NO-JS#no-js-is-not-blank —
-        the SVG chart is present without JS."""
-        html = _render_fixture()
-        assert "<svg" in html
-        assert "<path" in html  # arc paths are baked in
-
-    @rule("CIR-RENDER-NO-JS")
-    def test_no_js_detail_lines_present(self) -> None:
-        """CIR-RENDER-NO-JS#no-js-detail-lines-present —
-        detail lines are in the a11y table."""
-        html = _render_fixture()
-        assert "unmonitored" in html
-        assert "not evaluated" in html
-
-    @rule("CIR-RENDER-NO-JS")
-    def test_no_js_links_work(self, tmp_path: Path) -> None:
-        """CIR-RENDER-NO-JS#no-js-links-work —
-        configured links are plain anchors, so they navigate with scripting off.
-
-        Not named in issue #73, but the same coverage gap and unlocked by the same
-        change: before it, no `link:` reached the page at all, so the row could not
-        be asserted. Nothing here depends on the inline script running.
-        """
-        rows = {r["row_id"]: r for r in _load_click_table()["rows"]}
-        row = rows["click-follows-link"]
-        html_text = _render_click_row(row, tmp_path)
-
-        tag, attrs = _cell_open_tag(html_text, f"self/{row['item']['id']}")
-        assert tag == "a", "a configured link must be a plain anchor, not a scripted handler"
-        assert f'href="{row["expected"]["href"]}"' in attrs
-
-        # Navigation is the anchor's own, not the script's: no inline handler on the
-        # cell and no navigation anywhere in the page's script.
-        assert "onclick=" not in html_text
-        script = html_text[html_text.rindex("<script>"):]
-        for scripted_nav in ("location", "window.open", "navigate"):
-            assert scripted_nav not in script, (
-                f"the page script performs navigation ({scripted_nav}) — "
-                f"links must work with JS disabled"
-            )
-
-
-# ===========================================================================
-# CIR-RENDER-A11Y-TABLE — the accessible equivalent
-# ===========================================================================
-
-class TestRenderA11yTable:
-    """CIR-RENDER-A11Y-TABLE — the accessible equivalent."""
-
-    @rule("CIR-RENDER-A11Y-TABLE")
-    def test_a11y_table_complete(self) -> None:
-        """CIR-RENDER-A11Y-TABLE#a11y-table-complete —
-        every cell appears under its ring."""
-        html = _render_fixture()
-        # All fixture items should appear in the table
-        assert "Sleep" in html
-        assert "Quarterly labs" in html
-        assert "Exercise" in html
-        assert "Date night" in html
-        assert "Nova" in html
-        assert "Kit" in html
-        assert "Friends" in html
-        assert "Plants" in html
-
-    @rule("CIR-RENDER-A11Y-TABLE")
-    def test_a11y_table_states_status_in_words(self) -> None:
-        """CIR-RENDER-A11Y-TABLE#a11y-table-states-status-in-words —
-        status words, not colour swatches alone."""
-        html = _render_fixture()
-        # The table should contain status words
-        table_section = re.search(r'<details id="a11y-table".*?</details>', html, re.DOTALL)
-        assert table_section is not None
-        table_html = table_section.group()
-        assert "ok" in table_html
-        assert "attention" in table_html
-        assert "act" in table_html
-        assert "unmonitored" in table_html
-
-    @rule("CIR-RENDER-A11Y-TABLE")
-    def test_a11y_table_without_js(self) -> None:
-        """CIR-RENDER-A11Y-TABLE#a11y-table-without-js —
-        the table renders as HTML, not JS-generated."""
-        html = _render_fixture()
-        # The table is a <details> element with static content
-        assert '<details id="a11y-table">' in html
-        assert "<table>" in html
-
-
-# ===========================================================================
-# CIR-RENDER-CHROME — the page furniture
-# ===========================================================================
-
-class TestRenderChrome:
-    """CIR-RENDER-CHROME — the page furniture."""
-
-    @rule("CIR-RENDER-CHROME")
-    def test_chrome_ring_key_order(self) -> None:
-        """CIR-RENDER-CHROME#chrome-ring-key-order —
-        ring key lists rings inside-out."""
-        html = _render_fixture()
-        ring_key = re.search(r'<div id="ring-key".*?</div>', html, re.DOTALL)
-        assert ring_key is not None
-        key_html = ring_key.group()
-        items = re.findall(r'<li>(.*?)</li>', key_html)
-        assert len(items) >= 4
-        assert "Self" in items[0]
-        assert "Wider" in items[-1]
-
-    @rule("CIR-RENDER-CHROME")
-    def test_chrome_banner_hidden_when_clean(self) -> None:
-        """CIR-RENDER-CHROME#chrome-banner-hidden-when-clean —
-        no warnings banner when warnings is empty."""
-        # Build a minimal config with no warnings
-        import yaml
-        import tempfile
-
-        minimal = {
-            "person": "Test",
-            "rings": [{
-                "id": "a", "label": "A",
-                "items": [{"id": "x", "label": "X", "status": {"manual": "green"}}],
-            }],
-        }
-        with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False) as f:
-            yaml.dump(minimal, f)
-            tmp_path = Path(f.name)
-
-        try:
-            config = load_config(tmp_path)
-            artifact = resolve(config, reference_date=FIXTURE_REFERENCE_DATE, generated_at=FIXTURE_GENERATED_AT)
-            html = render_page(artifact)
-            # The warnings section div should NOT be present (no warnings in artifact)
-            # Note: CSS class name "warnings" is always in the styles, so check for the div id
-            assert '<div id="warnings"' not in html, "Warnings banner present but should be hidden"
-        finally:
-            tmp_path.unlink()
-
-    @rule("CIR-RENDER-CHROME")
-    def test_chrome_idle_detail_strip(self) -> None:
-        """CIR-RENDER-CHROME#chrome-idle-detail-strip —
-        idle text when nothing is hovered."""
-        html = _render_fixture()
-        assert "Hover or focus" in html
-
-
-# ===========================================================================
-# CIR-RENDER-STATUS-ENCODING — status is never colour alone
-# ===========================================================================
-
-class TestRenderStatusEncoding:
-    """CIR-RENDER-STATUS-ENCODING — status is never colour alone."""
-
-    @rule("CIR-RENDER-STATUS-ENCODING")
-    def test_status_word_in_detail_line(self) -> None:
-        """CIR-RENDER-STATUS-ENCODING#status-word-in-detail-line —
-        the detail line contains the status word."""
-        html = _render_fixture()
-        # The a11y table has status words
-        assert "ok" in html
-        assert "attention" in html
-        assert "act" in html
-        assert "unmonitored" in html
-
-    @rule("CIR-RENDER-STATUS-ENCODING")
-    def test_status_word_in_a11y_name(self) -> None:
-        """CIR-RENDER-STATUS-ENCODING#status-word-in-a11y-name —
-        cells have aria-labels with status words."""
-        html = _render_fixture()
-        # Check for aria-label attributes containing status words
-        assert 'aria-label=' in html
-
-
-# ===========================================================================
-# CIR-RENDER-GREY-VISIBLE — the honest grey
-# ===========================================================================
-
-class TestRenderGreyVisible:
-    """CIR-RENDER-GREY-VISIBLE — the honest grey."""
-
-    @rule("CIR-RENDER-GREY-VISIBLE")
-    def test_grey_reason_distinguishable(self) -> None:
-        """CIR-RENDER-GREY-VISIBLE#grey-reason-distinguishable —
-        by-choice and not-evaluated are distinguishable on the page via the
-        a11y-table Detail cell text and the separated summary counts."""
-        html = _render_fixture()
-
-        # 1. The a11y-table Detail cells differ between by-choice and not-evaluated
-        #    grey items (CIR-RENDER-A11Y-TABLE + ⚖-R51).
-        #    Exercise (by-choice) has detail "unmonitored" without the
-        #    "not evaluated in this build" suffix.
-        #    Sleep/labs/plants (not-evaluated) include "not evaluated in this build".
-        # Extract the a11y table rows from the HTML.
-        import re
-        table_match = re.search(r'<table>(.*?)</table>', html, re.DOTALL)
-        assert table_match is not None
-        table_html = table_match.group(1)
-        rows = re.findall(r'<tr>(.*?)</tr>', table_html)
-        grey_rows = []
-        for row in rows:
-            tds = re.findall(r'<td>(.*?)</td>', row)
-            if len(tds) >= 4 and tds[2] == "unmonitored":
-                grey_rows.append((tds[1], tds[3]))
-        # We should have grey items in the table
-        assert len(grey_rows) >= 2, f"Expected at least 2 grey rows, got {len(grey_rows)}"
-
-        # Find a by-choice item and a not-evaluated item
-        by_choice_rows = [r for r in grey_rows if r[1] == "unmonitored"]
-        not_eval_rows = [r for r in grey_rows if "not evaluated in this build" in r[1]]
-        assert len(by_choice_rows) >= 1, \
-            f"Expected at least one by-choice grey row, got {len(by_choice_rows)}. " \
-            f"Grey rows: {grey_rows}"
-        assert len(not_eval_rows) >= 1, \
-            f"Expected at least one not-evaluated grey row, got {len(not_eval_rows)}. " \
-            f"Grey rows: {grey_rows}"
-
-        # The Detail cells must differ (distinguishable mechanism)
-        assert by_choice_rows[0][1] != not_eval_rows[0][1], \
-            f"by-choice detail '{by_choice_rows[0][1]}' should differ from " \
-            f"not-evaluated detail '{not_eval_rows[0][1]}'"
-
-        # 2. The summary separates grey-reason counts (summary-separates-grey-reasons)
-        assert "unmonitored" in html  # the by-choice count label
-        assert "not evaluated" in html  # the not-evaluated count label
-
-        # 3. Grey cells carry the grey reason in their aria-label
-        grey_cells = re.findall(
-            r'data-status="grey"[^>]*aria-label="([^"]+)"',
-            html,
-        )
-        assert len(grey_cells) >= 2
-        has_by_choice_aria = any("by choice" in c for c in grey_cells)
-        has_not_eval_aria = any("not evaluated" in c for c in grey_cells)
-        assert has_by_choice_aria, \
-            f"Expected a grey cell with aria-label containing 'by choice', got: {grey_cells}"
-        assert has_not_eval_aria, \
-            f"Expected a grey cell with aria-label containing 'not evaluated', got: {grey_cells}"
-
-    @rule("CIR-RENDER-GREY-VISIBLE")
-    def test_grey_surface_proportion(self) -> None:
-        """CIR-RENDER-GREY-VISIBLE#grey-surface-proportion —
-        grey items occupy their full share."""
-        html = _render_fixture()
-        # The SVG has paths for grey items
-        assert "#9E9E9E" in html  # grey fill is present
-
-
-# ===========================================================================
-# CIR-RENDER-HOVER — the detail line
-# ===========================================================================
-
-class TestRenderHover:
-    """CIR-RENDER-HOVER — the detail line."""
-
-    @rule("CIR-RENDER-HOVER")
-    def test_hover_data_attributes(self) -> None:
-        """CIR-RENDER-HOVER#hover-full-line —
-        cells carry data-detail attributes."""
-        html = _render_fixture()
-        assert "data-detail=" in html
-        assert "data-label=" in html
-
-    @rule("CIR-RENDER-HOVER")
-    def test_hover_leave_resets(self) -> None:
-        """CIR-RENDER-HOVER#hover-leave-resets —
-        the JS has mouseleave handler."""
-        html = _render_fixture()
-        assert "mouseleave" in html
-        assert "resetDetail" in html
-
-
-# ===========================================================================
-# CIR-RENDER-KEYBOARD — the whole page without a mouse
-# ===========================================================================
-
-class TestRenderKeyboard:
-    """CIR-RENDER-KEYBOARD — the whole page without a mouse."""
-
-    @rule("CIR-RENDER-KEYBOARD")
-    def test_keyboard_tab_order(self) -> None:
-        """CIR-RENDER-KEYBOARD#keyboard-tab-order —
-        cells are focusable with tabindex."""
-        html = _render_fixture()
-        assert 'tabindex="0"' in html
-
-    @rule("CIR-RENDER-KEYBOARD")
-    def test_keyboard_focus_shows_detail(self) -> None:
-        """CIR-RENDER-KEYBOARD#keyboard-focus-shows-detail —
-        focus event handler is present."""
-        html = _render_fixture()
-        assert "focus" in html
-        assert "blur" in html
-
-    @rule("CIR-RENDER-KEYBOARD")
-    def test_keyboard_focus_visible(self) -> None:
-        """CIR-RENDER-KEYBOARD#keyboard-focus-visible —
-        focus-visible styles are present."""
-        html = _render_fixture()
-        assert "focus-visible" in html
-
-    @rule("CIR-RENDER-KEYBOARD")
-    def test_keyboard_accessible_name(self) -> None:
-        """CIR-RENDER-KEYBOARD#keyboard-accessible-name —
-        cells have aria-label."""
-        html = _render_fixture()
-        assert 'aria-label=' in html
-
-
-# ===========================================================================
 # CIR-RENDER-CLICK — where a cell leads
 # ===========================================================================
 
 class TestRenderClick:
-    """CIR-RENDER-CLICK — where a cell leads.
+    """Unit guard (unlabelled) for CIR-RENDER-CLICK's anchors — the rows themselves are proven by
+    clicking in the browser (tests/browser/test_render_rows.py TestClick); this keeps the cheap
+    markup facts the browser case does not measure (rel="noopener", no href on a dead cell).
 
     One parametrised test over every row of fixtures/click-destinations.yaml
     (CIR-PROC-TEST-ROWS#rows-parametrised-not-copied), not one function per row.
@@ -797,7 +300,6 @@ class TestRenderClick:
     no behaviour to assert. They are deferred with the rest of P2 (#35).
     """
 
-    @rule("CIR-RENDER-CLICK")
     @pytest.mark.parametrize(
         "row",
         _load_click_table()["rows"],
@@ -858,71 +360,6 @@ class TestRenderClick:
             assert f'rel="{expected["rel"]}"' in attrs, (
                 f"{full_id}: a new-tab link must carry rel={expected['rel']!r}, got: {attrs}"
             )
-
-
-# ===========================================================================
-# CIR-RENDER-SUMMARY — the count that survives everything
-# ===========================================================================
-
-class TestRenderSummary:
-    """CIR-RENDER-SUMMARY — the count that survives everything."""
-
-    @rule("CIR-RENDER-SUMMARY")
-    def test_summary_matches_the_picture(self) -> None:
-        """CIR-RENDER-SUMMARY#summary-matches-the-picture —
-        the centre disc shows summary counts."""
-        html = _render_fixture()
-        # The fixture has: 2 green, 1 yellow, 1 red, 1 by-choice, 3 not-evaluated
-        assert "2 ok" in html or "2" in html
-        assert "1 attention" in html or "1" in html
-        assert "1 act" in html or "1" in html
-
-    @rule("CIR-RENDER-SUMMARY")
-    def test_summary_separates_grey_reasons(self) -> None:
-        """CIR-RENDER-SUMMARY#summary-separates-grey-reasons —
-        by-choice and not-evaluated are counted separately in the summary
-        rather than lumped into a single count."""
-        html = _render_fixture()
-        # The fixture has 1 by-choice (exercise) and 3 not-evaluated (sleep, labs, plants)
-        # The centre disc summary shows them as separate counts.
-        # The summary text is a single line like:
-        #   "2 ok · 1 attention · 1 act · 1 unmonitored · 3 not evaluated"
-        import re
-        # Find the summary text element (the second text in the SVG centre disc)
-        summary_matches = re.findall(
-            r'<text[^>]*>([^<]*)</text>',
-            html,
-        )
-        # The summary is the second text element (after the person name)
-        assert len(summary_matches) >= 2, \
-            f"Expected at least 2 text elements, got {len(summary_matches)}"
-        summary_text = summary_matches[1]
-
-        # The summary must contain both "unmonitored" and "not evaluated" as
-        # separate count entries, not lumped as "4 unmonitored"
-        assert "unmonitored" in summary_text, \
-            f"Summary should contain by-choice count, got: {summary_text}"
-        assert "not evaluated" in summary_text, \
-            f"Summary should contain not-evaluated count, got: {summary_text}"
-
-        # Verify the counts are correct for the fixture
-        assert "1 unmonitored" in summary_text, \
-            f"Expected '1 unmonitored' in summary, got: {summary_text}"
-        assert "3 not evaluated" in summary_text, \
-            f"Expected '3 not evaluated' in summary, got: {summary_text}"
-
-        # Verify they are separate entries (not "4 unmonitored")
-        assert "4 unmonitored" not in summary_text, \
-            f"Summary should not lump grey reasons, got: {summary_text}"
-
-    @rule("CIR-RENDER-SUMMARY")
-    def test_summary_is_not_a_rollup(self) -> None:
-        """CIR-RENDER-SUMMARY#summary-is-not-a-rollup —
-        no ring or page is assigned a colour."""
-        html = _render_fixture()
-        # The centre disc has counts, not a status colour
-        # The SVG centre circle is neutral (#f8f8f8)
-        assert '#f8f8f8' in html
 
 
 # ===========================================================================
@@ -1290,77 +727,6 @@ class TestFixtureAcceptance:
         assert "act" in html
         # wider/plants ⚪ not-evaluated
 
-    @rule("CIR-RENDER-GREY-VISIBLE")
-    def test_three_greys_distinguishable(self) -> None:
-        """CIR-RENDER-GREY-VISIBLE#grey-reason-distinguishable —
-        the three grey reasons are told apart on the page via the a11y-table
-        Detail cell text and the separated summary counts,
-        not via the arc fill colour (CIR-DATA-GREY-REASON rules this out)."""
-        html = _render_fixture()
-
-        # 1. The page summary separates grey-reason counts rather than lumping
-        #    them — by-choice and not-evaluated appear with their individual counts
-        #    (summary-separates-grey-reasons is in TestRenderSummary).
-        #    The centre disc text includes both "unmonitored" and "not evaluated".
-        assert "unmonitored" in html
-        assert "not evaluated" in html
-
-        # 2. The a11y-table Detail cells carry the grey reason.
-        #    Exercise (by-choice): detail is "unmonitored"
-        #    Sleep/labs/plants (not-evaluated): detail includes "not evaluated in this build"
-        import re
-        table_match = re.search(r'<table>(.*?)</table>', html, re.DOTALL)
-        assert table_match is not None
-        table_html = table_match.group(1)
-        # Check that at least one by-choice row and one not-evaluated row exist
-        assert "unmonitored</td>" in table_html
-
-        # 3. All grey cells use identical fill (#9E9E9E) — CIR-DATA-GREY-REASON
-        grey_fills = re.findall(r'data-status="grey"[^>]*>\s*<path[^>]*fill="([^"]+)"', html)
-        assert len(grey_fills) >= 2, f"Expected at least 2 grey fills, got {len(grey_fills)}"
-        # All grey fills must be identical (#9E9E9E, excluding the empty grey band)
-        for f in grey_fills:
-            assert f == "#9E9E9E", f"Grey cell fill '{f}' should be #9E9E9E (all grey reasons share the same colour)"
-
-
-# ===========================================================================
-# CIR-RENDER-PRINT-COLOR — backgrounds must be forced on
-# ===========================================================================
-
-class TestRenderPrintColor:
-    """CIR-RENDER-PRINT-COLOR — backgrounds must be forced on."""
-
-    @rule("CIR-RENDER-PRINT-COLOR")
-    def test_print_fills_without_user_settings(self) -> None:
-        """CIR-RENDER-PRINT-COLOR#print-fills-without-user-settings —
-        print-color-adjust: exact is set."""
-        html = _render_fixture()
-        assert "print-color-adjust: exact" in html
-        assert "-webkit-print-color-adjust: exact" in html
-
-    @rule("CIR-RENDER-PRINT-COLOR")
-    def test_print_stylesheet_is_inline(self) -> None:
-        """CIR-RENDER-PRINT-COLOR#print-stylesheet-is-inline —
-        no separate stylesheet fetch."""
-        html = _render_fixture()
-        assert '<link rel="stylesheet"' not in html
-
-
-# ===========================================================================
-# CIR-RENDER-A4 — one sheet from the browser's print dialog
-# ===========================================================================
-
-class TestRenderA4:
-    """CIR-RENDER-A4 — one sheet from the browser's print dialog."""
-
-    @rule("CIR-RENDER-A4")
-    def test_print_interactive_affordances_hidden(self) -> None:
-        """CIR-RENDER-A4#print-interactive-affordances-hidden —
-        hover chrome is hidden in print."""
-        html = _render_fixture()
-        # The print media query hides hover effects
-        assert "@media print" in html
-
 
 # ===========================================================================
 # CIR-RENDER-TOUCH — no hover on glass
@@ -1403,55 +769,6 @@ class TestRenderRenderer:
         html = _render_fixture()
         assert '<script src=' not in html
         assert '<link rel="stylesheet"' not in html
-
-
-# ===========================================================================
-# CIR-RENDER-SIBLING-ORDER — where siblings start
-# ===========================================================================
-
-class TestRenderSiblingOrder:
-    """CIR-RENDER-SIBLING-ORDER — where siblings start."""
-
-    @rule("CIR-RENDER-SIBLING-ORDER")
-    def test_sibling_order_clockwise_from_noon(self) -> None:
-        """CIR-RENDER-SIBLING-ORDER#sibling-order-clockwise-from-noon —
-        items are ordered clockwise from 12 o'clock in config order."""
-        html = _render_fixture()
-        # The children ring has nova then kit
-        # Nova should appear before Kit in the SVG
-        nova_pos = html.find("Nova")
-        kit_pos = html.find("Kit")
-        assert nova_pos >= 0 and kit_pos >= 0
-        # Both appear (order in SVG doesn't strictly prove geometry,
-        # but the data-detail attributes carry the right ids)
-        assert 'data-item="children/nova"' in html
-        assert 'data-item="children/kit"' in html
-
-
-# ===========================================================================
-# CIR-RENDER-LABELS — labels fit, truncate, or step aside
-# ===========================================================================
-
-class TestRenderLabels:
-    """CIR-RENDER-LABELS — labels fit, truncate, or step aside."""
-
-    @rule("CIR-RENDER-LABELS")
-    def test_label_inside_arc(self) -> None:
-        """CIR-RENDER-LABELS#label-inside-arc —
-        item labels are rendered as SVG text."""
-        html = _render_fixture()
-        # Labels are SVG text elements
-        assert "<text" in html
-        assert "Sleep" in html
-        assert "Quarterly labs" in html
-
-    @rule("CIR-RENDER-LABELS")
-    def test_label_glyphs_passthrough(self) -> None:
-        """CIR-RENDER-LABELS#label-glyphs-passthrough —
-        Unicode glyphs pass through as-is."""
-        html = _render_fixture()
-        assert "◀" in html or "Nova" in html
-        assert "▶" in html or "Kit" in html
 
 
 # ===========================================================================
