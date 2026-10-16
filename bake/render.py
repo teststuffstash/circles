@@ -523,7 +523,10 @@ html, body { height: 100%; font-family: -apple-system, BlinkMacSystemFont, "Sego
 .cell:hover path, .cell:focus-visible path { stroke: #333; stroke-width: 2; }
 .cell:focus-visible path { stroke-dasharray: 3 2; }
 /* A11y table */
-#a11y-table { margin: 0 20px 20px; font-size: 12px; }
+/* The text alternative lives INSIDE the chrome column (which scrolls on its own), never
+   after the 100vh #app box — a sibling below it overflows the viewport
+   (CIR-RENDER-ONE-SCREEN, issue #93). */
+#a11y-table { font-size: 12px; }
 #a11y-table summary { cursor: pointer; font-size: 13px; color: #555; padding: 4px 0; }
 #a11y-table table { width: 100%; border-collapse: collapse; margin-top: 8px; }
 #a11y-table th, #a11y-table td { text-align: left; padding: 4px 8px; border-bottom: 1px solid #eee; }
@@ -534,12 +537,21 @@ html, body { height: 100%; font-family: -apple-system, BlinkMacSystemFont, "Sego
   body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
   #app { display: block; height: auto; max-height: none; overflow: visible; }
   #chart-area { display: block; text-align: center; padding: 0; }
-  #chart-area svg { max-width: 100%; max-height: 70vh; }
-  #chrome-panel { border-left: none; padding: 10px 0; overflow: visible; }
+  #chart-area svg { max-width: 100%; max-height: 62vh; }
+  /* One A4 portrait sheet (CIR-RENDER-A4#print-single-a4-portrait): under the chart the
+     chrome packs into two columns — ring key | legend — with the stamp, warnings and the
+     text alternative spanning full width. The detail strip is hover-only, not paper. */
+  #chrome-panel { border-left: none; padding: 6px 0 0; overflow: visible; display: grid; grid-template-columns: 1fr 1fr; gap: 6px 16px; }
+  #stamp, #warnings, #a11y-table { grid-column: 1 / -1; }
+  #detail-strip { display: none; }
   .cell:hover path, .cell:focus-visible path { stroke: #fff; stroke-width: 0.5; }
   .cell:focus-visible path { stroke-dasharray: none; }
-  #a11y-table { margin: 10px 0; }
-  #a11y-table table { font-size: 10px; }
+  /* A closed <details> does not print its body; force it open on paper
+     (CIR-RENDER-A4#print-detail-reaches-paper). */
+  #a11y-table::details-content { content-visibility: visible; display: block; }
+  #a11y-table summary { list-style: none; padding: 0; }
+  #a11y-table table { font-size: 9px; margin-top: 4px; }
+  #a11y-table th, #a11y-table td { padding: 1px 4px; }
   .detail-idle { display: none; }
 }
 @media print and (prefers-color-scheme: dark) {
@@ -695,9 +707,9 @@ def render_page(artifact: dict) -> str:
 </div>
 <div id="chrome-panel">
 {chrome_html}
-</div>
-</div>
 {a11y_html}
+</div>
+</div>
 <script id="artifact-data" type="application/json">
 {artifact_json}
 </script>
