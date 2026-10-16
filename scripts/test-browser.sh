@@ -159,6 +159,9 @@ if [ "$RUNNER" = "local" ]; then
   CIRCLES_PAGES_DIR="$BAKE_OUT" \
     uv run --frozen --group browser pytest "${PYTEST_ARGS[@]}" || RC=$?
 else
+  # The evidence stamp + executor (tests/conftest.py) are written INSIDE the container, where git
+  # may be absent: hand it the head sha (CI's CIRCLES_HEAD_SHA, else the host checkout's HEAD) and
+  # the run identity, or the browser results carry an empty stamp into the evidence job's merge.
   # Image ref through the LAN mirror unless disabled (same defaults as test-system.sh).
   IMAGE_REF="$IMAGE"
   if [ "${REGISTRY_MIRROR_NONE:-}" = "1" ]; then
@@ -177,6 +180,8 @@ else
     -v "$PWD:/work" -w /work \
     -v "$BAKE_OUT:/pages:ro" \
     -e CIRCLES_PAGES_DIR=/pages \
+    -e CIRCLES_HEAD_SHA="${CIRCLES_HEAD_SHA:-$(git rev-parse HEAD 2>/dev/null || true)}" \
+    -e GITHUB_SERVER_URL -e GITHUB_REPOSITORY -e GITHUB_RUN_ID \
     -e PYTHONDONTWRITEBYTECODE=1 \
     -e PIP_ROOT_USER_ACTION=ignore \
     "$IMAGE_REF" \
