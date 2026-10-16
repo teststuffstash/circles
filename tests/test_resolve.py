@@ -781,7 +781,8 @@ class TestAdaptContract:
                             lambda c: item(c, "children/nova").update(status={"manual": "grey"}))
         then_config_error(when_bake(config), "grey")
 
-    @rule("CIR-ADAPT-CONTRACT")
+    # Unlabelled (seat ruling 2026-10-16): the row's input is an adapter RAISING; a command exiting
+    # 3 is a different input (that is CIR-DATA-FAILURE-IS-GREY). Kept as a boundary guard.
     def test_adapter_failure_is_isolated(self, alex_copy) -> None:
         """CIR-ADAPT-CONTRACT#adapter-failure-is-isolated — one of alex's adapters fails (the plants
         command exits 3): that item is ⚪ + warning; every other item resolves exactly as alex
