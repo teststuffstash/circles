@@ -10,6 +10,7 @@ command: blocks validate at P0 and evaluate at P1, with no config migration in b
 
 from __future__ import annotations
 
+import errno
 import os
 import re
 from dataclasses import dataclass
@@ -170,9 +171,11 @@ def _validate_freshness(raw: dict, path: str, config_dir: Path) -> None:
     # CIR-BAKE-EXPOSURE#no-absolute-host-paths).
     try:
         resolved = (config_dir / source).resolve()
-    except (RuntimeError, OSError):
-        raise ConfigError(f"{path}.status.freshness.source: '{source}' is a symlink loop — "
-                          f"it resolves to no file") from None
+    except (RuntimeError, OSError) as e:
+        why = ("is a symlink loop — it resolves to no file"
+               if isinstance(e, RuntimeError) or getattr(e, "errno", None) == errno.ELOOP
+               else f"cannot be resolved ({type(e).__name__})")
+        raise ConfigError(f"{path}.status.freshness.source: '{source}' {why}") from None
     try:
         resolved.relative_to(config_dir)
     except ValueError:
