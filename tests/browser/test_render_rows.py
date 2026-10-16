@@ -1168,11 +1168,6 @@ class TestGeometry:
         then("rings from the centre outward", sorted(inner, key=inner.get), ["self", "partner", "children", "wider"])
 
     @rule("CIR-RENDER-SIBLING-ORDER")
-    @pytest.mark.xfail(strict=True, reason=(
-        "RED against the spec: bake/render.py starts every ring at current_angle = -90 in a frame "
-        "where 0 is 12 o'clock (x = cx + r·sin, y = cy − r·cos), so the first sibling starts at "
-        "9 o'clock — nova measures 270°→88°, not 0°→180°. Product fix is outside this chunk; strict, "
-        "so the fix turns this XPASS red and the marker must go."))
     def test_sibling_order_clockwise_from_noon(self, page: Page, served: str, pages_dir: Path) -> None:
         """CIR-RENDER-SIBLING-ORDER#sibling-order-clockwise-from-noon — ring items `[nova, kit]`:
         `nova` spans 12 → 6 o'clock (the right half), `kit` 6 → 12.
