@@ -26,6 +26,8 @@ import pytest
 from playwright.sync_api import Page
 from pypdf import PdfReader
 
+from rules import rule
+
 pytestmark = pytest.mark.browser
 
 GENERATED_AT = datetime(2026, 8, 3, 2, 0, 0, tzinfo=timezone.utc)
@@ -96,6 +98,16 @@ def _assert_no_stale_chrome(state: dict) -> None:
     assert "saturate" not in state["svgFilter"], f"picture desaturated: {state}"
 
 
+def _fresh_and_stale(page: Page, served: str) -> tuple[list, list, dict]:
+    """index-stale.html (threshold 36 h) viewed fresh (+6 h) then stale (+50 h): the cell
+    fills of each view, and the stale view's state."""
+    _view(page, served, "index-stale.html", 6)
+    fresh = page.evaluate(_CELL_FILLS)
+    state = _view(page, served, "index-stale.html", 50)
+    stale = page.evaluate(_CELL_FILLS)
+    return fresh, stale, state
+
+
 def _assert_stamp(state: dict) -> None:
     assert state["stampDisplay"] != "none"
     assert GENERATED_AT_TEXT in (state["stampText"] or ""), state
@@ -104,6 +116,7 @@ def _assert_stamp(state: dict) -> None:
 class TestStaleSelf:
     """CIR-BAKE-STALE-SELF — the page's own freshness."""
 
+    @rule("CIR-BAKE-STALE-SELF")
     @pytest.mark.parametrize(
         ("name", "hours"),
         [
@@ -122,25 +135,27 @@ class TestStaleSelf:
         _assert_stamp(state)
         assert page.locator("#stamp").is_visible()
 
+    @rule("CIR-BAKE-STALE-SELF")
     def test_no_threshold_no_banner(self, page: Page, served: str) -> None:
         """CIR-BAKE-STALE-SELF#no-threshold-no-banner — `stale_after_hours: null` (P0):
         stamp only; no banner, no invented expectation.
-        CIR-RENDER-STALE-MARK#no-threshold-no-stale-chrome — no banner, no overlay,
-        stamp still shown.
+        (Its CIR-RENDER-STALE-MARK twin: TestStaleMark.test_no_threshold_no_stale_chrome.)
 
         Viewed 1000 h after the build: with no declared cadence no age is "stale"."""
         state = _view(page, served, "index-no-threshold.html", 1000)
         _assert_no_stale_chrome(state)
         _assert_stamp(state)
 
+    @rule("CIR-BAKE-STALE-SELF")
     def test_fresh_bake_shows_no_banner(self, page: Page, served: str) -> None:
         """CIR-BAKE-STALE-SELF#fresh-bake-shows-no-banner — `generated_at` 6 h old,
         `stale_after_hours: 36`: no banner.
-        CIR-RENDER-STALE-MARK#fresh-page-has-no-stale-chrome — no banner, no overlay.
+        (Its CIR-RENDER-STALE-MARK twin: TestStaleMark.test_fresh_page_has_no_stale_chrome.)
 
         6 h <= 36 h, so the page is fresh."""
         _assert_no_stale_chrome(_view(page, served, "index-stale.html", 6))
 
+    @rule("CIR-BAKE-STALE-SELF")
     def test_stale_bake_shows_banner(self, page: Page, served: str) -> None:
         """CIR-BAKE-STALE-SELF#stale-bake-shows-banner — `generated_at` 50 h old,
         `stale_after_hours: 36`: banner "this page was built <n> hours ago; the lights
@@ -151,34 +166,39 @@ class TestStaleSelf:
         assert state["bannerVisible"], state
         assert state["bannerText"] == _banner_text(50)
 
+    @rule("CIR-BAKE-STALE-SELF")
     def test_stale_lights_marked_not_recoloured(self, page: Page, served: str) -> None:
         """CIR-BAKE-STALE-SELF#stale-lights-marked-not-recoloured — stale bake, item was
         🟢: still 🟢 in place, with the stale treatment.
-        CIR-BAKE-STALE-SELF#stale-bake-never-turns-items-red — not 🔴.
-        CIR-RENDER-STALE-MARK#stale-is-not-a-fifth-colour — statuses keep their colours;
-        staleness is a separate visual channel (desaturation plus a hatched overlay).
 
         Expected: the same bytes viewed fresh (+6 h) and stale (+50 h) give every cell the
         same status, fill attribute and computed fill; every 🟢 cell computes to the palette
-        green; no cell that was not 🔴 computes to the palette red; and the stale view adds
-        the separate channel — the picture's filter desaturates and the hatch overlay is
-        rendered."""
-        _view(page, served, "index-stale.html", 6)
-        fresh = page.evaluate(_CELL_FILLS)
-        state = _view(page, served, "index-stale.html", 50)
-        stale = page.evaluate(_CELL_FILLS)
+        green; and the stale view carries the treatment (banner, desaturation, overlay)."""
+        fresh, stale, state = _fresh_and_stale(page, served)
 
         assert fresh and stale == fresh, "stale view recoloured or moved a cell"
         greens = [c for c in stale if c["status"] == "green"]
         assert greens, "fixture has 🟢 items (CIR-PROC-TEST-FIXTURES)"
         assert all(c["fill"] == GREEN_RGB for c in greens), greens
-        not_red = [c for c in stale if c["status"] != "red"]
-        assert all(c["fill"] != RED_RGB for c in not_red), not_red
 
         assert state["bannerVisible"], state
         assert "saturate" in state["svgFilter"], f"no desaturation: {state['svgFilter']}"
         assert state["overlayDisplay"] != "none", "no hatched overlay"
 
+    @rule("CIR-BAKE-STALE-SELF")
+    def test_stale_bake_never_turns_items_red(self, page: Page, served: str) -> None:
+        """CIR-BAKE-STALE-SELF#stale-bake-never-turns-items-red — stale bake: not 🔴.
+
+        Expected: viewed stale (+50 h), no cell that was not 🔴 computes to the palette red,
+        and no cell changed status against the fresh view (+6 h)."""
+        fresh, stale, state = _fresh_and_stale(page, served)
+
+        assert state["bannerVisible"], state
+        assert fresh and stale == fresh, "stale view recoloured or moved a cell"
+        not_red = [c for c in stale if c["status"] != "red"]
+        assert all(c["fill"] != RED_RGB for c in not_red), not_red
+
+    @rule("CIR-BAKE-STALE-SELF")
     def test_manual_items_are_stale_too(self, page: Page, served: str) -> None:
         """CIR-BAKE-STALE-SELF#manual-items-are-stale-too — stale bake with only `manual:`
         items: the banner applies to the whole page.
@@ -192,6 +212,7 @@ class TestStaleSelf:
         assert state["bannerVisible"] and state["bannerText"] == _banner_text(50), state
         assert state["overlayDisplay"] != "none", state
 
+    @rule("CIR-BAKE-STALE-SELF")
     @pytest.mark.parametrize(
         ("name", "hours", "stale"),
         [
@@ -220,6 +241,39 @@ class TestStaleSelf:
 class TestStaleMark:
     """CIR-RENDER-STALE-MARK — showing that the lights are history."""
 
+    @rule("CIR-RENDER-STALE-MARK")
+    def test_no_threshold_no_stale_chrome(self, page: Page, served: str) -> None:
+        """CIR-RENDER-STALE-MARK#no-threshold-no-stale-chrome — no banner, no overlay,
+        stamp still shown.
+
+        `stale_after_hours: null` (P0) viewed 1000 h after the build: with no declared
+        cadence no age is "stale"."""
+        state = _view(page, served, "index-no-threshold.html", 1000)
+        _assert_no_stale_chrome(state)
+        _assert_stamp(state)
+
+    @rule("CIR-RENDER-STALE-MARK")
+    def test_fresh_page_has_no_stale_chrome(self, page: Page, served: str) -> None:
+        """CIR-RENDER-STALE-MARK#fresh-page-has-no-stale-chrome — no banner, no overlay.
+
+        `generated_at` 6 h old, `stale_after_hours: 36`: 6 h <= 36 h, so the page is fresh."""
+        _assert_no_stale_chrome(_view(page, served, "index-stale.html", 6))
+
+    @rule("CIR-RENDER-STALE-MARK")
+    def test_stale_is_not_a_fifth_colour(self, page: Page, served: str) -> None:
+        """CIR-RENDER-STALE-MARK#stale-is-not-a-fifth-colour — statuses keep their colours;
+        staleness is a separate visual channel (desaturation plus a hatched overlay).
+
+        Expected: the same bytes viewed fresh (+6 h) and stale (+50 h) give every cell the
+        same status, fill attribute and computed fill; the stale view adds the separate
+        channel — the picture's filter desaturates and the hatch overlay is rendered."""
+        fresh, stale, state = _fresh_and_stale(page, served)
+
+        assert fresh and stale == fresh, "stale view recoloured or moved a cell"
+        assert "saturate" in state["svgFilter"], f"no desaturation: {state['svgFilter']}"
+        assert state["overlayDisplay"] != "none", "no hatched overlay"
+
+    @rule("CIR-RENDER-STALE-MARK")
     def test_stale_marks_whole_picture(self, page: Page, served: str) -> None:
         """CIR-RENDER-STALE-MARK#stale-marks-whole-picture — `generated_at` past
         `stale_after_hours`: banner plus a page-wide stale treatment.
@@ -235,6 +289,7 @@ class TestStaleMark:
         assert cover["overlay"]["w"] > 0 and cover["overlay"]["h"] > 0, cover
         assert cover["uncovered"] == [], f"cells outside the overlay: {cover}"
 
+    @rule("CIR-RENDER-STALE-MARK")
     def test_stale_stated_in_words(self, page: Page, served: str) -> None:
         """CIR-RENDER-STALE-MARK#stale-stated-in-words — stale page: "built <n> hours ago"
         in text, printed and read aloud.
@@ -255,6 +310,7 @@ class TestStaleMark:
         text = " ".join(reader.pages[0].extract_text().split())
         assert "built 50 hours ago" in text, text[:400]
 
+    @rule("CIR-RENDER-STALE-MARK")
     def test_stale_banner_keeps_one_screen(self, page: Page, served: str) -> None:
         """CIR-RENDER-STALE-MARK#stale-marks-whole-picture under
         CIR-RENDER-ONE-SCREEN#one-screen-reference — the banner lands inside the #app

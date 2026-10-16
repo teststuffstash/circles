@@ -7,7 +7,9 @@ readable for colourblind readers and on greyscale print. Status *semantics* live
 
 **World: alex** — every table on this page states behavior against the fixture person.
 
-## CIR-RENDER-PALETTE — the four fills
+## CIR-RENDER-PALETTE
+
+**— the four fills**
 
 | status | word | fill | approx. relative luminance |
 |---|---|---|---|
@@ -58,21 +60,15 @@ the ladder and contrast matrix — every constraint above re-proved per theme �
 whose stated exposure is a glance and a printout. If phone-first evening reading becomes real,
 dark mode lands as a new requirement with its own palette rows, not as an untested media query.
 
-<details class="evidence-block">
-<summary>Evidence: 2 test case(s) — alex</summary>
+<details markdown="1"><summary>Evidence — latest run</summary>
 
-**Requirement:** CIR-RENDER-PALETTE — **World:** alex
-
-| Case ID | Status | Detail |
-|---------|--------|--------|
-| `palette-exact-fills` | PASS | — |
-| `palette-label-contrast` | PASS | — |
-
-[View full report](../../specs-site/evidence)
+--8<-- "CIR-RENDER-PALETTE.md"
 
 </details>
 
-## CIR-RENDER-GREY-VISIBLE — the honest grey
+## CIR-RENDER-GREY-VISIBLE
+
+**— the honest grey**
 
 ⚪ is a first-class status. The unmonitored surface must be **readable at a glance** — never
 hidden, never defaulted to green, never visually "off": no reduced opacity, no dashed ghost
@@ -86,21 +82,15 @@ styling that reads as decoration. A fully grey ring renders as a solid grey band
 | grey-surface-proportion | the fixture's `self/exercise` item | the grey arc occupies its full share of the ring — its size is its honesty |
 | grey-reason-distinguishable | one `by-choice` cell and one tooling-caused (`by-failure` / `not-evaluated`) cell | chosen silence and tooling-caused grey are distinguishable without hovering via the text alternative (a11y-table Detail cell text differs per reason) and the separated summary counts ([`CIR-DATA-GREY-REASON`](../data/status-resolution.md)) |
 
-<details class="evidence-block">
-<summary>Evidence: 2 test case(s) — alex</summary>
+<details markdown="1"><summary>Evidence — latest run</summary>
 
-**Requirement:** CIR-RENDER-GREY-VISIBLE — **World:** alex
-
-| Case ID | Status | Detail |
-|---------|--------|--------|
-| `grey-reason-distinguishable` | PASS | — |
-| `grey-surface-proportion` | PASS | — |
-
-[View full report](../../specs-site/evidence)
+--8<-- "CIR-RENDER-GREY-VISIBLE.md"
 
 </details>
 
-## CIR-RENDER-STATUS-ENCODING — status is never colour alone
+## CIR-RENDER-STATUS-ENCODING
+
+**— status is never colour alone**
 
 Everywhere a status is conveyed, its **word** is available without colour perception: the legend
 pairs each fill with its word, the detail line includes it, each cell's accessible name includes
@@ -113,21 +103,15 @@ it, and the text alternative lists every cell with it — and prints.
 | no-color-only-cells | whole-page audit | no status appears as colour without a reachable word form |
 | legible-with-fills-stripped | render forced to `print-color-adjust: economy` | statuses still readable from outlines and the text alternative |
 
-<details class="evidence-block">
-<summary>Evidence: 2 test case(s) — alex</summary>
+<details markdown="1"><summary>Evidence — latest run</summary>
 
-**Requirement:** CIR-RENDER-STATUS-ENCODING — **World:** alex
-
-| Case ID | Status | Detail |
-|---------|--------|--------|
-| `status-word-in-a11y-name` | PASS | — |
-| `status-word-in-detail-line` | PASS | — |
-
-[View full report](../../specs-site/evidence)
+--8<-- "CIR-RENDER-STATUS-ENCODING.md"
 
 </details>
 
-## CIR-RENDER-LEGEND — the key
+## CIR-RENDER-LEGEND
+
+**— the key**
 
 The legend maps all four fills to their words — `ok`, `attention`, `act`, `unmonitored`,
 lowercase — present **at all times** (never behind a hover) on screen and on the A4 print. All
@@ -140,21 +124,15 @@ language, not the current census.
 | legend-words | legend text | exactly `ok` / `attention` / `act` / `unmonitored` |
 | legend-on-print | browser print | present on the A4 page |
 
-<details class="evidence-block">
-<summary>Evidence: 2 test case(s) — alex</summary>
+<details markdown="1"><summary>Evidence — latest run</summary>
 
-**Requirement:** CIR-RENDER-LEGEND — **World:** alex
-
-| Case ID | Status | Detail |
-|---------|--------|--------|
-| `legend-all-four` | PASS | — |
-| `legend-words` | PASS | — |
-
-[View full report](../../specs-site/evidence)
+--8<-- "CIR-RENDER-LEGEND.md"
 
 </details>
 
-## CIR-RENDER-PRINT-COLOR — backgrounds must be forced on
+## CIR-RENDER-PRINT-COLOR
+
+**— backgrounds must be forced on**
 
 Browsers default to `print-color-adjust: economy`: background colours and images are omitted
 unless the user ticks "background graphics" in the print dialog. For this page that default
@@ -168,21 +146,15 @@ if that is ignored.
 | print-legible-with-fills-stripped | forced `economy` render | statuses still readable from outlines and the text alternative |
 | print-stylesheet-is-inline | built page | inline, no separate stylesheet fetch ([`CIR-RENDER-NO-EGRESS`](layout.md)) |
 
-<details class="evidence-block">
-<summary>Evidence: 2 test case(s) — alex</summary>
+<details markdown="1"><summary>Evidence — latest run</summary>
 
-**Requirement:** CIR-RENDER-PRINT-COLOR — **World:** alex
-
-| Case ID | Status | Detail |
-|---------|--------|--------|
-| `print-fills-without-user-settings` | PASS | — |
-| `print-stylesheet-is-inline` | PASS | — |
-
-[View full report](../../specs-site/evidence)
+--8<-- "CIR-RENDER-PRINT-COLOR.md"
 
 </details>
 
-## CIR-RENDER-STALE-MARK — showing that the lights are history
+## CIR-RENDER-STALE-MARK
+
+**— showing that the lights are history**
 
 | row id | inputs | expected |
 |---|---|---|
@@ -198,9 +170,15 @@ banner above it. **Ruled: (a)**, with (c) reserved for an extreme threshold if o
 declared. (b) risks being ignored, which defeats the point — a stale page that still looks
 healthy is the product's own dangerous-green.
 
-_Evidence: none yet — unverified._
+<details markdown="1"><summary>Evidence — latest run</summary>
 
-## CIR-RENDER-A11Y-TABLE — the accessible equivalent
+--8<-- "CIR-RENDER-STALE-MARK.md"
+
+</details>
+
+## CIR-RENDER-A11Y-TABLE
+
+**— the accessible equivalent**
 
 One table, generated from the same artifact, listing every item with ring, label, status word,
 guardrail, data date and any warning. It is the screen-reader path, the no-JS path, the print
@@ -219,18 +197,9 @@ rendered.
 | a11y-table-reachable-by-screen-reader | accessibility tree | reachable without expanding the disclosure |
 | sunburst-not-read-arc-by-arc | any page | the picture is labelled as an image with a text summary; the table is the readable path |
 
-<details class="evidence-block">
-<summary>Evidence: 3 test case(s) — alex</summary>
+<details markdown="1"><summary>Evidence — latest run</summary>
 
-**Requirement:** CIR-RENDER-A11Y-TABLE — **World:** alex
-
-| Case ID | Status | Detail |
-|---------|--------|--------|
-| `a11y-table-complete` | PASS | — |
-| `a11y-table-states-status-in-words` | PASS | — |
-| `a11y-table-without-js` | PASS | — |
-
-[View full report](../../specs-site/evidence)
+--8<-- "CIR-RENDER-A11Y-TABLE.md"
 
 </details>
 

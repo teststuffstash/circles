@@ -11,8 +11,11 @@ import shutil
 from pathlib import Path
 from typing import Callable
 
+import allure
 import pytest
 import yaml
+
+from rules import case_title
 
 FIXTURES = Path(__file__).resolve().parent.parent / "fixtures"
 ALEX_DIR = FIXTURES / "alex"
@@ -62,3 +65,20 @@ def alex_copy(tmp_path: Path) -> AlexCopy:
         return config_path
 
     return make
+
+
+
+@pytest.hookimpl(tryfirst=True)
+def pytest_runtest_call(item: pytest.Item) -> None:
+    """Title a ``@rule``-labelled case with the spec row it cites (tests/rules.py ``case_title``),
+    so its evidence row joins the spec table's ``row id`` column. Unlabelled tests keep their name.
+
+    At CALL time, not in a fixture: allure-pytest re-derives the result's name when setup ends."""
+    marker = item.get_closest_marker("rule")
+    if marker is None:
+        return
+    callspec = getattr(item, "callspec", None)
+    row = case_title(marker.args[0], callspec.id if callspec else None,
+                     getattr(getattr(item, "function", None), "__doc__", None))
+    if row:
+        allure.dynamic.title(row)

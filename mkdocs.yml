@@ -32,3 +32,10 @@ markdown_extensions:
   - md_in_html
   - toc:
       permalink: true
+  # Evidence transclusion: a rule's evidence block is `--8<-- "<RULE>.md"` inside a collapsed
+  # <details markdown="1">; scripts/evidence.sh writes the run's fragments to specs/evidence/
+  # (gitignored). A missing fragment renders as nothing — the rule reads visibly unverified,
+  # never a build failure (allure-behavior-snippets CONVENTIONS § Evidence blocks on spec pages).
+  - pymdownx.snippets:
+      base_path: [specs/evidence]
+      check_paths: false

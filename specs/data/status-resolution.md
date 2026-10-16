@@ -22,7 +22,9 @@ The difference is whether a human can fix it *before* anyone looks at a wrong pa
 
 **World: alex** — every table on this page states behavior against the fixture person.
 
-## CIR-DATA-STATUS-RESOLUTION — the canonical table
+## CIR-DATA-STATUS-RESOLUTION
+
+**— the canonical table**
 
 | row id | inputs | expected |
 |---|---|---|
@@ -51,35 +53,15 @@ Note the deliberate asymmetry in the last rows: a bad word from a *command* is a
 failure (⚪ + warning), a bad word in the *config* is a config error. The config is checkable
 before publishing; the command's output is not.
 
-<details class="evidence-block">
-<summary>Evidence: 16 test case(s) — alex</summary>
+<details markdown="1"><summary>Evidence — latest run</summary>
 
-**Requirement:** CIR-DATA-STATUS-RESOLUTION — **World:** alex
-
-| Case ID | Status | Detail |
-|---------|--------|--------|
-| `adapter-not-evaluated-this-phase` | PASS | — |
-| `empty-status-block` | PASS | — |
-| `freshness-all-dates-future` | PASS | — |
-| `freshness-inside-window` | PASS | — |
-| `freshness-source-missing` | PASS | — |
-| `freshness-source-no-dates` | PASS | — |
-| `freshness-stale` | PASS | — |
-| `freshness-very-stale` | PASS | — |
-| `manual-declares-grey` | PASS | — |
-| `manual-green` | PASS | — |
-| `manual-red` | PASS | — |
-| `manual-unknown-word` | PASS | — |
-| `manual-yellow` | PASS | — |
-| `no-adapter-declared` | PASS | — |
-| `two-adapters-on-one-item` | PASS | — |
-| `unknown-adapter-key` | PASS | — |
-
-[View full report](../../specs-site/evidence)
+--8<-- "CIR-DATA-STATUS-RESOLUTION.md"
 
 </details>
 
-## CIR-DATA-CONFIG-ERROR-FAILS — config errors publish nothing
+## CIR-DATA-CONFIG-ERROR-FAILS
+
+**— config errors publish nothing**
 
 A config error aborts the bake with a non-zero exit and a message naming the file, the item's
 ref and the offending key. **No partial artifact is written and the previously published page
@@ -92,21 +74,15 @@ never read — dangerous-green.
 | published-page-survives-failed-bake | published page exists, new bake hits a config error | old page still served; it ages and eventually trips [`CIR-BAKE-STALE-SELF`](data-json.md) |
 | message-names-the-item | error inside `children/kit` | message contains `children/kit` |
 
-<details class="evidence-block">
-<summary>Evidence: 2 test case(s) — alex</summary>
+<details markdown="1"><summary>Evidence — latest run</summary>
 
-**Requirement:** CIR-DATA-CONFIG-ERROR-FAILS — **World:** alex
-
-| Case ID | Status | Detail |
-|---------|--------|--------|
-| `config-error-aborts-whole-bake` | PASS | — |
-| `message-names-the-item` | PASS | — |
-
-[View full report](../../specs-site/evidence)
+--8<-- "CIR-DATA-CONFIG-ERROR-FAILS.md"
 
 </details>
 
-## CIR-DATA-FAILURE-IS-GREY — the failure algebra
+## CIR-DATA-FAILURE-IS-GREY
+
+**— the failure algebra**
 
 Every adapter-runtime failure mode — missing source, unreadable file, zero parseable dates,
 command non-zero exit, command timeout, unparseable command output, future-only dates —
@@ -126,23 +102,15 @@ The last row is the one implementations get wrong. Carrying yesterday's light fo
 most attractive dangerous-green there is: the page looks healthy for weeks while the tooling
 rots. Yesterday's answer is available in yesterday's artifact; it is not a status today.
 
-<details class="evidence-block">
-<summary>Evidence: 4 test case(s) — alex</summary>
+<details markdown="1"><summary>Evidence — latest run</summary>
 
-**Requirement:** CIR-DATA-FAILURE-IS-GREY — **World:** alex
-
-| Case ID | Status | Detail |
-|---------|--------|--------|
-| `failure-never-green` | PASS | — |
-| `failure-never-red` | PASS | — |
-| `unreadable-source-is-grey` | PASS | — |
-| `warning-names-item` | PASS | — |
-
-[View full report](../../specs-site/evidence)
+--8<-- "CIR-DATA-FAILURE-IS-GREY.md"
 
 </details>
 
-## CIR-DATA-GREY-REASON — one grey light, three reasons
+## CIR-DATA-GREY-REASON
+
+**— one grey light, three reasons**
 
 ⚪ has three roads, and conflating them hides broken tooling behind deliberate silence — or
 dresses a phase boundary up as a failure. The light is the same (the glossary fixes four
@@ -192,21 +160,15 @@ following segment. **Ruled: (b).** The reader matches the detail line against th
 the glossary's one-definition-no-synonyms rule applies with extra force to strings a reader must
 visually join.
 
-<details class="evidence-block">
-<summary>Evidence: 2 test case(s) — alex</summary>
+<details markdown="1"><summary>Evidence — latest run</summary>
 
-**Requirement:** CIR-DATA-GREY-REASON — **World:** alex
-
-| Case ID | Status | Detail |
-|---------|--------|--------|
-| `unmonitored-by-choice` | PASS | — |
-| `unmonitored-not-evaluated` | PASS | — |
-
-[View full report](../../specs-site/evidence)
+--8<-- "CIR-DATA-GREY-REASON.md"
 
 </details>
 
-## CIR-DATA-STATUS-MANUAL-VALUES — the manual adapter's vocabulary
+## CIR-DATA-STATUS-MANUAL-VALUES
+
+**— the manual adapter's vocabulary**
 
 `manual:` accepts exactly `green`, `yellow`, `red` (lowercase). **There is no `manual: grey`.**
 The way to be ⚪ is to omit `status:` entirely — grey means "unmonitored", and a hand-set grey
@@ -218,21 +180,15 @@ deliberately leaves unmonitored declares no adapter, and its grey is then true.
 | manual-lowercase-only | `manual: Green` | config error |
 | manual-grey-rejected | `manual: grey` | config error, pointing at omitting `status:` |
 
-<details class="evidence-block">
-<summary>Evidence: 2 test case(s) — alex</summary>
+<details markdown="1"><summary>Evidence — latest run</summary>
 
-**Requirement:** CIR-DATA-STATUS-MANUAL-VALUES — **World:** alex
-
-| Case ID | Status | Detail |
-|---------|--------|--------|
-| `manual-grey-rejected` | PASS | — |
-| `manual-lowercase-only` | PASS | — |
-
-[View full report](../../specs-site/evidence)
+--8<-- "CIR-DATA-STATUS-MANUAL-VALUES.md"
 
 </details>
 
-## CIR-DATA-NO-AGGREGATION — no roll-up, ever
+## CIR-DATA-NO-AGGREGATION
+
+**— no roll-up, ever**
 
 Statuses exist **per item only**. The page computes and displays no ring-level or page-level
 aggregate: no "worst-of" ring tint, no overall score, no centre summary light. "The innermost
@@ -249,21 +205,15 @@ area, which is the opposite of what the page is for.
 | fully-grey-ring | a ring whose items all lack adapters | the whole band renders ⚪; no special treatment |
 | centre-carries-no-status | any config | the centre disc carries name, stamp and counts, never a light (⚖-R9) |
 
-<details class="evidence-block">
-<summary>Evidence: 2 test case(s) — alex</summary>
+<details markdown="1"><summary>Evidence — latest run</summary>
 
-**Requirement:** CIR-DATA-NO-AGGREGATION — **World:** alex
-
-| Case ID | Status | Detail |
-|---------|--------|--------|
-| `centre-carries-no-status` | PASS | — |
-| `inner-red-outer-untouched` | PASS | — |
-
-[View full report](../../specs-site/evidence)
+--8<-- "CIR-DATA-NO-AGGREGATION.md"
 
 </details>
 
-## CIR-DATA-RESOLUTION-TIME — statuses resolve at bake time only
+## CIR-DATA-RESOLUTION-TIME
+
+**— statuses resolve at bake time only**
 
 Statuses are resolved **when the bake runs** and frozen into the artifact. The page is a pure
 renderer of baked verdicts: no adapter code, no date math, no re-evaluation on load.
@@ -274,22 +224,15 @@ renderer of baked verdicts: no adapter code, no date math, no re-evaluation on l
 | p0-manual-roundtrip | P0 bake over a `manual:`-only config | statuses pass through unchanged into the artifact |
 | one-reference-date-per-bake | two freshness items in one bake | both age against the same reference date (`CIR-ADAPT-REFERENCE-DATE`) |
 
-<details class="evidence-block">
-<summary>Evidence: 3 test case(s) — alex</summary>
+<details markdown="1"><summary>Evidence — latest run</summary>
 
-**Requirement:** CIR-DATA-RESOLUTION-TIME — **World:** alex
-
-| Case ID | Status | Detail |
-|---------|--------|--------|
-| `one-reference-date-per-bake` | PASS | — |
-| `p0-manual-roundtrip` | PASS | — |
-| `page-never-reevaluates` | PASS | — |
-
-[View full report](../../specs-site/evidence)
+--8<-- "CIR-DATA-RESOLUTION-TIME.md"
 
 </details>
 
-## CIR-DATA-DETAIL-LINE — what hover shows
+## CIR-DATA-DETAIL-LINE
+
+**— what hover shows**
 
 Every item resolves a detail line: the guardrail (if any), the status word, the last-data date
 (if the adapter has one), the note (if any), and the failure reason (if any). Order is fixed so
@@ -304,18 +247,8 @@ carried as one string (⚖-R20), so print and no-JS paths render it without comp
 | failure-reason-is-shown | command timed out | line ends with the reason, not a stack trace ([`CIR-BAKE-EXPOSURE`](data-json.md)) |
 | detail-line-is-plain-text | any item | no markup; the same string serves hover, the accessible table, and print |
 
-<details class="evidence-block">
-<summary>Evidence: 4 test case(s) — alex</summary>
+<details markdown="1"><summary>Evidence — latest run</summary>
 
-**Requirement:** CIR-DATA-DETAIL-LINE — **World:** alex
-
-| Case ID | Status | Detail |
-|---------|--------|--------|
-| `detail-line-is-plain-text` | PASS | — |
-| `full-detail-line` | PASS | — |
-| `manual-item-has-no-data-date` | PASS | — |
-| `no-guardrail` | PASS | — |
-
-[View full report](../../specs-site/evidence)
+--8<-- "CIR-DATA-DETAIL-LINE.md"
 
 </details>

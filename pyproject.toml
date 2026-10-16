@@ -32,5 +32,6 @@ testpaths = ["tests"]
 # `scripts/test-browser.sh` overrides this with `-o addopts=` when it targets tests/browser.
 addopts = "--ignore=tests/browser"
 markers = [
+    "rule: the spec rule a test proves — applied only via tests/rules.py `rule()` (story label = rule ID)",
     "browser: system-tier browser evidence (CIR-PROC-BROWSER-EVIDENCE, ⚖-R48) — run via `devbox run test-browser`",
 ]

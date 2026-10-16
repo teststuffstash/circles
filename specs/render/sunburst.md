@@ -8,7 +8,9 @@ artifact ([../data/data-json.md](../data/data-json.md)).
 
 **World: alex** — every table on this page states behavior against the fixture person.
 
-## CIR-RENDER-RING-ORDER — rings read inside-out
+## CIR-RENDER-RING-ORDER
+
+**— rings read inside-out**
 
 The artifact's ring array order **is** the geometry order: `rings[0]` is the innermost ring,
 adjacent to the centre disc. Triage reads inward-first, so no rendering, sorting or layout step
@@ -19,20 +21,15 @@ may reorder rings.
 | ring-order-innermost-first | rings `[self, partner, children, wider]` | `self` is the innermost rendered ring, `wider` the outermost |
 | ring-order-never-resorted | rings whose labels sort differently alphabetically | rendered order still follows the array, never alphabetical or status sorting |
 
-<details class="evidence-block">
-<summary>Evidence: 1 test case(s) — alex</summary>
+<details markdown="1"><summary>Evidence — latest run</summary>
 
-**Requirement:** CIR-RENDER-RING-ORDER — **World:** alex
-
-| Case ID | Status | Detail |
-|---------|--------|--------|
-| `ring-order-innermost-first` | PASS | — |
-
-[View full report](../../specs-site/evidence)
+--8<-- "CIR-RENDER-RING-ORDER.md"
 
 </details>
 
-## CIR-RENDER-RING-PARTITION — rings are independent, not a hierarchy
+## CIR-RENDER-RING-PARTITION
+
+**— rings are independent, not a hierarchy**
 
 A classic sunburst is a hierarchy: each ring subdivides its parent's arc, so an outer segment is
 angularly contained by its parent. **circles is not that.** *Self*, *Partner*, *Children* and
@@ -63,21 +60,15 @@ ring), and the triage doctrine is per-ring, not per-branch. Nesting would also f
 emptiness wherever an inner item has no outer children. Recorded as an ⚖ rather than assumed,
 because "sunburst" usually implies (b) — this entry is where to overrule.
 
-<details class="evidence-block">
-<summary>Evidence: 2 test case(s) — alex</summary>
+<details markdown="1"><summary>Evidence — latest run</summary>
 
-**Requirement:** CIR-RENDER-RING-PARTITION — **World:** alex
-
-| Case ID | Status | Detail |
-|---------|--------|--------|
-| `partition-full-circle-per-ring` | PASS | — |
-| `partition-ring-boundaries-visible` | PASS | — |
-
-[View full report](../../specs-site/evidence)
+--8<-- "CIR-RENDER-RING-PARTITION.md"
 
 </details>
 
-## CIR-RENDER-ARC-SHARE — arc angles from shares
+## CIR-RENDER-ARC-SHARE
+
+**— arc angles from shares**
 
 Within a ring, an item's arc angle is `360° × share ÷ (Σ shares of the ring's items)`
 ([`CIR-DATA-SHARE`](../data/circles-yaml.md)). Cells of one ring are separated by a uniform
@@ -91,22 +82,15 @@ visible notch.
 | arc-share-mixed-weights | siblings with shares 2, 1, 1 | arcs ≈ 180° / 90° / 90° |
 | arc-gap-uniform | any ring | all inter-cell gaps in the ring equal |
 
-<details class="evidence-block">
-<summary>Evidence: 2 test case(s) — alex</summary>
+<details markdown="1"><summary>Evidence — latest run</summary>
 
-**Requirement:** CIR-RENDER-ARC-SHARE — **World:** alex
-
-| Case ID | Status | Detail |
-|---------|--------|--------|
-| `arc-share-half-arcs` | PASS | — |
-| `arc-share-single-item-ring` | PASS | — |
-| `arc-share-mixed-weights` | PASS | — |
-
-[View full report](../../specs-site/evidence)
+--8<-- "CIR-RENDER-ARC-SHARE.md"
 
 </details>
 
-## CIR-RENDER-SIBLING-ORDER — where siblings start
+## CIR-RENDER-SIBLING-ORDER
+
+**— where siblings start**
 
 The first item of each ring's array starts at **12 o'clock**; siblings proceed **clockwise** in
 array order. Every ring starts its own first sibling at 12 o'clock — a consequence of the
@@ -141,20 +125,15 @@ order is what the person wrote and changes only when they change it, so spatial 
 status changes — a cell going 🔴 stays where it was. (c) is rejected outright: a page whose
 geometry reshuffles as statuses change cannot be read "at a glance" day over day.
 
-<details class="evidence-block">
-<summary>Evidence: 1 test case(s) — alex</summary>
+<details markdown="1"><summary>Evidence — latest run</summary>
 
-**Requirement:** CIR-RENDER-SIBLING-ORDER — **World:** alex
-
-| Case ID | Status | Detail |
-|---------|--------|--------|
-| `sibling-order-clockwise-from-noon` | PASS | — |
-
-[View full report](../../specs-site/evidence)
+--8<-- "CIR-RENDER-SIBLING-ORDER.md"
 
 </details>
 
-## CIR-RENDER-RING-THICKNESS — the most important ring is the smallest
+## CIR-RENDER-RING-THICKNESS
+
+**— the most important ring is the smallest**
 
 Inside-out ordering puts the ring that matters most at the smallest radius, where arc length is
 shortest and labels fit worst. Radial thickness is the only lever that can compensate.
@@ -176,22 +155,15 @@ size it is the first thing to become unreadable. (c) buys legibility at the cost
 one-screen budget. Nobody else in the fan-out raised this; it has a real consequence at print
 size, which is why it is recorded rather than left to the implementer.
 
-<details class="evidence-block">
-<summary>Evidence: 3 test case(s) — alex</summary>
+<details markdown="1"><summary>Evidence — latest run</summary>
 
-**Requirement:** CIR-RENDER-RING-THICKNESS — **World:** alex
-
-| Case ID | Status | Detail |
-|---------|--------|--------|
-| `centre-disc-holds-identity` | PASS | — |
-| `centre-hole-is-not-zero` | PASS | — |
-| `thickness-non-increasing-outward` | PASS | — |
-
-[View full report](../../specs-site/evidence)
+--8<-- "CIR-RENDER-RING-THICKNESS.md"
 
 </details>
 
-## CIR-RENDER-MIN-ARC — no unreadable slivers
+## CIR-RENDER-MIN-ARC
+
+**— no unreadable slivers**
 
 A sliver that cannot be seen, hovered or tapped is an item the person believes is monitored and
 never actually looks at — dangerous-green by geometry rather than by data.
@@ -205,23 +177,15 @@ never actually looks at — dangerous-green by geometry rather than by data.
 | overflow-no-negative-arcs | 200 items in one ring (total_deg = 0 after clamp) | no negative/degenerate arc angles; capacity warning count is non-negative |
 | min-arc-adjustment-is-disclosed | an item whose arc was widened to the minimum | the detail line states the declared share, so geometry never silently misreports a weight |
 
-<details class="evidence-block">
-<summary>Evidence: 4 test case(s) — alex</summary>
+<details markdown="1"><summary>Evidence — latest run</summary>
 
-**Requirement:** CIR-RENDER-MIN-ARC — **World:** alex
-
-| Case ID | Status | Detail |
-|---------|--------|--------|
-| `min-arc-exceeded-by-ring` | PASS | — |
-| `min-arc-tiny-share-still-drawn` | PASS | — |
-| `mixed-floored-natural-overflow-capped` | PASS | — |
-| `overflow-no-negative-arcs` | PASS | — |
-
-[View full report](../../specs-site/evidence)
+--8<-- "CIR-RENDER-MIN-ARC.md"
 
 </details>
 
-## CIR-RENDER-LABELS — labels fit, truncate, or step aside
+## CIR-RENDER-LABELS
+
+**— labels fit, truncate, or step aside**
 
 Item labels render **inside their cell's arc**, centred on the arc's mid-angle. A label never
 overflows its cell. Ring labels never appear on the chart — the ring key names them
@@ -235,21 +199,15 @@ overflows its cell. Ring labels never appear on the chart — the ring key names
 | label-full-text-always-reachable | any elided or omitted label | full text present in the detail line and the text alternative |
 | label-glyphs-passthrough | label `◀ Nova` | glyph rendered as-is |
 
-<details class="evidence-block">
-<summary>Evidence: 2 test case(s) — alex</summary>
+<details markdown="1"><summary>Evidence — latest run</summary>
 
-**Requirement:** CIR-RENDER-LABELS — **World:** alex
-
-| Case ID | Status | Detail |
-|---------|--------|--------|
-| `label-glyphs-passthrough` | PASS | — |
-| `label-inside-arc` | PASS | — |
-
-[View full report](../../specs-site/evidence)
+--8<-- "CIR-RENDER-LABELS.md"
 
 </details>
 
-## CIR-RENDER-CAPACITY — how much the page holds
+## CIR-RENDER-CAPACITY
+
+**— how much the page holds**
 
 One screen must hold the whole picture, but config is unbounded — so capacity is pinned as a
 **legibility envelope**: at the reference viewport, configs within **≤ 6 rings and ≤ 8 items per
@@ -274,25 +232,15 @@ ninth friend, and silence hides a real product signal. The envelope numbers are 
 print constraint (see [layout.md](layout.md)). If real use outgrows them, the answer is a spec
 change, not a bigger default.
 
-<details class="evidence-block">
-<summary>Evidence: 6 test case(s) — alex</summary>
+<details markdown="1"><summary>Evidence — latest run</summary>
 
-**Requirement:** CIR-RENDER-CAPACITY — **World:** alex
-
-| Case ID | Status | Detail |
-|---------|--------|--------|
-| `capacity-at-limit` | PASS | — |
-| `capacity-empty-ring-band` | PASS | — |
-| `capacity-exceeded-item-count` | PASS | — |
-| `capacity-exceeded-ring-count` | PASS | — |
-| `capacity-inside-envelope` | PASS | — |
-| `capacity-minimum-page` | PASS | — |
-
-[View full report](../../specs-site/evidence)
+--8<-- "CIR-RENDER-CAPACITY.md"
 
 </details>
 
-## CIR-RENDER-SUMMARY — the count that survives everything
+## CIR-RENDER-SUMMARY
+
+**— the count that survives everything**
 
 The page carries a one-line summary of its own statuses — greens, yellows, reds, and the grey
 reasons counted separately: unmonitored by choice, adapter failing, not evaluated — taken
@@ -315,18 +263,9 @@ traced, tested or acted on. Worst-wins in particular trains the reader to ignore
 red area — the opposite of what the page is for. Counts give the same at-a-glance signal without
 inventing a verdict.
 
-<details class="evidence-block">
-<summary>Evidence: 3 test case(s) — alex</summary>
+<details markdown="1"><summary>Evidence — latest run</summary>
 
-**Requirement:** CIR-RENDER-SUMMARY — **World:** alex
-
-| Case ID | Status | Detail |
-|---------|--------|--------|
-| `summary-is-not-a-rollup` | PASS | — |
-| `summary-matches-the-picture` | PASS | — |
-| `summary-separates-grey-reasons` | PASS | — |
-
-[View full report](../../specs-site/evidence)
+--8<-- "CIR-RENDER-SUMMARY.md"
 
 </details>
 

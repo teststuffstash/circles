@@ -22,6 +22,8 @@ from bake.emit import write_artifact
 from bake.render import add_capacity_warnings, render_page
 from bake.resolve import resolve
 
+from rules import rule
+
 FIXTURES = Path(__file__).resolve().parent.parent / "fixtures"
 ALEX_YAML = FIXTURES / "alex" / "circles.yaml"
 CLICK_TABLE = FIXTURES / "click-destinations.yaml"
@@ -133,6 +135,7 @@ def _cell_open_tag(html_text: str, full_id: str) -> tuple[str, str]:
 class TestBakeSelfContained:
     """CIR-BAKE-SELF-CONTAINED — one bake run yields both artifacts."""
 
+    @rule("CIR-BAKE-SELF-CONTAINED")
     def test_inlined_data_equals_file(self, tmp_path: Path) -> None:
         """CIR-BAKE-SELF-CONTAINED#inlined-data-equals-the-file —
         the inlined JSON in index.html is identical to data.json."""
@@ -161,6 +164,7 @@ class TestBakeSelfContained:
 
         assert inlined == file_data, "inlined data does not match data.json"
 
+    @rule("CIR-BAKE-SELF-CONTAINED")
     def test_page_renders_with_no_network(self) -> None:
         """CIR-BAKE-SELF-CONTAINED#page-renders-with-no-network —
         the page contains zero external resource references."""
@@ -175,6 +179,7 @@ class TestBakeSelfContained:
         # No @import
         assert "@import" not in html
 
+    @rule("CIR-BAKE-SELF-CONTAINED")
     def test_page_has_both_artifacts(self, tmp_path: Path) -> None:
         """CIR-BAKE-SELF-CONTAINED#page-has-both-artifacts —
         the page contains both the SVG chart and the data script."""
@@ -261,6 +266,7 @@ class TestInlinedJsonScriptEscape:
 class TestRenderRingOrder:
     """CIR-RENDER-RING-ORDER — rings read inside-out."""
 
+    @rule("CIR-RENDER-RING-ORDER")
     def test_ring_order_innermost_first(self) -> None:
         """CIR-RENDER-RING-ORDER#ring-order-innermost-first —
         self is innermost, wider is outermost."""
@@ -287,6 +293,7 @@ class TestRenderRingOrder:
 class TestRenderPalette:
     """CIR-RENDER-PALETTE — the four fills."""
 
+    @rule("CIR-RENDER-PALETTE")
     def test_palette_exact_fills(self) -> None:
         """CIR-RENDER-PALETTE#palette-exact-fills —
         the four fills are exactly the pinned hexes."""
@@ -296,6 +303,7 @@ class TestRenderPalette:
         assert "#B22222" in html  # red
         assert "#9E9E9E" in html  # grey
 
+    @rule("CIR-RENDER-PALETTE")
     def test_palette_label_contrast(self) -> None:
         """CIR-RENDER-PALETTE#palette-label-contrast —
         labels use correct contrasting colours."""
@@ -333,6 +341,7 @@ class TestRenderPalette:
 class TestRenderLegend:
     """CIR-RENDER-LEGEND — the key."""
 
+    @rule("CIR-RENDER-LEGEND")
     def test_legend_all_four(self) -> None:
         """CIR-RENDER-LEGEND#legend-all-four —
         the legend shows all four entries even when not all are used."""
@@ -342,6 +351,7 @@ class TestRenderLegend:
         assert "act" in html
         assert "unmonitored" in html
 
+    @rule("CIR-RENDER-LEGEND")
     def test_legend_words(self) -> None:
         """CIR-RENDER-LEGEND#legend-words —
         legend text uses the exact display words."""
@@ -363,12 +373,14 @@ class TestRenderLegend:
 class TestRenderGeneratedAt:
     """CIR-RENDER-GENERATED-AT — the honesty stamp."""
 
+    @rule("CIR-RENDER-GENERATED-AT")
     def test_stamp_verbatim(self) -> None:
         """CIR-RENDER-GENERATED-AT#stamp-verbatim —
         the generated_at string appears verbatim on the page."""
         html = _render_fixture()
         assert "2026-08-03T02:00:00Z" in html
 
+    @rule("CIR-RENDER-GENERATED-AT")
     def test_stamp_on_screen(self) -> None:
         """CIR-RENDER-GENERATED-AT#stamp-verbatim —
         the stamp is visible in the chrome with the verbatim string."""
@@ -384,6 +396,7 @@ class TestRenderGeneratedAt:
 class TestRenderNoEgress:
     """CIR-RENDER-NO-EGRESS — the page talks to nobody."""
 
+    @rule("CIR-RENDER-NO-EGRESS")
     def test_no_external_requests_at_runtime(self) -> None:
         """CIR-RENDER-NO-EGRESS#no-external-requests-at-runtime —
         no external URLs in the page (allow w3.org SVG namespace)."""
@@ -392,6 +405,7 @@ class TestRenderNoEgress:
         non_svg_urls = [u for u in urls if "w3.org" not in u]
         assert len(non_svg_urls) == 0, f"Found external URLs: {non_svg_urls}"
 
+    @rule("CIR-RENDER-NO-EGRESS")
     def test_no_third_party_origins(self) -> None:
         """CIR-RENDER-NO-EGRESS#no-third-party-origins-in-markup —
         no CDN, font, analytics or tile references."""
@@ -400,6 +414,7 @@ class TestRenderNoEgress:
         assert "cdn." not in html
         assert "analytics" not in html
 
+    @rule("CIR-RENDER-NO-EGRESS")
     def test_fonts_are_system(self) -> None:
         """CIR-RENDER-NO-EGRESS#fonts-are-system-or-inlined —
         no webfont fetch."""
@@ -407,6 +422,7 @@ class TestRenderNoEgress:
         assert "@font-face" not in html
         assert "font-family:" not in html or "system-ui" in html or "-apple-system" in html
 
+    @rule("CIR-RENDER-NO-EGRESS")
     def test_page_works_from_file_url(self) -> None:
         """CIR-RENDER-NO-EGRESS#page-works-from-file-url —
         the page is fully self-contained."""
@@ -423,6 +439,7 @@ class TestRenderNoEgress:
 class TestRenderAssetBudget:
     """CIR-RENDER-ASSET-BUDGET — small enough to be one file."""
 
+    @rule("CIR-RENDER-ASSET-BUDGET")
     def test_budget_built_page_is_small(self) -> None:
         """CIR-RENDER-ASSET-BUDGET#budget-built-page-is-small —
         the single index.html is within 250 KB budget."""
@@ -430,6 +447,7 @@ class TestRenderAssetBudget:
         size = len(html.encode("utf-8"))
         assert size <= 250_000, f"index.html is {size} bytes, exceeds 250 KB budget"
 
+    @rule("CIR-RENDER-ASSET-BUDGET")
     def test_budget_growth_is_linear(self) -> None:
         """CIR-RENDER-ASSET-BUDGET#budget-growth-is-linear —
         growth is linear in items, not in libraries."""
@@ -446,6 +464,7 @@ class TestRenderAssetBudget:
 class TestRenderNoJs:
     """CIR-RENDER-NO-JS — the page still says something."""
 
+    @rule("CIR-RENDER-NO-JS")
     def test_no_js_text_alternative_renders(self) -> None:
         """CIR-RENDER-NO-JS#no-js-text-alternative-renders —
         the a11y table is present in the HTML."""
@@ -454,6 +473,7 @@ class TestRenderNoJs:
         assert "<table>" in html
         assert "<th>Ring</th>" in html
 
+    @rule("CIR-RENDER-NO-JS")
     def test_no_js_is_not_blank(self) -> None:
         """CIR-RENDER-NO-JS#no-js-is-not-blank —
         the SVG chart is present without JS."""
@@ -461,6 +481,7 @@ class TestRenderNoJs:
         assert "<svg" in html
         assert "<path" in html  # arc paths are baked in
 
+    @rule("CIR-RENDER-NO-JS")
     def test_no_js_detail_lines_present(self) -> None:
         """CIR-RENDER-NO-JS#no-js-detail-lines-present —
         detail lines are in the a11y table."""
@@ -468,6 +489,7 @@ class TestRenderNoJs:
         assert "unmonitored" in html
         assert "not evaluated" in html
 
+    @rule("CIR-RENDER-NO-JS")
     def test_no_js_links_work(self, tmp_path: Path) -> None:
         """CIR-RENDER-NO-JS#no-js-links-work —
         configured links are plain anchors, so they navigate with scripting off.
@@ -502,6 +524,7 @@ class TestRenderNoJs:
 class TestRenderA11yTable:
     """CIR-RENDER-A11Y-TABLE — the accessible equivalent."""
 
+    @rule("CIR-RENDER-A11Y-TABLE")
     def test_a11y_table_complete(self) -> None:
         """CIR-RENDER-A11Y-TABLE#a11y-table-complete —
         every cell appears under its ring."""
@@ -516,6 +539,7 @@ class TestRenderA11yTable:
         assert "Friends" in html
         assert "Plants" in html
 
+    @rule("CIR-RENDER-A11Y-TABLE")
     def test_a11y_table_states_status_in_words(self) -> None:
         """CIR-RENDER-A11Y-TABLE#a11y-table-states-status-in-words —
         status words, not colour swatches alone."""
@@ -529,6 +553,7 @@ class TestRenderA11yTable:
         assert "act" in table_html
         assert "unmonitored" in table_html
 
+    @rule("CIR-RENDER-A11Y-TABLE")
     def test_a11y_table_without_js(self) -> None:
         """CIR-RENDER-A11Y-TABLE#a11y-table-without-js —
         the table renders as HTML, not JS-generated."""
@@ -545,6 +570,7 @@ class TestRenderA11yTable:
 class TestRenderChrome:
     """CIR-RENDER-CHROME — the page furniture."""
 
+    @rule("CIR-RENDER-CHROME")
     def test_chrome_ring_key_order(self) -> None:
         """CIR-RENDER-CHROME#chrome-ring-key-order —
         ring key lists rings inside-out."""
@@ -557,6 +583,7 @@ class TestRenderChrome:
         assert "Self" in items[0]
         assert "Wider" in items[-1]
 
+    @rule("CIR-RENDER-CHROME")
     def test_chrome_banner_hidden_when_clean(self) -> None:
         """CIR-RENDER-CHROME#chrome-banner-hidden-when-clean —
         no warnings banner when warnings is empty."""
@@ -585,6 +612,7 @@ class TestRenderChrome:
         finally:
             tmp_path.unlink()
 
+    @rule("CIR-RENDER-CHROME")
     def test_chrome_idle_detail_strip(self) -> None:
         """CIR-RENDER-CHROME#chrome-idle-detail-strip —
         idle text when nothing is hovered."""
@@ -599,6 +627,7 @@ class TestRenderChrome:
 class TestRenderStatusEncoding:
     """CIR-RENDER-STATUS-ENCODING — status is never colour alone."""
 
+    @rule("CIR-RENDER-STATUS-ENCODING")
     def test_status_word_in_detail_line(self) -> None:
         """CIR-RENDER-STATUS-ENCODING#status-word-in-detail-line —
         the detail line contains the status word."""
@@ -609,6 +638,7 @@ class TestRenderStatusEncoding:
         assert "act" in html
         assert "unmonitored" in html
 
+    @rule("CIR-RENDER-STATUS-ENCODING")
     def test_status_word_in_a11y_name(self) -> None:
         """CIR-RENDER-STATUS-ENCODING#status-word-in-a11y-name —
         cells have aria-labels with status words."""
@@ -624,6 +654,7 @@ class TestRenderStatusEncoding:
 class TestRenderGreyVisible:
     """CIR-RENDER-GREY-VISIBLE — the honest grey."""
 
+    @rule("CIR-RENDER-GREY-VISIBLE")
     def test_grey_reason_distinguishable(self) -> None:
         """CIR-RENDER-GREY-VISIBLE#grey-reason-distinguishable —
         by-choice and not-evaluated are distinguishable on the page via the
@@ -681,6 +712,7 @@ class TestRenderGreyVisible:
         assert has_not_eval_aria, \
             f"Expected a grey cell with aria-label containing 'not evaluated', got: {grey_cells}"
 
+    @rule("CIR-RENDER-GREY-VISIBLE")
     def test_grey_surface_proportion(self) -> None:
         """CIR-RENDER-GREY-VISIBLE#grey-surface-proportion —
         grey items occupy their full share."""
@@ -696,6 +728,7 @@ class TestRenderGreyVisible:
 class TestRenderHover:
     """CIR-RENDER-HOVER — the detail line."""
 
+    @rule("CIR-RENDER-HOVER")
     def test_hover_data_attributes(self) -> None:
         """CIR-RENDER-HOVER#hover-full-line —
         cells carry data-detail attributes."""
@@ -703,6 +736,7 @@ class TestRenderHover:
         assert "data-detail=" in html
         assert "data-label=" in html
 
+    @rule("CIR-RENDER-HOVER")
     def test_hover_leave_resets(self) -> None:
         """CIR-RENDER-HOVER#hover-leave-resets —
         the JS has mouseleave handler."""
@@ -718,12 +752,14 @@ class TestRenderHover:
 class TestRenderKeyboard:
     """CIR-RENDER-KEYBOARD — the whole page without a mouse."""
 
+    @rule("CIR-RENDER-KEYBOARD")
     def test_keyboard_tab_order(self) -> None:
         """CIR-RENDER-KEYBOARD#keyboard-tab-order —
         cells are focusable with tabindex."""
         html = _render_fixture()
         assert 'tabindex="0"' in html
 
+    @rule("CIR-RENDER-KEYBOARD")
     def test_keyboard_focus_shows_detail(self) -> None:
         """CIR-RENDER-KEYBOARD#keyboard-focus-shows-detail —
         focus event handler is present."""
@@ -731,12 +767,14 @@ class TestRenderKeyboard:
         assert "focus" in html
         assert "blur" in html
 
+    @rule("CIR-RENDER-KEYBOARD")
     def test_keyboard_focus_visible(self) -> None:
         """CIR-RENDER-KEYBOARD#keyboard-focus-visible —
         focus-visible styles are present."""
         html = _render_fixture()
         assert "focus-visible" in html
 
+    @rule("CIR-RENDER-KEYBOARD")
     def test_keyboard_accessible_name(self) -> None:
         """CIR-RENDER-KEYBOARD#keyboard-accessible-name —
         cells have aria-label."""
@@ -759,6 +797,7 @@ class TestRenderClick:
     no behaviour to assert. They are deferred with the rest of P2 (#35).
     """
 
+    @rule("CIR-RENDER-CLICK")
     @pytest.mark.parametrize(
         "row",
         _load_click_table()["rows"],
@@ -828,6 +867,7 @@ class TestRenderClick:
 class TestRenderSummary:
     """CIR-RENDER-SUMMARY — the count that survives everything."""
 
+    @rule("CIR-RENDER-SUMMARY")
     def test_summary_matches_the_picture(self) -> None:
         """CIR-RENDER-SUMMARY#summary-matches-the-picture —
         the centre disc shows summary counts."""
@@ -837,6 +877,7 @@ class TestRenderSummary:
         assert "1 attention" in html or "1" in html
         assert "1 act" in html or "1" in html
 
+    @rule("CIR-RENDER-SUMMARY")
     def test_summary_separates_grey_reasons(self) -> None:
         """CIR-RENDER-SUMMARY#summary-separates-grey-reasons —
         by-choice and not-evaluated are counted separately in the summary
@@ -874,6 +915,7 @@ class TestRenderSummary:
         assert "4 unmonitored" not in summary_text, \
             f"Summary should not lump grey reasons, got: {summary_text}"
 
+    @rule("CIR-RENDER-SUMMARY")
     def test_summary_is_not_a_rollup(self) -> None:
         """CIR-RENDER-SUMMARY#summary-is-not-a-rollup —
         no ring or page is assigned a colour."""
@@ -890,6 +932,7 @@ class TestRenderSummary:
 class TestRenderCapacity:
     """CIR-RENDER-CAPACITY — how much the page holds."""
 
+    @rule("CIR-RENDER-CAPACITY")
     def test_capacity_inside_envelope(self) -> None:
         """CIR-RENDER-CAPACITY#capacity-inside-envelope —
         the fixture (4 rings, ≤3 items/ring) renders without density warning."""
@@ -898,6 +941,7 @@ class TestRenderCapacity:
         assert "density" not in html.lower()
         assert "capacity" not in html.lower()
 
+    @rule("CIR-RENDER-CAPACITY")
     def test_capacity_minimum_page(self) -> None:
         """CIR-RENDER-CAPACITY#capacity-minimum-page —
         1 ring, 1 item renders as a full-circle band."""
@@ -925,6 +969,7 @@ class TestRenderCapacity:
         finally:
             tmp_path.unlink()
 
+    @rule("CIR-RENDER-CAPACITY")
     def test_capacity_at_limit(self) -> None:
         """CIR-RENDER-CAPACITY#capacity-at-limit —
         6 rings, 8 items in one ring renders legibly; no warning."""
@@ -960,6 +1005,7 @@ class TestRenderCapacity:
         finally:
             tmp_path.unlink()
 
+    @rule("CIR-RENDER-CAPACITY")
     def test_capacity_exceeded_ring_count(self) -> None:
         """CIR-RENDER-CAPACITY#capacity-exceeded-ring-count —
         7 rings triggers a build warning."""
@@ -989,6 +1035,7 @@ class TestRenderCapacity:
         finally:
             tmp_path.unlink()
 
+    @rule("CIR-RENDER-CAPACITY")
     def test_capacity_exceeded_item_count(self) -> None:
         """CIR-RENDER-CAPACITY#capacity-exceeded-item-count —
         9 items in one ring triggers a build warning naming the ring."""
@@ -1023,6 +1070,7 @@ class TestRenderCapacity:
         finally:
             tmp_path.unlink()
 
+    @rule("CIR-RENDER-MIN-ARC")
     def test_min_arc_exceeded_by_ring(self) -> None:
         """CIR-RENDER-MIN-ARC#min-arc-exceeded-by-ring —
         many items in one ring triggers a min-arc build warning AND every
@@ -1168,6 +1216,7 @@ class TestRenderCapacity:
 class TestRenderBootFailure:
     """CIR-RENDER-BOOT-FAILURE — failure is visible, never blank."""
 
+    @rule("CIR-RENDER-BOOT-FAILURE")
     def test_boot_failure_payload_absent(self) -> None:
         """CIR-RENDER-BOOT-FAILURE#boot-failure-payload-absent —
         the page handles missing payload gracefully (structural: the page always has a payload
@@ -1175,6 +1224,7 @@ class TestRenderBootFailure:
         html = _render_fixture()
         assert '<script id="artifact-data"' in html
 
+    @rule("CIR-RENDER-BOOT-FAILURE")
     def test_boot_failure_empty_rings(self) -> None:
         """CIR-RENDER-BOOT-FAILURE#boot-failure-empty-rings —
         empty rings render as grey bands, not a blank page."""
@@ -1201,111 +1251,6 @@ class TestRenderBootFailure:
             assert "#9E9E9E" in html  # grey fill for empty ring
         finally:
             tmp_path.unlink()
-
-
-# ===========================================================================
-# CIR-RENDER-ONE-SCREEN — no scrolling, ever (proxy check)
-# ===========================================================================
-
-class TestRenderOneScreen:
-    """CIR-RENDER-ONE-SCREEN — no scrolling, ever.
-
-    NOTE: This is a labelled proxy check only (CIR-PROC-BROWSER-EVIDENCE).
-    The real one-screen assertion requires a browser at 1280×800 viewport.
-    This test checks the structural properties that enable one-screen rendering.
-    """
-
-    def test_one_screen_proxy(self) -> None:
-        """CIR-RENDER-ONE-SCREEN#one-screen-reference —
-        PROXY CHECK ONLY: the page uses viewBox scaling and max-height constraints
-        that enable one-screen rendering. Real verification requires a browser
-        at 1280×800 viewport (CIR-PROC-BROWSER-EVIDENCE)."""
-        html = _render_fixture()
-        # The SVG uses viewBox for scaling
-        assert 'viewBox="0 0 800 800"' in html
-        # The app container uses max-height: 100vh
-        assert "max-height: 100vh" in html
-        # The chart area uses flex layout
-        assert "flex" in html
-
-    @pytest.mark.parametrize(
-        "viewport",
-        [
-            pytest.param((1920, 1080), id="CIR-RENDER-ONE-SCREEN#one-screen-larger-viewport"),
-            pytest.param((700, 500), id="CIR-RENDER-ONE-SCREEN#one-screen-smaller-viewport"),
-        ],
-    )
-    def test_one_screen_other_viewports_proxy(self, viewport: tuple[int, int]) -> None:
-        """CIR-RENDER-ONE-SCREEN — away from the reference viewport, the picture
-        scales rather than scrolls (⚖-R38).
-
-        PROXY CHECK ONLY (CIR-PROC-BROWSER-EVIDENCE): no browser measures a
-        scrollbar here. What is measurable from the built page is *why* no
-        scrollbar can appear at any size — the page is viewport-independent by
-        construction — so that is what this asserts. Real verification at
-        1920×1080 and 700×500 waits on the browser harness (deferred: #34).
-        """
-        width, height = viewport
-        html = _render_fixture()
-
-        # 1. The viewport never changes what is baked: one page serves every size,
-        #    which is what makes "scales, not scrolls" a property of the markup
-        #    rather than of a particular window.
-        assert html == _render_fixture(), "the render is not deterministic"
-        assert "@media (min-width" not in html and "@media (max-width" not in html, (
-            "a width breakpoint would make the composition viewport-conditional — "
-            "⚖-R38 rules scale-to-fit, not a responsive redesign"
-        )
-
-        # 2. The page box is exactly the viewport and clips rather than scrolls.
-        assert "height: 100vh" in html
-        assert "max-height: 100vh" in html
-        assert "overflow: hidden" in html
-
-        # 3. The chart is sized by its viewBox and capped at the space it is given,
-        #    so it scales both up (1920×1080) and down (700×500) with no intrinsic
-        #    pixel size to overflow.
-        assert 'viewBox="0 0 800 800"' in html
-        svg_open = re.search(r"<svg\b[^>]*>", html)
-        assert svg_open is not None
-        assert "width=" not in svg_open.group(0), (
-            f"a fixed svg width cannot scale to {width}×{height}: {svg_open.group(0)}"
-        )
-        assert "height=" not in svg_open.group(0), (
-            f"a fixed svg height cannot scale to {width}×{height}: {svg_open.group(0)}"
-        )
-        assert "#chart-area svg { max-width: 100%; max-height: 100%; }" in html
-
-    def test_one_screen_with_warnings_proxy(self) -> None:
-        """CIR-RENDER-ONE-SCREEN#one-screen-with-warnings —
-        with a warnings banner shown, the chart yields the space rather than the
-        page growing.
-
-        PROXY CHECK ONLY (CIR-PROC-BROWSER-EVIDENCE): the real assertion is "no
-        scrollbar at 1280×800 with the banner up", which needs a browser (#34).
-        The measurable proxy is that the banner lands inside the fixed-width,
-        independently-scrolling chrome column while the chart area stays the
-        flexible one — so banner height cannot extend the page box.
-        """
-        artifact = _resolve_fixture()
-        # Exactly 2 warnings, taken from the fixture's own (CIR-PROC-TEST-FIXTURES).
-        assert len(artifact["warnings"]) >= 2, "fixture should produce warnings to trim"
-        artifact = {**artifact, "warnings": artifact["warnings"][:2]}
-        html = render_page(artifact)
-
-        # The banner is shown, and says how many.
-        assert 'id="warnings"' in html
-        assert "2 warnings" in html
-
-        # It sits in the chrome column, which absorbs its own overflow …
-        chrome = html[html.index('<div id="chrome-panel">'):html.index('<details id="a11y-table">')]
-        assert 'id="warnings"' in chrome, "the banner must live in the chrome column"
-        assert "#chrome-panel { flex: 0 0 320px; overflow-y: auto;" in html
-
-        # … while the chart area is the flexible one that yields the space, inside a
-        # page box that is still exactly one viewport tall and clipped.
-        assert "#chart-area { flex: 1 1 60%;" in html
-        assert "#app { display: flex; flex-direction: row; height: 100vh; max-height: 100vh; overflow: hidden; }" in html
 
 
 # ===========================================================================
@@ -1345,6 +1290,7 @@ class TestFixtureAcceptance:
         assert "act" in html
         # wider/plants ⚪ not-evaluated
 
+    @rule("CIR-RENDER-GREY-VISIBLE")
     def test_three_greys_distinguishable(self) -> None:
         """CIR-RENDER-GREY-VISIBLE#grey-reason-distinguishable —
         the three grey reasons are told apart on the page via the a11y-table
@@ -1384,6 +1330,7 @@ class TestFixtureAcceptance:
 class TestRenderPrintColor:
     """CIR-RENDER-PRINT-COLOR — backgrounds must be forced on."""
 
+    @rule("CIR-RENDER-PRINT-COLOR")
     def test_print_fills_without_user_settings(self) -> None:
         """CIR-RENDER-PRINT-COLOR#print-fills-without-user-settings —
         print-color-adjust: exact is set."""
@@ -1391,6 +1338,7 @@ class TestRenderPrintColor:
         assert "print-color-adjust: exact" in html
         assert "-webkit-print-color-adjust: exact" in html
 
+    @rule("CIR-RENDER-PRINT-COLOR")
     def test_print_stylesheet_is_inline(self) -> None:
         """CIR-RENDER-PRINT-COLOR#print-stylesheet-is-inline —
         no separate stylesheet fetch."""
@@ -1405,66 +1353,12 @@ class TestRenderPrintColor:
 class TestRenderA4:
     """CIR-RENDER-A4 — one sheet from the browser's print dialog."""
 
-    def test_print_margins_are_declared(self) -> None:
-        """CIR-RENDER-A4#print-margins-are-declared —
-        @page margin is declared."""
-        html = _render_fixture()
-        assert "@page" in html
-        assert "margin: 10mm" in html
-        assert "A4 portrait" in html
-
+    @rule("CIR-RENDER-A4")
     def test_print_interactive_affordances_hidden(self) -> None:
         """CIR-RENDER-A4#print-interactive-affordances-hidden —
         hover chrome is hidden in print."""
         html = _render_fixture()
         # The print media query hides hover effects
-        assert "@media print" in html
-
-
-# ===========================================================================
-# CIR-RENDER-REFERENCE-VIEWPORT — the tested screen (proxy)
-# ===========================================================================
-
-class TestRenderReferenceViewport:
-    """CIR-RENDER-REFERENCE-VIEWPORT — the tested screen.
-
-    NOTE: This is a labelled proxy check only (CIR-PROC-BROWSER-EVIDENCE).
-    """
-
-    def test_viewport_gate_is_fixed_proxy(self) -> None:
-        """CIR-RENDER-REFERENCE-VIEWPORT#viewport-gate-is-fixed —
-        PROXY CHECK ONLY: the page has a viewport meta tag.
-        Real verification requires a browser at 1280×800 (CIR-PROC-BROWSER-EVIDENCE)."""
-        html = _render_fixture()
-        assert 'name="viewport"' in html
-
-    def test_viewport_larger_passes_trivially_proxy(self) -> None:
-        """CIR-RENDER-REFERENCE-VIEWPORT#viewport-larger-passes-trivially —
-        at 1920×1080 the composition scales up and the gate does not re-run.
-
-        PROXY CHECK ONLY (CIR-PROC-BROWSER-EVIDENCE): a browser is what would
-        actually measure 1920×1080; that is deferred with the rest of the browser
-        evidence (#34). The half of the row that IS decidable from the built page
-        is the reason the gate need not re-run above the reference viewport — the
-        page has no size-conditional behaviour to re-test, and its own declared
-        gate size stays 1280×800 regardless.
-        """
-        html = _render_fixture()
-
-        # Nothing in the page branches on viewport size, so a larger viewport
-        # cannot produce a different composition to gate.
-        assert "@media (min-width" not in html and "@media (max-width" not in html
-        assert 'content="width=device-width, initial-scale=1"' in html, (
-            "the page must adopt the device's own width rather than pinning a size"
-        )
-
-        # The only fixed geometry is the SVG's own coordinate space, which scales
-        # to whatever box it is given — up as readily as down.
-        assert 'viewBox="0 0 800 800"' in html
-        assert "#chart-area svg { max-width: 100%; max-height: 100%; }" in html
-
-        # The scale-up path is scale, not reflow: the print path is the one place
-        # the layout changes, and it is media-gated on print rather than on width.
         assert "@media print" in html
 
 
@@ -1475,10 +1369,11 @@ class TestRenderReferenceViewport:
 class TestRenderTouch:
     """CIR-RENDER-TOUCH — no hover on glass."""
 
-    def test_touch_target_size_proxy(self) -> None:
+    @rule("CIR-RENDER-TOUCH")
+    def test_touch_target_size(self) -> None:
         """CIR-RENDER-TOUCH#touch-target-size —
-        PROXY CHECK ONLY: cells are SVG elements with role=button.
-        Real touch-target verification requires a browser."""
+        cells are SVG elements with role=button and in the tab order. A source-level
+        check: measuring the target size needs the browser tier (#34)."""
         html = _render_fixture()
         assert 'role="button"' in html
         assert 'tabindex="0"' in html
@@ -1491,6 +1386,7 @@ class TestRenderTouch:
 class TestRenderRenderer:
     """CIR-RENDER-RENDERER — what draws the rings."""
 
+    @rule("CIR-RENDER-RENDERER")
     def test_renderer_draws_independent_rings(self) -> None:
         """CIR-RENDER-RENDERER#renderer-draws-independent-rings —
         the SVG has multiple ring paths."""
@@ -1500,6 +1396,7 @@ class TestRenderRenderer:
         # Should have at least 8 paths (one per item)
         assert path_count >= 8, f"Expected at least 8 paths, got {path_count}"
 
+    @rule("CIR-RENDER-RENDERER")
     def test_renderer_adds_no_runtime_egress(self) -> None:
         """CIR-RENDER-RENDERER#renderer-adds-no-runtime-egress —
         no library fetched at run time."""
@@ -1515,6 +1412,7 @@ class TestRenderRenderer:
 class TestRenderSiblingOrder:
     """CIR-RENDER-SIBLING-ORDER — where siblings start."""
 
+    @rule("CIR-RENDER-SIBLING-ORDER")
     def test_sibling_order_clockwise_from_noon(self) -> None:
         """CIR-RENDER-SIBLING-ORDER#sibling-order-clockwise-from-noon —
         items are ordered clockwise from 12 o'clock in config order."""
@@ -1537,6 +1435,7 @@ class TestRenderSiblingOrder:
 class TestRenderLabels:
     """CIR-RENDER-LABELS — labels fit, truncate, or step aside."""
 
+    @rule("CIR-RENDER-LABELS")
     def test_label_inside_arc(self) -> None:
         """CIR-RENDER-LABELS#label-inside-arc —
         item labels are rendered as SVG text."""
@@ -1546,6 +1445,7 @@ class TestRenderLabels:
         assert "Sleep" in html
         assert "Quarterly labs" in html
 
+    @rule("CIR-RENDER-LABELS")
     def test_label_glyphs_passthrough(self) -> None:
         """CIR-RENDER-LABELS#label-glyphs-passthrough —
         Unicode glyphs pass through as-is."""
@@ -1561,6 +1461,7 @@ class TestRenderLabels:
 class TestRenderRingPartition:
     """CIR-RENDER-RING-PARTITION — rings are independent."""
 
+    @rule("CIR-RENDER-RING-PARTITION")
     def test_partition_full_circle_per_ring(self) -> None:
         """CIR-RENDER-RING-PARTITION#partition-full-circle-per-ring —
         each ring spans the full 360°."""
@@ -1571,6 +1472,7 @@ class TestRenderRingPartition:
         assert 'data-item="self/' in html
         assert 'data-item="wider/' in html
 
+    @rule("CIR-RENDER-RING-PARTITION")
     def test_partition_ring_boundaries_visible(self) -> None:
         """CIR-RENDER-RING-PARTITION#partition-ring-boundaries-visible —
         rings are separated by gaps (stroke)."""
@@ -1586,6 +1488,7 @@ class TestRenderRingPartition:
 class TestRenderArcShare:
     """CIR-RENDER-ARC-SHARE — arc angles from shares."""
 
+    @rule("CIR-RENDER-ARC-SHARE")
     def test_arc_share_half_arcs(self) -> None:
         """CIR-RENDER-ARC-SHARE#arc-share-half-arcs —
         two siblings with share:0.5 each get equal arcs."""
@@ -1594,6 +1497,7 @@ class TestRenderArcShare:
         assert 'data-item="children/nova"' in html
         assert 'data-item="children/kit"' in html
 
+    @rule("CIR-RENDER-ARC-SHARE")
     def test_arc_share_single_item_ring(self) -> None:
         """CIR-RENDER-ARC-SHARE#arc-share-single-item-ring —
         a ring with exactly one item renders as a full 360° band
@@ -1689,6 +1593,7 @@ class TestRenderArcShare:
         finally:
             tmp_path.unlink()
 
+    @rule("CIR-RENDER-ARC-SHARE")
     def test_arc_share_mixed_weights(self) -> None:
         """CIR-RENDER-ARC-SHARE#arc-share-mixed-weights —
         siblings with shares 2, 1, 1 → arcs ≈ 180° / 90° / 90°."""
@@ -1775,6 +1680,7 @@ class TestRenderArcShare:
 class TestRenderRingThickness:
     """CIR-RENDER-RING-THICKNESS — the most important ring is the smallest."""
 
+    @rule("CIR-RENDER-RING-THICKNESS")
     def test_thickness_non_increasing_outward(self) -> None:
         """CIR-RENDER-RING-THICKNESS#thickness-non-increasing-outward —
         inner rings are thicker than outer rings."""
@@ -1784,6 +1690,7 @@ class TestRenderRingThickness:
         # The SVG has the right viewBox
         assert 'viewBox="0 0 800 800"' in html
 
+    @rule("CIR-RENDER-RING-THICKNESS")
     def test_centre_hole_is_not_zero(self) -> None:
         """CIR-RENDER-RING-THICKNESS#centre-hole-is-not-zero —
         a hole remains; the innermost ring is a band, not a pie."""
@@ -1791,6 +1698,7 @@ class TestRenderRingThickness:
         assert '<circle' in html
         assert 'cx="400.0"' in html
 
+    @rule("CIR-RENDER-RING-THICKNESS")
     def test_centre_disc_holds_identity(self) -> None:
         """CIR-RENDER-RING-THICKNESS#centre-disc-holds-identity —
         the disc carries the person's name and summary."""
@@ -1805,6 +1713,7 @@ class TestRenderRingThickness:
 class TestRenderMinArc:
     """CIR-RENDER-MIN-ARC — no unreadable slivers."""
 
+    @rule("CIR-RENDER-MIN-ARC")
     def test_min_arc_tiny_share_still_drawn(self) -> None:
         """CIR-RENDER-MIN-ARC#min-arc-tiny-share-still-drawn —
         all items are drawn as paths."""
@@ -1813,6 +1722,7 @@ class TestRenderMinArc:
         path_count = html.count("<path")
         assert path_count >= 8  # at least 8 arc paths + centre circle
 
+    @rule("CIR-RENDER-MIN-ARC")
     def test_mixed_floored_natural_overflow_capped(self) -> None:
         """CIR-RENDER-MIN-ARC#mixed-floored-natural-overflow-capped —
         mixed floored and natural items where floored arcs alone
@@ -1889,6 +1799,7 @@ class TestRenderMinArc:
         finally:
             tmp_path.unlink()
 
+    @rule("CIR-RENDER-MIN-ARC")
     def test_overflow_no_negative_arcs(self) -> None:
         """CIR-RENDER-MIN-ARC#overflow-no-negative-arcs —
         ring with >180 items where total_deg would go negative
@@ -1975,6 +1886,7 @@ class TestRenderMinArc:
 class TestRenderEmptyRing:
     """CIR-RENDER-CAPACITY — empty ring band."""
 
+    @rule("CIR-RENDER-CAPACITY")
     def test_capacity_empty_ring_band(self) -> None:
         """CIR-RENDER-CAPACITY#capacity-empty-ring-band —
         ring with zero items is drawn as grey band with an empty-ring warning."""
