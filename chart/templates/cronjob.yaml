@@ -1,0 +1,103 @@
+{{- /* The nightly bake (circles-iac docs/deploy-seam.md §"Pod shape"). The source repo's URL and
+       token live ONLY in Secret files under /secrets/source — no env var references the Secret
+       (CIR-ADAPT-BUDGET#environment-not-inherited-wholesale), neither value reaches an argv. */ -}}
+{{- if .Values.bake.enabled }}
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: {{ .Release.Name }}-bake
+  labels: { app.kubernetes.io/name: {{ .Chart.Name }}-bake }
+spec:
+  schedule: {{ .Values.bake.schedule | quote }}
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 1
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 2
+      ttlSecondsAfterFinished: 3600
+      template:
+        metadata:
+          labels: { app.kubernetes.io/name: {{ .Chart.Name }}-bake }
+        spec:
+          restartPolicy: Never
+          automountServiceAccountToken: false
+          activeDeadlineSeconds: 600
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 101
+            runAsGroup: 101
+            fsGroup: 101
+            seccompProfile: { type: RuntimeDefault }
+          affinity:
+            podAffinity:
+              # RWO volume: the bake must land on the page pod's node.
+              requiredDuringSchedulingIgnoredDuringExecution:
+                - labelSelector:
+                    matchLabels: { app.kubernetes.io/name: {{ .Chart.Name }} }
+                  topologyKey: kubernetes.io/hostname
+          initContainers:
+            - name: clone
+              image: "{{ .Values.bake.image.repository }}:{{ .Values.bake.image.tag | default .Chart.AppVersion }}"
+              imagePullPolicy: {{ .Values.bake.image.pullPolicy }}
+              workingDir: /src
+              command: ["/bin/sh", "-ec"]
+              args:
+                - |
+                  # URL: read by a shell builtin into the repo config — never an argv.
+                  # Token: handed to git by a credential helper that cats the file — never an argv.
+                  read -r url < /secrets/source/url
+                  git init -q /src/repo
+                  printf '[remote "origin"]\n\turl = %s\n\tfetch = +refs/heads/*:refs/remotes/origin/*\n' "$url" >> /src/repo/.git/config
+                  cd /src/repo
+                  git -c credential.helper='!f() { echo username=circles-bake; printf "password=%s\n" "$(cat /secrets/source/token)"; }; f' \
+                    fetch -q --depth 1 origin HEAD
+                  git checkout -q FETCH_HEAD
+                  echo "cloned $(git rev-parse --short HEAD)"
+              env:
+                - { name: HOME, value: /tmp }
+                - { name: GIT_TERMINAL_PROMPT, value: "0" }
+              securityContext:
+                allowPrivilegeEscalation: false
+                readOnlyRootFilesystem: true
+                capabilities: { drop: ["ALL"] }
+              resources: {{- toYaml .Values.bake.resources | nindent 16 }}
+              volumeMounts:
+                - { name: source-secret, mountPath: /secrets/source, readOnly: true }
+                - { name: src, mountPath: /src }
+                - { name: tmp, mountPath: /tmp }
+          containers:
+            - name: bake
+              image: "{{ .Values.bake.image.repository }}:{{ .Values.bake.image.tag | default .Chart.AppVersion }}"
+              imagePullPolicy: {{ .Values.bake.image.pullPolicy }}
+              # the image's venv python directly — uid 101 cannot write uv's caches
+              workingDir: /build
+              command: ["/build/.venv/bin/python", "-m", "bake"]
+              args:
+                - --config
+                - /src/repo/{{ .Values.bake.configPath }}
+                - --out
+                - /content
+                - --evaluate
+                - --stale-after-hours
+                - {{ .Values.bake.staleAfterHours | quote }}
+              env:
+                - { name: HOME, value: /tmp }
+                - { name: PYTHONDONTWRITEBYTECODE, value: "1" }
+              securityContext:
+                allowPrivilegeEscalation: false
+                readOnlyRootFilesystem: true
+                capabilities: { drop: ["ALL"] }
+              resources: {{- toYaml .Values.bake.resources | nindent 16 }}
+              volumeMounts:
+                - { name: src, mountPath: /src, readOnly: true }
+                - { name: content, mountPath: /content }
+                - { name: tmp, mountPath: /tmp }
+          volumes:
+            - name: source-secret
+              secret: { secretName: {{ .Values.bake.sourceSecretName }}, defaultMode: 0440 }
+            - { name: src, emptyDir: {} }
+            - { name: tmp, emptyDir: {} }
+            - name: content
+              persistentVolumeClaim: { claimName: {{ .Values.content.claimName }} }
+{{- end }}

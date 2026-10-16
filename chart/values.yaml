@@ -6,3 +6,23 @@ port: 8080
 resources:
   requests: { cpu: 25m, memory: 32Mi }
   limits: { memory: 64Mi }
+
+# The deploy seam (circles-iac ADR-001, docs/deploy-seam.md). Defaults render exactly the
+# image-content chart: no PVC, no CronJob, the page serves what the image baked.
+content:
+  mode: image # image: serve the fixture page baked into the image | volume: serve the PVC (RO)
+  claimName: circles-content
+  storage: 1Gi # storageClassName longhorn, RWO
+bake:
+  enabled: false # renders the nightly CronJob (+ the PVC it writes to)
+  schedule: "17 1 * * *"
+  staleAfterHours: 36 # → data.json stale_after_hours
+  configPath: circles.yaml # path inside the cloned private repo
+  sourceSecretName: circles-source-git # keys: url, token — mounted as files, never env
+  image:
+    repository: ghcr.io/teststuffstash/circles-bake
+    tag: "" # chart appVersion by default (published at the page image's tag)
+    pullPolicy: IfNotPresent
+  resources:
+    requests: { cpu: 50m, memory: 64Mi }
+    limits: { memory: 256Mi }

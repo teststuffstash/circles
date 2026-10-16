@@ -10,6 +10,7 @@
 set -euo pipefail
 
 IMG="${CIRCLES_IMAGE:-ghcr.io/teststuffstash/circles}"
+BAKE_IMG="${CIRCLES_BAKE_IMAGE:-ghcr.io/teststuffstash/circles-bake}" # the nightly CronJob's image
 TAG="${CIRCLES_TAG:-0.1.0}"
 
 command -v docker >/dev/null || { echo "ERROR: docker not found — run on the Docker host (pop-os), not the jail."; exit 1; }
@@ -20,3 +21,12 @@ echo "==> pushing…"
 docker push "$IMG:$TAG"
 docker push "$IMG:latest"
 echo "==> pushed $IMG:$TAG (+ :latest)"
+
+# The bake-job stage, at the SAME tag: the chart's bake.image.tag defaults to its appVersion,
+# which deploy.yaml stamps == this tag (chart-is-deployable-unit).
+echo "==> building $BAKE_IMG:$TAG (--target bake-job, amd64)…"
+docker build --target bake-job -t "$BAKE_IMG:$TAG" -t "$BAKE_IMG:latest" .
+echo "==> pushing…"
+docker push "$BAKE_IMG:$TAG"
+docker push "$BAKE_IMG:latest"
+echo "==> pushed $BAKE_IMG:$TAG (+ :latest)"

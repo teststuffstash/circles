@@ -11,6 +11,36 @@
       }
     },
     "port": { "type": "integer" },
-    "resources": { "type": "object" }
+    "resources": { "type": "object" },
+    "content": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "mode": { "type": "string", "enum": ["image", "volume"] },
+        "claimName": { "type": "string", "minLength": 1 },
+        "storage": { "type": "string", "minLength": 1 }
+      }
+    },
+    "bake": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "schedule": { "type": "string", "minLength": 1 },
+        "staleAfterHours": { "type": "integer", "minimum": 1 },
+        "configPath": { "type": "string", "minLength": 1 },
+        "sourceSecretName": { "type": "string", "minLength": 1 },
+        "image": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "repository": { "type": "string" },
+            "pullPolicy": { "type": "string", "enum": ["Always", "IfNotPresent", "Never"] },
+            "tag": { "type": "string" }
+          }
+        },
+        "resources": { "type": "object" }
+      }
+    }
   }
 }
