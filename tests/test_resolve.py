@@ -27,8 +27,6 @@ import json
 import os
 import re
 import stat
-import subprocess
-import sys
 import time
 from datetime import date, datetime, timezone
 from pathlib import Path
@@ -45,14 +43,18 @@ from bake.config import load_config
 from bake.emit import write_artifact
 from bake.resolve import resolve, window_status
 from evidence_helpers import (
-    FIXTURE_REFERENCE_DATE,
     REPO,
     BakeRun,
     given_alex,
+    given_prior_bake,
+    given_script,
     item,
     item_of,
+    masked_digest,
     then_config_error,
+    then_grey_by_failure,
     verdict,
+    warnings_for,
     when_bake,
 )
 from rules import rule
@@ -86,80 +88,13 @@ def _items(run: BakeRun) -> dict[str, dict]:
     return {f"{r['id']}/{i['id']}": i for r in run.data["rings"] for i in r["items"]}
 
 
-def _raw(run: BakeRun) -> str:
-    """out/data.json as the bytes the page's host serves (text)."""
-    return (run.out_dir / "data.json").read_text(encoding="utf-8")
-
-
-def _item_warnings(run: BakeRun, ref: str) -> list[str]:
-    """The artifact's warning messages for one item ref."""
-    return [w["message"] for w in run.data["warnings"] if w["item"] == ref]
-
-
-def _masked_digest(raw: str) -> str:
-    """sha256 of a data.json text with its generated_at value masked — CIR-BAKE-DETERMINISM's
-    "byte-identical except generated_at" made comparable as one short value."""
-    masked = re.sub(r'"generated_at": "[^"]*"', '"generated_at": "<masked>"', raw)
-    return hashlib.sha256(masked.encode("utf-8")).hexdigest()[:16]
-
-
-def _copy_then(alex_copy: AlexCopy, fn: Callable[[Path], None]) -> Callable[[], Path]:
-    """An ``alex_copy`` that also applies a FILE-level knob (a script, a mode bit) to the copy, so
-    given_alex performs it inside its given step."""
-    def make() -> Path:
-        config = alex_copy()
-        fn(config.parent)
-        return config
-    return make
-
-
 def given_plants_runs(alex_copy: AlexCopy, what: str, body: str) -> Path:
     """Given: world alex whose wider/plants `command:` runs a real /bin/sh probe script.
 
     ``what`` names the probe's behaviour (the step name threads it); ``body`` is the script."""
-    def write_probe(world: Path) -> None:
-        script = world / "notes" / "plants-probe.sh"
-        script.write_text("#!/bin/sh\n" + body, encoding="utf-8")
-        script.chmod(0o755)
-        allure.attach("#!/bin/sh\n" + body, name=f"notes/plants-probe.sh ({what})",
-                      attachment_type=allure.attachment_type.TEXT)
-    return given_alex(_copy_then(alex_copy, write_probe), f"wider/plants command: [{PROBE}] — {what}",
-                      lambda c: item(c, "wider/plants").update(status={"command": [PROBE]}))
-
-
-def given_prior_bake(root: Path, config: Path, *flags: str, why: str,
-                     env: dict[str, str] | None = None) -> str:
-    """Given: an earlier bake already published ``<root>/out`` — an arrange step that dies loudly
-    on failure (CONVENTIONS § The helper razor). Returns that run's data.json text."""
-    out = root / "out"
-    argv = ["-m", "bake", "--config", str(config), "--out", str(out),
-            "--reference-date", FIXTURE_REFERENCE_DATE, *flags]
-    shown_config = (config.relative_to(REPO) if REPO in config.parents else config.relative_to(root))
-    shown = f"bake --config {shown_config.as_posix()} --out out --reference-date {FIXTURE_REFERENCE_DATE} " + " ".join(flags)
-    run_env = dict(os.environ, PYTHONPATH=os.pathsep.join(filter(None, [str(REPO), os.environ.get("PYTHONPATH")])))
-    run_env.update(env or {})
-    with allure.step(f"Given: a prior bake published out/ ({why}): {shown.strip()}"):
-        proc = subprocess.run([sys.executable, *argv], cwd=root, env=run_env,
-                              capture_output=True, text=True, timeout=60)
-        assert proc.returncode == 0, f"arrange: the prior bake failed:\n{proc.stderr}"
-        raw = (out / "data.json").read_text(encoding="utf-8")
-        allure.attach(raw, name="prior out/data.json", attachment_type=allure.attachment_type.JSON)
-    return raw
-
-
-def then_grey_by_failure(run: BakeRun, ref: str, cause: str) -> None:
-    """The spec phrase "⚪ + build warning, reason by-failure" (CIR-DATA-FAILURE-IS-GREY) as its
-    claims: the page still ships, the light is grey/by-failure with no data date, exactly one
-    warning names the item and the cause, and the detail line carries that same reason (⚖-R51)."""
-    verdict("exit code", run.exit_code, 0)
-    it = item_of(run.data, ref)
-    verdict(f"{ref} status, grey_reason, last_data_date", [it["status"], it["grey_reason"], it["last_data_date"]],
-            ["grey", "by-failure", None])
-    messages = _item_warnings(run, ref)
-    verdict(f"{ref} warning count", len(messages), 1)
-    verdict(f"{ref} warning", messages[0] if messages else "", cause, op="contains")
-    verdict(f"{ref} detail_line", it["detail_line"], messages[0] if messages else "<no warning>",
-            op="contains")
+    return given_alex(alex_copy, f"wider/plants command: [{PROBE}] — {what}",
+                      lambda c: item(c, "wider/plants").update(status={"command": [PROBE]}),
+                      world=lambda w: given_script(w / "circles.yaml", PROBE.removeprefix("./"), body))
 
 
 # ===========================================================================
@@ -232,7 +167,7 @@ class TestDataStatusResolution:
         build warning, reason by-failure."""
         config = given_alex(alex_copy, "self/sleep source: notes/absent.md",
                             lambda c: item(c, "self/sleep")["status"]["freshness"].update(source="notes/absent.md"))
-        then_grey_by_failure(when_bake(config, "--evaluate"), "self/sleep", "missing source")
+        then_grey_by_failure(when_bake(config, "--evaluate"), "self/sleep", cause="missing source", ships=True)
 
     @rule("CIR-DATA-STATUS-RESOLUTION")
     def test_freshness_source_no_dates(self, alex_copy) -> None:
@@ -240,7 +175,7 @@ class TestDataStatusResolution:
         (notes/empty-log.md), zero parseable dates → ⚪ + build warning."""
         config = given_alex(alex_copy, "self/sleep source: notes/empty-log.md",
                             lambda c: item(c, "self/sleep")["status"]["freshness"].update(source="notes/empty-log.md"))
-        then_grey_by_failure(when_bake(config, "--evaluate"), "self/sleep", "no dates found")
+        then_grey_by_failure(when_bake(config, "--evaluate"), "self/sleep", cause="no dates found", ships=True)
 
     @rule("CIR-DATA-STATUS-RESOLUTION")
     def test_freshness_all_dates_future(self, alex_copy) -> None:
@@ -248,7 +183,7 @@ class TestDataStatusResolution:
         the reference date → ⚪ + build warning (⚖-R8). Reference 2026-07-29: the sleep-log's
         07-30, 07-31 and 08-01 are all ahead of it."""
         run = when_bake(given_alex(alex_copy), "--evaluate", reference_date="2026-07-29")
-        then_grey_by_failure(run, "self/sleep", "after the reference date")
+        then_grey_by_failure(run, "self/sleep", cause="after the reference date", ships=True)
 
     @rule("CIR-DATA-STATUS-RESOLUTION")
     def test_adapter_not_evaluated_this_phase(self, alex_copy) -> None:
@@ -262,7 +197,7 @@ class TestDataStatusResolution:
         verdict("self/sleep, self/labs, wider/plants status + grey_reason",
                 {ref: [items[ref]["status"], items[ref]["grey_reason"]] for ref in refs},
                 {ref: ["grey", "not-evaluated"] for ref in refs})
-        verdict("their warnings", {ref: _item_warnings(run, ref) for ref in refs},
+        verdict("their warnings", {ref: warnings_for(run, ref) for ref in refs},
                 {ref: ["adapter not evaluated in this build"] for ref in refs})
 
     # The table's five config-error rows. The shared claim is the asymmetry the spec calls out: a
@@ -338,7 +273,7 @@ class TestDataFailureIsGrey:
         exits 3: a failure, so ⚪ + warning — the printed red is never taken."""
         config = given_plants_runs(alex_copy, "prints red, exits 3", "echo red\nexit 3\n")
         run = when_bake(config, "--evaluate")
-        then_grey_by_failure(run, "wider/plants", "3")
+        then_grey_by_failure(run, "wider/plants", cause="3", ships=True)
         verdict("grey items without a grey_reason",
                 [ref for ref, i in _items(run).items() if i["status"] == "grey" and i["grey_reason"] is None], [])
 
@@ -347,7 +282,7 @@ class TestDataFailureIsGrey:
         """CIR-DATA-FAILURE-IS-GREY#failure-never-green — the plants command prints `green` and
         then exits 3: a failure, so ⚪ + warning — the printed green is never taken."""
         config = given_plants_runs(alex_copy, "prints green, exits 3", "echo green\nexit 3\n")
-        then_grey_by_failure(when_bake(config, "--evaluate"), "wider/plants", "3")
+        then_grey_by_failure(when_bake(config, "--evaluate"), "wider/plants", cause="3", ships=True)
 
     @rule("CIR-DATA-FAILURE-IS-GREY")
     @pytest.mark.skipif(os.geteuid() == 0, reason="root reads mode-000 files")
@@ -359,14 +294,13 @@ class TestDataFailureIsGrey:
         def unreadable(world: Path) -> None:
             note.append(world / "notes" / "sleep-log.md")
             note[0].chmod(0o000)
-        config = given_alex(_copy_then(alex_copy, unreadable), "notes/sleep-log.md mode 000 (config unchanged)",
-                            lambda c: None)
+        config = given_alex(alex_copy, "notes/sleep-log.md mode 000 (config unchanged)", world=unreadable)
         try:
             run = when_bake(config, "--evaluate")
         finally:
             note[0].chmod(0o644)
-        then_grey_by_failure(run, "self/sleep", "unreadable source")
-        verdict("self/sleep warning", _item_warnings(run, "self/sleep")[0], "notes/sleep-log.md", op="contains")
+        then_grey_by_failure(run, "self/sleep", cause="unreadable source", ships=True)
+        verdict("self/sleep warning", warnings_for(run, "self/sleep")[0], "notes/sleep-log.md", op="contains")
 
     @rule("CIR-DATA-FAILURE-IS-GREY")
     def test_warning_names_item(self, alex_copy) -> None:
@@ -378,7 +312,7 @@ class TestDataFailureIsGrey:
         plants = item_of(run.data, "wider/plants")
         verdict("wider/plants status, grey_reason", [plants["status"], plants["grey_reason"]], ["grey", "by-failure"])
         verdict("warnings", run.warnings, "wider/plants: command exited", op="contains")
-        verdict("wider/plants warning", " | ".join(_item_warnings(run, "wider/plants")), "3", op="contains")
+        verdict("wider/plants warning", " | ".join(warnings_for(run, "wider/plants")), "3", op="contains")
 
 
 # ===========================================================================
@@ -578,7 +512,7 @@ class TestBakeStatusValues:
         """CIR-BAKE-STATUS-VALUES#status-never-emoji — never 🟢🟡🔴⚪ anywhere in data.json."""
         run = when_bake(given_alex(alex_copy), "--evaluate")
         verdict("exit code", run.exit_code, 0)
-        raw = _raw(run)
+        raw = run.raw
         verdict("light emoji in data.json", [e for e in ("🟢", "🟡", "🔴", "⚪") if e in raw], [])
 
     @rule("CIR-BAKE-STATUS-VALUES")
@@ -795,7 +729,7 @@ class TestAdaptContract:
         items = _items(run)
         verdict("wider/plants status, grey_reason",
                 [items["wider/plants"]["status"], items["wider/plants"]["grey_reason"]], ["grey", "by-failure"])
-        verdict("wider/plants warning", " | ".join(_item_warnings(run, "wider/plants")), "3", op="contains")
+        verdict("wider/plants warning", " | ".join(warnings_for(run, "wider/plants")), "3", op="contains")
         verdict("the other seven lights", {ref: items[ref]["status"] for ref in items if ref != "wider/plants"}, {
             "self/sleep": "green", "self/labs": "red", "self/exercise": "grey",
             "partner/date-night": "yellow", "children/nova": "green", "children/kit": "green",
@@ -881,7 +815,7 @@ class TestAdaptReferenceDate:
         prior = given_prior_bake(config.parent.parent, config, "--evaluate", why="first evaluated bake at 2026-08-03")
         run = when_bake(config, "--evaluate")
         verdict("exit code", run.exit_code, 0)
-        verdict("data.json sha256 (generated_at masked)", _masked_digest(_raw(run)), _masked_digest(prior))
+        verdict("data.json sha256 (generated_at masked)", masked_digest(run.raw), masked_digest(prior))
         verdict("self/sleep last_data_date", item_of(run.data, "self/sleep")["last_data_date"], "2026-08-01")
 
     @rule("CIR-ADAPT-REFERENCE-DATE")
@@ -898,8 +832,7 @@ class TestAdaptReferenceDate:
         pytest.param("Pacific/Kiritimati", "Etc/GMT+12", id="config Pacific/Kiritimati, host TZ Etc/GMT+12"),
         pytest.param("omitted (UTC)", "Pacific/Kiritimati", id="config timezone omitted (UTC), host TZ Pacific/Kiritimati"),
     ])
-    def test_reference_date_default_is_config_timezone(self, alex_copy, monkeypatch: pytest.MonkeyPatch,
-                                                       config_tz: str, host_tz: str) -> None:
+    def test_reference_date_default_is_config_timezone(self, alex_copy, config_tz: str, host_tz: str) -> None:
         """CIR-ADAPT-REFERENCE-DATE#reference-date-default-is-config-timezone — no injected date:
         today is the current instant's date in the config's `timezone:` (UTC when omitted); the
         host's TZ must not leak."""
@@ -909,10 +842,10 @@ class TestAdaptReferenceDate:
         else:
             config = given_alex(alex_copy, f"timezone: {config_tz}", lambda c: c.update(timezone=config_tz))
         with allure.step(f"Given: host TZ={host_tz} (the bake process's local zone)"):
-            monkeypatch.setenv("TZ", host_tz)
+            host = {"TZ": host_tz}
         zone = ZoneInfo("UTC" if omitted else config_tz)
         before = datetime.now(zone).date().isoformat()
-        run = when_bake(config, reference_date=None)
+        run = when_bake(config, reference_date=None, env=host)
         if datetime.now(zone).date().isoformat() != before:
             pytest.skip("the config zone's calendar day rolled over during the bake")
         verdict("exit code", run.exit_code, 0)
@@ -1020,7 +953,7 @@ class TestBakeAtomicWrite:
         run = when_bake(config)
         verdict("exit code", run.exit_code, 1)
         verdict("artifact files in out/", run.artifact_files, ["data.json", "index.html"])
-        verdict("out/data.json sha256", hashlib.sha256(_raw(run).encode()).hexdigest()[:16],
+        verdict("out/data.json sha256", hashlib.sha256(run.raw.encode()).hexdigest()[:16],
                 hashlib.sha256(prior.encode()).hexdigest()[:16])
 
     @rule("CIR-BAKE-ATOMIC-WRITE")
@@ -1064,7 +997,7 @@ class TestBakeDeterminism:
         prior = given_prior_bake(config.parent.parent, config, why="first bake, same config + date")
         run = when_bake(config)
         verdict("exit code", run.exit_code, 0)
-        verdict("data.json sha256 (generated_at masked)", _masked_digest(_raw(run)), _masked_digest(prior))
+        verdict("data.json sha256 (generated_at masked)", masked_digest(run.raw), masked_digest(prior))
 
     @rule("CIR-BAKE-DETERMINISM")
     def test_ordering_is_stable(self, alex_copy) -> None:
@@ -1078,17 +1011,16 @@ class TestBakeDeterminism:
                 ["self/sleep", "self/labs", "wider/plants"])
 
     @rule("CIR-BAKE-DETERMINISM")
-    def test_host_timezone_does_not_leak(self, alex_copy, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_host_timezone_does_not_leak(self, alex_copy) -> None:
         """CIR-BAKE-DETERMINISM#host-timezone-does-not-leak — the evaluated bake under host
         TZ=Pacific/Auckland is identical (generated_at aside) to the one under TZ=UTC; the
         config's timezone: governs."""
         config = given_alex(alex_copy)
         prior = given_prior_bake(config.parent.parent, config, "--evaluate", why="evaluated, host TZ=UTC",
                                  env={"TZ": "UTC"})
-        monkeypatch.setenv("TZ", "Pacific/Auckland")
-        run = when_bake(config, "--evaluate")
+        run = when_bake(config, "--evaluate", env={"TZ": "Pacific/Auckland"})
         verdict("exit code", run.exit_code, 0)
-        verdict("data.json sha256 (generated_at masked)", _masked_digest(_raw(run)), _masked_digest(prior))
+        verdict("data.json sha256 (generated_at masked)", masked_digest(run.raw), masked_digest(prior))
         verdict("self/sleep last_data_date (the evaluated artifact)",
                 item_of(run.data, "self/sleep")["last_data_date"], "2026-08-01")
 
@@ -1118,8 +1050,8 @@ class TestBakeExposure:
                             lambda c: item(c, "self/sleep")["status"]["freshness"].update(source="notes/absent.md"))
         run = when_bake(config, "--evaluate")
         verdict("exit code", run.exit_code, 0)
-        verdict("self/sleep warning", " | ".join(_item_warnings(run, "self/sleep")), "notes/absent.md", op="contains")
-        raw = _raw(run)
+        verdict("self/sleep warning", " | ".join(warnings_for(run, "self/sleep")), "notes/absent.md", op="contains")
+        raw = run.raw
         verdict("data.json names the config dir's absolute path", str(config.parent.resolve()) in raw, False)
         verdict("data.json", raw, "/home/", op="not contains")
         verdict("data.json", raw, "/etc/", op="not contains")
@@ -1136,12 +1068,12 @@ class TestBakeExposure:
                        if line.startswith("- ")]
         run = when_bake(config, "--evaluate")
         verdict("exit code", run.exit_code, 0)
-        raw = _raw(run)
+        raw = run.raw
         verdict("data.json", raw, "2026-08-01", op="contains")
         verdict("note entry words found in data.json", [w for w in entry_words if w in raw], [])
 
     @rule("CIR-BAKE-EXPOSURE")
-    def test_command_stderr_not_passed_through(self, alex_copy, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_command_stderr_not_passed_through(self, alex_copy) -> None:
         """CIR-BAKE-EXPOSURE#command-stderr-not-passed-through — the plants command prints a stack
         trace with paths and its env to stderr (the bake's env holds CIRCLES_SECRET): the warning
         is a bounded, sanitized summary — none of it reaches data.json."""
@@ -1149,14 +1081,13 @@ class TestBakeExposure:
                 'echo "  File \\"$0\\", line 7, in /home/alex/bin/probe" >&2\n'
                 'env >&2\nexit 1\n')
         config = given_plants_runs(alex_copy, "stack trace + env on stderr, exits 1", body)
-        monkeypatch.setenv("CIRCLES_SECRET", "s3cret-value")
-        run = when_bake(config, "--evaluate")
+        run = when_bake(config, "--evaluate", env={"CIRCLES_SECRET": "s3cret-value"})
         verdict("exit code", run.exit_code, 0)
-        raw = _raw(run)
+        raw = run.raw
         verdict("stderr fragments found in data.json",
                 [s for s in ("Traceback", "/home/alex", "PATH=", "CIRCLES_SECRET", "s3cret-value", "plants-probe.sh")
                  if s in raw], [])
-        message = " | ".join(_item_warnings(run, "wider/plants"))
+        message = " | ".join(warnings_for(run, "wider/plants"))
         verdict(f"wider/plants warning length ≤ {adapters_module.WARNING_MAX_CHARS}",
                 0 < len(message) <= adapters_module.WARNING_MAX_CHARS, True)
 
@@ -1175,10 +1106,10 @@ class TestBakeExposure:
         run = when_bake(config, "--evaluate")
         verdict("exit code", run.exit_code, 0)
         verdict("wider/plants status", item_of(run.data, "wider/plants")["status"], "grey")
-        message = " | ".join(_item_warnings(run, "wider/plants"))
+        message = " | ".join(warnings_for(run, "wider/plants"))
         cap = adapters_module.WARNING_MAX_CHARS
         verdict(f"wider/plants warning length ≤ cap {cap} < 10000", 0 < len(message) <= cap < 10_000, True)
-        verdict("data.json size < 100000 bytes", len(_raw(run).encode()) < 100_000, True)
+        verdict("data.json size < 100000 bytes", len(run.raw.encode()) < 100_000, True)
 
 
 # ===========================================================================
@@ -1310,7 +1241,7 @@ class TestProcPhaseP0:
         refs = ("self/sleep", "self/labs", "wider/plants")
         verdict("status + grey_reason", {ref: [items[ref]["status"], items[ref]["grey_reason"]] for ref in refs},
                 {ref: ["grey", "not-evaluated"] for ref in refs})
-        verdict("warnings", {ref: _item_warnings(run, ref) for ref in refs},
+        verdict("warnings", {ref: warnings_for(run, ref) for ref in refs},
                 {ref: ["adapter not evaluated in this build"] for ref in refs})
 
     @rule("CIR-PROC-PHASE-P0")

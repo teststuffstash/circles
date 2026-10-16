@@ -21,34 +21,39 @@
 # values come from the spec rows and the fixture comments (fixtures/alex/circles.yaml), cited
 # beside each claim — never from running the page.
 #
-# The given/when/then helpers below are this module's own (tests/evidence_helpers.py is the
-# CLI boundary's); `verdict` is reused from there.
+# The given/when/then helpers are the browser tier's shared ones (tests/browser/browser_helpers.py;
+# `then` IS tests/evidence_helpers.py's `verdict`, the one verdict implementation).
 
 from __future__ import annotations
 
-import io
 import json
 import math
-import operator
 import re
 import shutil
 from pathlib import Path
-from typing import Any, Iterator
+from typing import Iterator
 
 import allure
 import pytest
 import yaml
 from playwright.sync_api import Browser, Page
-from pypdf import PdfReader
 
-from evidence_helpers import _shown, verdict, world_seed
+from browser.browser_helpers import (
+    GEOMETRY,
+    REFERENCE_VIEWPORT,
+    ax_names,
+    given_loaded,
+    given_page,
+    observe,
+    pdf_colours,
+    then,
+    when,
+)
 from rules import rule
 
 pytestmark = pytest.mark.browser
 
 REPO = Path(__file__).resolve().parents[2]
-WORLD = "alex"
-REFERENCE_VIEWPORT = {"width": 1280, "height": 800}  # CIR-RENDER-REFERENCE-VIEWPORT (⚖-R37)
 
 # CIR-RENDER-PALETTE: the four pinned fills (specs/render/colors.md, palette table).
 PALETTE = {"green": "#00916A", "yellow": "#F2B300", "red": "#B22222", "grey": "#9E9E9E"}
@@ -77,71 +82,6 @@ STAMP = "2026-08-03T02:00:00Z"  # CIR-RENDER-GENERATED-AT#stamp-verbatim's input
 BUDGET_BYTES = 250_000          # CIR-RENDER-ASSET-BUDGET: "250 KB total, uncompressed"
 
 
-# ---------------------------------------------------------------------------- given
-
-def _inlined_artifact(html: str) -> dict:
-    """The artifact the page carries (`<script id="artifact-data">`) — what the page was given."""
-    m = re.search(r'<script id="artifact-data" type="application/json">(.*?)</script>', html, re.S)
-    assert m is not None, "page carries no inlined artifact — arrange failure"
-    return json.loads(m.group(1))
-
-
-def given_page(pages_dir: Path, name: str, variant: str) -> dict:
-    """Given: the baked page ``name`` (world alex, ``variant``) — the world seed and the page's
-    inlined artifact attached. Returns that artifact (wire format: a dict)."""
-    with allure.step(f"Given: page {name} (world {WORLD}: {variant})"):
-        allure.attach(world_seed(), name=f"world: {WORLD} — seed (sha256 + circles.yaml)",
-                      attachment_type=allure.attachment_type.TEXT)
-        artifact = _inlined_artifact((pages_dir / name).read_text(encoding="utf-8"))
-        allure.attach(json.dumps(artifact, indent=2, ensure_ascii=False),
-                      name=f"{name} — inlined artifact (world: {WORLD}, {variant})",
-                      attachment_type=allure.attachment_type.JSON)
-    return artifact
-
-
-def given_loaded(page: Page, served: str, pages_dir: Path, name: str, variant: str) -> dict:
-    """Given: ``name`` as given_page, already loaded in the browser (the load is arrange here —
-    asserted internally, so a failed load dies in the given step)."""
-    artifact = given_page(pages_dir, name, variant)
-    with allure.step(f"Given: browser has {name} open at "
-                     f"{REFERENCE_VIEWPORT['width']}×{REFERENCE_VIEWPORT['height']}"):
-        response = page.goto(f"{served}/{name}")
-        assert response is not None and response.ok, f"loading {name}: {response}"
-    return artifact
-
-
-# ---------------------------------------------------------------------------- when / observe
-
-def when(action: str):
-    """When: the ONE browser action under test — used as ``with when("…"):`` around the inline
-    Playwright call, so the action stays in the test body (CONVENTIONS § The helper razor)."""
-    return allure.step(f"When: {action}")
-
-
-def observe(page: Page, js: str, name: str, arg: Any = None) -> Any:
-    """What the browser reports (``page.evaluate``), attached as JSON under the current step."""
-    result = page.evaluate(js, arg)
-    allure.attach(json.dumps(result, indent=2, ensure_ascii=False), name=name,
-                  attachment_type=allure.attachment_type.JSON)
-    return result
-
-
-# ---------------------------------------------------------------------------- then
-
-_CMP = {">=": operator.ge, "<=": operator.le, ">": operator.gt, "<": operator.lt,
-        "!=": operator.ne}
-
-
-def then(claim: str, actual: Any, expected: Any, *, op: str = "=") -> None:
-    """evidence_helpers.verdict, plus the ordering ops a measured geometry claim needs."""
-    if op not in _CMP:
-        verdict(claim, actual, expected, op=op)
-        return
-    with allure.step(f"Then: {claim} {op} {_shown(expected)}"):
-        assert _CMP[op](actual, expected), (
-            f"{claim}: expected {op} {_shown(expected)}, actual {_shown(actual)}")
-
-
 # ---------------------------------------------------------------------------- measurements
 
 _CELLS = """() => Array.from(document.querySelectorAll('.cell')).map(c => {
@@ -156,38 +96,6 @@ _CELLS = """() => Array.from(document.querySelectorAll('.cell')).map(c => {
           box: {w: b.width, h: b.height}};
 })"""
 
-# Polar geometry of every cell, in the SVG's user space (centre = the viewBox centre): each
-# path is sampled along its length; radius = distance from the centre, angle = degrees
-# clockwise from 12 o'clock. The angular span is the circle minus the largest gap between
-# sampled angles, so a cell starting exactly at noon is not split in two.
-_GEOMETRY = """() => {
-  const svg = document.querySelector('#chart-area svg');
-  const vb = svg.viewBox.baseVal, cx = vb.x + vb.width / 2, cy = vb.y + vb.height / 2;
-  const polar = (x, y) => ({r: Math.hypot(x - cx, y - cy),
-                            a: ((Math.atan2(x - cx, cy - y) * 180 / Math.PI) + 360) % 360});
-  return Array.from(document.querySelectorAll('.cell')).map(c => {
-    const p = c.querySelector('path'), len = p.getTotalLength(), n = 720;
-    const pts = [];
-    for (let i = 0; i <= n; i++) { const q = p.getPointAtLength(len * i / n); pts.push(polar(q.x, q.y)); }
-    const angles = pts.map(q => q.a).sort((x, y) => x - y);
-    let gap = 360 - angles[angles.length - 1] + angles[0], start = angles[0];
-    for (let i = 1; i < angles.length; i++) {
-      if (angles[i] - angles[i - 1] > gap) { gap = angles[i] - angles[i - 1]; start = angles[i]; }
-    }
-    const span = 360 - gap;
-    // label corners, mapped from the text's own box through its transform into user space
-    const t = c.querySelector('text'), bb = t.getBBox(), m = t.transform.baseVal.consolidate();
-    const corners = [[bb.x, bb.y], [bb.x + bb.width, bb.y], [bb.x, bb.y + bb.height],
-                     [bb.x + bb.width, bb.y + bb.height]].map(([x, y]) => {
-      const pt = m ? new DOMPoint(x, y).matrixTransform(m.matrix) : new DOMPoint(x, y);
-      return polar(pt.x, pt.y);
-    });
-    return {item: c.getAttribute('data-item'),
-            rMin: Math.min(...pts.map(q => q.r)), rMax: Math.max(...pts.map(q => q.r)),
-            start: start, span: span, labelCorners: corners};
-  });
-}"""
-
 _A11Y_TABLE = """() => {
   const head = Array.from(document.querySelectorAll('#a11y-table thead th')).map(th => th.textContent.trim());
   const rows = Array.from(document.querySelectorAll('#a11y-table tbody tr')).map(
@@ -200,28 +108,6 @@ _STRIP = "() => document.getElementById('detail-content').textContent.trim()"
 _ACTIVE = """() => { const a = document.activeElement;
   return {item: a ? a.getAttribute('data-item') : null, tag: a ? a.tagName.toLowerCase() : null,
           inChart: !!(a && a.closest('#chart-area svg'))}; }"""
-
-
-def _ax_names(page: Page) -> dict[str, str]:
-    """data-item → the cell's COMPUTED accessible name, from Chromium's accessibility tree (CDP
-    Accessibility.getFullAXTree) — what a screen reader is handed, not the markup."""
-    cdp = page.context.new_cdp_session(page)
-    try:
-        cdp.send("DOM.getDocument", {"depth": -1})
-        names: dict[str, str] = {}
-        for node in cdp.send("Accessibility.getFullAXTree")["nodes"]:
-            if node.get("ignored") or "backendDOMNodeId" not in node:
-                continue
-            role = node.get("role", {}).get("value")
-            if role not in ("button", "link"):
-                continue
-            desc = cdp.send("DOM.describeNode", {"backendNodeId": node["backendDOMNodeId"]})["node"]
-            attrs = dict(zip(desc.get("attributes", [])[::2], desc.get("attributes", [])[1::2]))
-            if "data-item" in attrs:
-                names[attrs["data-item"]] = node.get("name", {}).get("value", "")
-        return names
-    finally:
-        cdp.detach()
 
 
 def _rgb(hex_colour: str) -> str:
@@ -356,7 +242,7 @@ class TestKeyboard:
         (CIR-RENDER-GREY-VISIBLE), so the claim is on the name's leading three parts."""
         given_loaded(page, served, pages_dir, "index.html", "unmodified")
         with when("Chromium computes the accessibility tree of the loaded page"):
-            names = _ax_names(page)
+            names = ax_names(page)
             allure.attach(json.dumps(names, indent=2, ensure_ascii=False),
                           name="computed accessible name per cell", attachment_type=allure.attachment_type.JSON)
         expected = {ref: f"{ITEM_LABELS[ref]}, {WORDS[UNEVALUATED_STATUS[ref]]}, ring {RING_OF[ref]}"
@@ -718,7 +604,7 @@ class TestStatusEncoding:
         the palette word of its image-build status."""
         given_loaded(page, served, pages_dir, "index.html", "unmodified")
         with when("Chromium computes the accessibility tree of the loaded page"):
-            names = _ax_names(page)
+            names = ax_names(page)
             allure.attach(json.dumps(names, indent=2, ensure_ascii=False),
                           name="computed accessible name per cell", attachment_type=allure.attachment_type.JSON)
         missing = [ref for ref in CELL_ORDER
@@ -861,7 +747,7 @@ class TestGreyVisible:
             table = observe(page, _A11Y_TABLE, "text alternative: rows")
             centre = observe(page, _CENTRE, "centre disc texts")
             cells = observe(page, _CELLS, "cells: computed fill")
-            names = _ax_names(page)
+            names = ax_names(page)
         detail = {row[1]: row[3] for row in table["rows"]}
         summary = next(t for t in centre if " · " in t)
         then("Exercise (by-choice) Detail cell", detail["Exercise"], "unmonitored")
@@ -884,7 +770,7 @@ class TestGreyVisible:
         given_page(pages_dir, "index.html", "unmodified")
         with when("browser loads index.html"):
             page.goto(f"{served}/index.html")
-            geo = {g["item"]: g for g in observe(page, _GEOMETRY, "cell geometry (polar, user space)")}
+            geo = {g["item"]: g for g in observe(page, GEOMETRY, "cell geometry (polar, user space)")}
         span = {ref: round(geo[ref]["span"], 1) for ref in ("self/sleep", "self/labs", "self/exercise")}
         band = {ref: round(geo[ref]["rMax"] - geo[ref]["rMin"], 1) for ref in span}
         then("self/exercise span (°)", span["self/exercise"], span["self/sleep"])
@@ -1063,19 +949,6 @@ class TestAssetBudget:
 # CIR-RENDER-PRINT-COLOR / CIR-RENDER-A4 — on paper
 # ===========================================================================
 
-def _pdf_colours(pdf: bytes) -> list[str]:
-    """The palette hexes painted in a PDF: every non-stroking/stroking RGB colour operator in the
-    first page's content stream, matched to the palette within 0.002 per channel."""
-    data = PdfReader(io.BytesIO(pdf)).pages[0].get_contents().get_data().decode("latin-1")
-    triples = {tuple(float(v) for v in m) for m in re.findall(r"([\d.]+) ([\d.]+) ([\d.]+) (?:rg|RG)\b", data)}
-    found = []
-    for status, hexa in PALETTE.items():
-        want = tuple(int(hexa[i:i + 2], 16) / 255 for i in (1, 3, 5))
-        if any(all(math.isclose(a, b, abs_tol=0.002) for a, b in zip(t, want)) for t in triples):
-            found.append(hexa)
-    return found
-
-
 class TestPrintColor:
     """CIR-RENDER-PRINT-COLOR (specs/render/colors.md)."""
 
@@ -1091,7 +964,7 @@ class TestPrintColor:
         with when("print to A4 PDF with the dialog's defaults (background graphics off)"):
             page.emulate_media(media="print")
             pdf = page.pdf(format="A4", print_background=False, prefer_css_page_size=True)
-            found = _pdf_colours(pdf)
+            found = pdf_colours(pdf, PALETTE)
             allure.attach(json.dumps(found), name="palette colours painted in the PDF",
                           attachment_type=allure.attachment_type.JSON)
         then("palette fills painted in the PDF", found, list(PALETTE.values()))
@@ -1160,7 +1033,7 @@ class TestGeometry:
         given_page(pages_dir, "index.html", "unmodified")
         with when("browser loads index.html"):
             page.goto(f"{served}/index.html")
-            geo = observe(page, _GEOMETRY, "cell geometry (polar, user space)")
+            geo = observe(page, GEOMETRY, "cell geometry (polar, user space)")
         inner: dict[str, float] = {}
         for g in geo:
             ring_id = g["item"].split("/")[0]
@@ -1177,7 +1050,7 @@ class TestGeometry:
         given_page(pages_dir, "index.html", "unmodified")
         with when("browser loads index.html"):
             page.goto(f"{served}/index.html")
-            geo = {g["item"]: g for g in observe(page, _GEOMETRY, "cell geometry (polar, user space)")}
+            geo = {g["item"]: g for g in observe(page, GEOMETRY, "cell geometry (polar, user space)")}
         nova, kit = geo["children/nova"], geo["children/kit"]
         then("nova start (° from noon, rounded)", round(nova["start"]) % 360, 0)
         then("nova end (°)", nova["start"] + nova["span"], 180.5, op="<=")
@@ -1194,7 +1067,7 @@ class TestGeometry:
         given_page(pages_dir, "index.html", "unmodified")
         with when("browser loads index.html"):
             page.goto(f"{served}/index.html")
-            geo = observe(page, _GEOMETRY, "cell geometry + label corners (polar, user space)")
+            geo = observe(page, GEOMETRY, "cell geometry + label corners (polar, user space)")
         outside = []
         for g in geo:
             for corner in g["labelCorners"]:

@@ -18,7 +18,7 @@ from __future__ import annotations
 import pytest
 
 from bake.config import ConfigError, load_config
-from evidence_helpers import given_alex, item, item_of, ring, then_config_error, verdict, when_bake
+from evidence_helpers import given_alex, given_file, item, item_of, ring, then_config_error, verdict, when_bake
 from rules import rule
 
 
@@ -610,8 +610,7 @@ class TestAdaptCommand:
         def noexec(c):
             item(c, "wider/plants").update(status={"command": ["./noexec.sh"]})
         config = given_alex(alex_copy, "wider/plants command: ['./noexec.sh'] (mode 0644)", noexec)
-        script = config.parent / "noexec.sh"
-        script.write_text("#!/bin/sh\necho green\n", encoding="utf-8")
+        script = given_file(config, "noexec.sh", "#!/bin/sh\necho green\n")
         script.chmod(0o644)  # no exec bit — the row's input
         run = when_bake(config)
         then_config_error(run, "not executable")
