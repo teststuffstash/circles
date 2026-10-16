@@ -10,9 +10,13 @@
 #   CIRCLES_BROWSER_RUNNER  — auto|local|docker|skip (default: auto)
 #                             auto: docker if `docker info` works, else local if the
 #                             `browser` group imports playwright, else SKIPPED (exit 0)
-#   PLAYWRIGHT_IMAGE        — docker runner image (default: mcr.microsoft.com/playwright/python:v1.62.0);
-#                             the pip `playwright` pin is derived from its `v<version>` tag — the image
-#                             ships browsers but NOT the pip package (platform-verified 2026-08-30)
+#   PLAYWRIGHT_IMAGE        — docker runner image (default: mcr.microsoft.com/playwright/python:v<pin>,
+#                             <pin> = the `playwright==` pin in pyproject.toml's `browser` group — ONE
+#                             source, so a Renovate bump of the pip pin moves the image with it and
+#                             the local and docker runners never test different browsers). The pip
+#                             `playwright` installed in the container is derived from the image's
+#                             `v<version>` tag — the image ships browsers but NOT the pip package
+#                             (platform-verified 2026-08-30)
 #   REGISTRY_MIRROR_MCR     — mcr.microsoft.com mirror (default: http://192.168.40.31, the LAN VIP
 #                             per homelab SERVICES.md §Registry mirrors, ADR-091); the image ref is
 #                             rewritten to <mirror-host>/<path>. REGISTRY_MIRROR_NONE=1 pulls upstream.
@@ -40,7 +44,9 @@ export UV_PROJECT_ENVIRONMENT=.venv
 
 REFERENCE_DATE="2026-08-03"
 RUNNER="${CIRCLES_BROWSER_RUNNER:-auto}"
-IMAGE="${PLAYWRIGHT_IMAGE:-mcr.microsoft.com/playwright/python:v1.62.0}"
+PW_PIN=$(sed -nE 's/^[[:space:]]*"playwright==([0-9.]+)".*/\1/p' pyproject.toml)
+[ -n "$PW_PIN" ] || { echo "ERROR: no playwright==<version> pin in pyproject.toml" >&2; exit 1; }
+IMAGE="${PLAYWRIGHT_IMAGE:-mcr.microsoft.com/playwright/python:v${PW_PIN}}"
 EVIDENCE_DIR=allure-results-browser
 
 # ── skip guard / runner selection (graceful skip keeps the gate usable everywhere) ─────
