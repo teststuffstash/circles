@@ -2,10 +2,28 @@
   "world": "alex",
   "report_path": "../specs-site/evidence",
   "requirements": {
+    "CIR-ADAPT-BUDGET": [
+      "bake-exit-code-only-for-config-errors",
+      "bake-total-budget",
+      "command-children-killed",
+      "command-per-item-timeout",
+      "environment-not-inherited-wholesale"
+    ],
     "CIR-ADAPT-COMMAND": [
       "command-argv-array-required",
+      "command-cannot-set-a-data-date",
+      "command-cwd-is-config-dir",
+      "command-empty-stdout",
       "command-executable-bit-at-validation",
-      "command-executable-exists-at-validation"
+      "command-executable-exists-at-validation",
+      "command-extra-output-ignored",
+      "command-first-non-empty-line-wins",
+      "command-nonzero-exit-dominates",
+      "command-not-shell-interpreted",
+      "command-prints-yellow",
+      "command-stderr-not-on-the-page",
+      "command-stdout-trimmed-and-folded",
+      "command-unknown-word"
     ],
     "CIR-ADAPT-CONTRACT": [
       "adapter-cannot-return-grey",
@@ -53,8 +71,10 @@
       "two-bakes-agree"
     ],
     "CIR-BAKE-EXPOSURE": [
+      "command-stderr-not-passed-through",
       "no-absolute-host-paths",
-      "no-source-content-in-the-artifact"
+      "no-source-content-in-the-artifact",
+      "warning-text-is-bounded"
     ],
     "CIR-BAKE-PAGE-DOES-NOT-RESOLVE": [
       "page-contains-no-adapter-code"
@@ -114,7 +134,8 @@
     "CIR-DATA-FAILURE-IS-GREY": [
       "failure-never-green",
       "failure-never-red",
-      "unreadable-source-is-grey"
+      "unreadable-source-is-grey",
+      "warning-names-item"
     ],
     "CIR-DATA-FRESHNESS-EMPTY": [
       "source-file-empty",

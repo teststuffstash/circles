@@ -25,8 +25,10 @@ def alex_copy(tmp_path: Path) -> AlexCopy:
     """Factory: copy fixtures/alex into tmp_path/alex and return its circles.yaml path.
 
     Keyword knobs re-point the sleep item's ``freshness:`` block (``sleep_source``,
-    ``yellow_after``, ``red_after``) or set the top-level ``timezone``. Everything else
-    stays the fixture person's.
+    ``yellow_after``, ``red_after``) or set the top-level ``timezone``. ``commands`` maps
+    a cell ref (``"wider/plants"``) to the argv its ``status:`` becomes (``command: argv``) —
+    the command-adapter knob; the caller writes the script into the copy before loading.
+    Everything else stays the fixture person's.
     """
     def make(
         *,
@@ -34,6 +36,7 @@ def alex_copy(tmp_path: Path) -> AlexCopy:
         yellow_after: int | None = None,
         red_after: int | None = None,
         timezone: str | None = None,
+        commands: dict[str, list[str]] | None = None,
     ) -> Path:
         root = tmp_path / "alex"
         shutil.copytree(ALEX_DIR, root)
@@ -50,6 +53,11 @@ def alex_copy(tmp_path: Path) -> AlexCopy:
             freshness["yellow_after"] = yellow_after
         if red_after is not None:
             freshness["red_after"] = red_after
+        for ref, argv in (commands or {}).items():
+            ring_id, item_id = ref.split("/")
+            ring = next(r for r in data["rings"] if r["id"] == ring_id)
+            item = next(i for i in ring["items"] if i["id"] == item_id)
+            item["status"] = {"command": list(argv)}
         config_path.write_text(yaml.dump(data, allow_unicode=True), encoding="utf-8")
         return config_path
 

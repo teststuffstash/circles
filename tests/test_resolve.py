@@ -11,6 +11,8 @@ from __future__ import annotations
 
 import json
 import os
+import subprocess
+import sys
 import time
 from datetime import date, datetime, timezone
 from pathlib import Path
@@ -18,6 +20,7 @@ from typing import Any, Callable
 
 import pytest
 
+import bake.adapters as adapters_module
 import bake.resolve as resolve_module
 from bake.__main__ import default_reference_date
 from bake.config import ConfigError, load_config
@@ -64,6 +67,24 @@ def _sleep_failure(artifact: dict) -> str:
     assert len(messages) == 1, messages
     assert messages[0] in sleep["detail_line"]
     return messages[0]
+
+
+def _plants_runs(alex_copy: AlexCopy, body: str) -> Path:
+    """A tmp alex whose wider/plants `command:` runs a real /bin/sh script with *body*."""
+    config_path = alex_copy(commands={"wider/plants": ["./notes/plants-probe.sh"]})
+    script = config_path.parent / "notes" / "plants-probe.sh"
+    script.write_text("#!/bin/sh\n" + body, encoding="utf-8")
+    script.chmod(0o755)
+    return config_path
+
+
+def _run_bake(*args: str) -> subprocess.CompletedProcess:
+    """Run the ONE bake entry point as a real process (`python -m bake …`)."""
+    return subprocess.run(
+        [sys.executable, "-m", "bake", *args],
+        cwd=Path(__file__).resolve().parent.parent,
+        capture_output=True, text=True, timeout=120,
+    )
 
 
 def _item_by_id(artifact: dict, ring_id: str, item_id: str) -> dict:
@@ -329,6 +350,18 @@ class TestDataFailureIsGrey:
         assert "unreadable source" in message
         assert "notes/sleep-log.md" in message
 
+    def test_warning_names_item(self, alex_copy: AlexCopy) -> None:
+        """CIR-DATA-FAILURE-IS-GREY#warning-names-item — the `plants` command exits 3 →
+        the warning identifies cell `wider/plants` and the exit code; the light is ⚪."""
+        artifact = _resolve_fixture(evaluate=True,
+                                    config_path=_plants_runs(alex_copy, "echo green\nexit 3\n"))
+        plants = _item_by_id(artifact, "wider", "plants")
+        assert plants["status"] == "grey"
+        assert plants["grey_reason"] == "by-failure"
+        warnings = [w for w in artifact["warnings"] if w["item"] == "wider/plants"]
+        assert len(warnings) == 1
+        assert "3" in warnings[0]["message"]
+
 
 # ===========================================================================
 # CIR-DATA-NO-AGGREGATION — no roll-up, ever
@@ -560,6 +593,27 @@ class TestBakeStaleSelf:
         stale_after_hours is null at P0."""
         artifact = _resolve_fixture()
         assert artifact["stale_after_hours"] is None
+
+    def test_stale_after_hours_flag(self, tmp_path: Path) -> None:
+        """CIR-BAKE-STALE-SELF#no-threshold-no-banner — the bake writes `null` unless the
+        nightly bake declares its cadence with --stale-after-hours N (P1), which lands as
+        integer N; a non-positive or non-integer N is a config-style error (nonzero exit)."""
+        base = ["--config", str(ALEX_YAML), "--reference-date", "2026-08-03"]
+        omitted = _run_bake(*base, "--out", str(tmp_path / "p0"))
+        assert omitted.returncode == 0, omitted.stderr
+        assert json.loads((tmp_path / "p0" / "data.json").read_text())["stale_after_hours"] is None
+
+        declared = _run_bake(*base, "--out", str(tmp_path / "p1"), "--evaluate",
+                             "--stale-after-hours", "36")
+        assert declared.returncode == 0, declared.stderr
+        assert json.loads((tmp_path / "p1" / "data.json").read_text())["stale_after_hours"] == 36
+
+        for bad in ("0", "-1", "1.5", "abc"):
+            out = tmp_path / f"bad{bad}"
+            rejected = _run_bake(*base, "--out", str(out), f"--stale-after-hours={bad}")
+            assert rejected.returncode != 0, bad
+            assert "stale-after-hours" in rejected.stderr
+            assert not (out / "data.json").exists()
 
 
 # ===========================================================================
@@ -1079,6 +1133,36 @@ class TestBakeExposure:
                 remainder = line.split("—", 1)[1].strip()
                 assert remainder not in serialised, f"{note}: {remainder!r} leaked"
 
+    def test_command_stderr_not_passed_through(self, alex_copy: AlexCopy,
+                                               monkeypatch: pytest.MonkeyPatch) -> None:
+        """CIR-BAKE-EXPOSURE#command-stderr-not-passed-through — a command prints a stack
+        trace with paths and env to stderr: the warning is a bounded, sanitized summary."""
+        monkeypatch.setenv("CIRCLES_SECRET", "s3cret-value")
+        body = ('echo "Traceback (most recent call last):" >&2\n'
+                'echo "  File \\"$0\\", line 7, in /home/alex/bin/probe" >&2\n'
+                'env >&2\nexit 1\n')
+        artifact = _resolve_fixture(evaluate=True, config_path=_plants_runs(alex_copy, body))
+        serialised = json.dumps(artifact)
+        for leaked in ("Traceback", "/home/alex", "PATH=", "CIRCLES_SECRET", "s3cret-value",
+                       "plants-probe.sh"):
+            assert leaked not in serialised, leaked
+        message = next(w["message"] for w in artifact["warnings"] if w["item"] == "wider/plants")
+        assert len(message) <= adapters_module.WARNING_MAX_CHARS
+
+    @pytest.mark.parametrize("stream", ["stderr", "stdout-first-line"])
+    def test_warning_text_is_bounded(self, alex_copy: AlexCopy, stream: str) -> None:
+        """CIR-BAKE-EXPOSURE#warning-text-is-bounded — a command prints 10 MB (to stderr,
+        or as its unknown status word) → the warning is truncated at a fixed cap."""
+        ten_mb = "head -c 10485760 /dev/zero | tr '\\0' 'x'"
+        body = (f"{ten_mb} >&2\nexit 1\n" if stream == "stderr" else f"{ten_mb}\necho\n")
+        artifact = _resolve_fixture(evaluate=True, config_path=_plants_runs(alex_copy, body))
+        plants = _item_by_id(artifact, "wider", "plants")
+        assert plants["status"] == "grey"
+        message = next(w["message"] for w in artifact["warnings"] if w["item"] == "wider/plants")
+        # The cap is a fixed constant, three orders of magnitude under the output.
+        assert len(message) <= adapters_module.WARNING_MAX_CHARS < 10_000
+        assert len(json.dumps(artifact)) < 100_000
+
 
 # ===========================================================================
 # CIR-BAKE-PAGE-DOES-NOT-RESOLVE — the page renders, it never decides
@@ -1326,3 +1410,36 @@ class TestBakeArtifactSchema:
                 assert isinstance(item["share"], (int, float))
                 assert isinstance(item["detail_line"], str)
                 assert "detail_page" in item
+
+
+# ===========================================================================
+# CIR-ADAPT-BUDGET — the bake's exit code (the process, not the resolver)
+# ===========================================================================
+
+class TestAdaptBudgetExitCode:
+    """CIR-ADAPT-BUDGET — failed adapters publish with warnings; only config errors fail."""
+
+    def test_bake_exit_code_only_for_config_errors(self, alex_copy: AlexCopy,
+                                                   tmp_path: Path) -> None:
+        """CIR-ADAPT-BUDGET#bake-exit-code-only-for-config-errors — some adapters failed,
+        none was a config error → exit 0 and the artifact is written with warnings; a
+        config error (a string `command:`) → nonzero and nothing written."""
+        config_path = _plants_runs(alex_copy, "echo red\nexit 3\n")
+        out = tmp_path / "out"
+        ran = _run_bake("--config", str(config_path), "--out", str(out), "--evaluate",
+                        "--reference-date", "2026-08-03")
+        assert ran.returncode == 0, ran.stderr
+        artifact = json.loads((out / "data.json").read_text())
+        assert any(w["item"] == "wider/plants" for w in artifact["warnings"])
+        assert (out / "index.html").exists()
+
+        broken = config_path.read_text().replace("- ./notes/plants-probe.sh",
+                                                 "./notes/plants-probe.sh", 1)
+        broken = broken.replace("command:\n", "command: ", 1)
+        config_path.write_text(broken)
+        bad_out = tmp_path / "bad"
+        failed = _run_bake("--config", str(config_path), "--out", str(bad_out), "--evaluate",
+                           "--reference-date", "2026-08-03")
+        assert failed.returncode != 0
+        assert "array" in failed.stderr  # the config error names the argv-array form
+        assert not (bad_out / "data.json").exists()

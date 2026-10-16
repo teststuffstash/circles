@@ -3,10 +3,11 @@
 #
 # Usage:
 #   python -m bake --config fixtures/alex/circles.yaml --out dist/ [--reference-date YYYY-MM-DD]
-#                  [--evaluate]
+#                  [--evaluate] [--stale-after-hours N]
 #
-# --evaluate is the P1 (nightly) switch: freshness: adapters are evaluated against their
-# sources. Without it the build-time bake behaves as at P0 — freshness:/command: items are
+# --evaluate is the P1 (nightly) switch: freshness: and command: adapters are evaluated
+# against their sources. --stale-after-hours N is the nightly bake's declared cadence,
+# written to the artifact's stale_after_hours (omitted: null, as at P0 — CIR-BAKE-STALE-SELF). Without it the build-time bake behaves as at P0 — freshness:/command: items are
 # ⚪ not-evaluated (CIR-PROC-BAKE-ONE-PATH: one code path, differing only in configuration).
 #
 # The page slice extends this same entry point so one run writes both
@@ -40,6 +41,17 @@ def default_reference_date(tz_name: str, now: datetime) -> date:
     return now.astimezone(ZoneInfo(tz_name)).date()
 
 
+def positive_hours(text: str) -> int:
+    """argparse type for --stale-after-hours: a positive integer, nothing else."""
+    try:
+        value = int(text, 10)
+    except ValueError:
+        raise argparse.ArgumentTypeError(f"must be a positive integer, got {text!r}") from None
+    if value <= 0:
+        raise argparse.ArgumentTypeError(f"must be a positive integer, got {text!r}")
+    return value
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(
         description="circles bake — turn circles.yaml into the baked artifact (data.json)",
@@ -66,8 +78,16 @@ def main() -> None:
         "--evaluate",
         action="store_true",
         default=False,
-        help="Evaluate freshness: adapters (the nightly bake). Off: freshness/command "
-             "items are grey not-evaluated, as at image-build time",
+        help="Evaluate freshness: and command: adapters (the nightly bake). Off: "
+             "freshness/command items are grey not-evaluated, as at image-build time",
+    )
+    parser.add_argument(
+        "--stale-after-hours",
+        type=positive_hours,
+        default=None,
+        metavar="N",
+        help="The bake's cadence: the page banners itself stale past N hours "
+             "(default: null — no cadence, no banner)",
     )
     args = parser.parse_args()
 
@@ -104,6 +124,7 @@ def main() -> None:
             reference_date=reference_date,
             generated_at=generated_at,
             evaluate=args.evaluate,
+            stale_after_hours=args.stale_after_hours,
         )
     except Exception as e:
         print(f"Resolution error: {e}", file=sys.stderr)
