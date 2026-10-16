@@ -20,3 +20,11 @@ spec:
           securityContext: { allowPrivilegeEscalation: false, capabilities: { drop: ["ALL"] } }
           readinessProbe: { httpGet: { path: /, port: http } }
           resources: {{- toYaml .Values.resources | nindent 12 }}
+          {{- if eq .Values.content.mode "volume" }}
+          # the bake's output, read-only over the image's docroot (nginx.conf stays from the image)
+          volumeMounts:
+            - { name: content, mountPath: /usr/share/nginx/html, readOnly: true }
+      volumes:
+        - name: content
+          persistentVolumeClaim: { claimName: {{ .Values.content.claimName }}, readOnly: true }
+          {{- end }}

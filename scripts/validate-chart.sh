@@ -31,4 +31,15 @@ echo "==> kubeconform (strict, existing-secret mode)"
 kubeconform -summary -strict "${RENDERED2}"
 
 echo ""
+echo "==> helm template (deploy seam: bake.enabled + content.mode=volume)"
+RENDERED3=$(mktemp /tmp/rendered.XXXXXX.yaml)
+trap 'rm -f "${RENDERED}" "${RENDERED2}" "${RENDERED3}"' EXIT
+helm template test-validate "${CHART_DIR}" \
+  --set bake.enabled=true \
+  --set content.mode=volume > "${RENDERED3}"
+
+echo "==> kubeconform (strict, deploy-seam mode)"
+kubeconform -summary -strict "${RENDERED3}"
+
+echo ""
 echo "✓ chart validation passed"

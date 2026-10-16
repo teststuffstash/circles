@@ -1,0 +1,14 @@
+{{- /* The bake's output volume. Rendered when the CronJob writes to it OR the page serves it:
+       rollout step 3 runs the bake onto the PVC while the page still serves the image content. */ -}}
+{{- if or .Values.bake.enabled (eq .Values.content.mode "volume") }}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ .Values.content.claimName }}
+  labels: { app.kubernetes.io/name: {{ .Chart.Name }} }
+spec:
+  accessModes: [ReadWriteOnce]
+  storageClassName: longhorn
+  resources:
+    requests: { storage: {{ .Values.content.storage }} }
+{{- end }}

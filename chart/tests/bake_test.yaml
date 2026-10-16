@@ -1,0 +1,197 @@
+# The content/bake seam — circles-iac docs/deploy-seam.md (ADR-001) §"Values the overlay will set"
+# and §"Pod shape the chart renders for the CronJob". Expected values below come from that doc
+# and chart/values.yaml defaults (schedule "17 1 * * *", staleAfterHours 36, configPath
+# circles.yaml, sourceSecretName circles-source-git, claimName circles-content, storage 1Gi).
+suite: content/bake seam
+templates: [cronjob.yaml, pvc.yaml, deployment.yaml]
+tests:
+  # ── defaults: today's chart, nothing new rendered ──────────────────────────
+  - it: default values render no CronJob
+    template: cronjob.yaml
+    asserts:
+      - hasDocuments: { count: 0 }
+  - it: default values render no PVC
+    template: pvc.yaml
+    asserts:
+      - hasDocuments: { count: 0 }
+  - it: image mode (default) mounts nothing over the docroot
+    template: deployment.yaml
+    asserts:
+      - notExists: { path: spec.template.spec.volumes }
+      - notExists: { path: "spec.template.spec.containers[0].volumeMounts" }
+
+  # ── PVC: rendered when the bake writes OR the page reads ───────────────────
+  - it: bake.enabled alone (content.mode image — rollout step 3) renders the PVC
+    template: pvc.yaml
+    set: { bake: { enabled: true } }
+    asserts:
+      - hasDocuments: { count: 1 }
+      - isKind: { of: PersistentVolumeClaim }
+      - equal: { path: metadata.name, value: circles-content }
+      - equal: { path: spec.storageClassName, value: longhorn }
+      - equal: { path: spec.accessModes, value: [ReadWriteOnce] }
+      - equal: { path: spec.resources.requests.storage, value: 1Gi }
+  - it: content.mode volume alone renders the PVC
+    template: pvc.yaml
+    set: { content: { mode: volume } }
+    asserts:
+      - hasDocuments: { count: 1 }
+  - it: content.storage + claimName flow into the PVC
+    template: pvc.yaml
+    set: { content: { mode: volume, claimName: other, storage: 2Gi } }
+    asserts:
+      - equal: { path: metadata.name, value: other }
+      - equal: { path: spec.resources.requests.storage, value: 2Gi }
+
+  # ── Deployment, volume mode ────────────────────────────────────────────────
+  - it: volume mode mounts the PVC read-only over the nginx docroot
+    template: deployment.yaml
+    set: { content: { mode: volume } }
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].volumeMounts
+          content: { name: content, mountPath: /usr/share/nginx/html, readOnly: true }
+      - contains:
+          path: spec.template.spec.volumes
+          content: { name: content, persistentVolumeClaim: { claimName: circles-content, readOnly: true } }
+  - it: volume mode keeps the page image (nginx.conf stays from the image)
+    template: deployment.yaml
+    set: { content: { mode: volume }, image: { tag: 1.2.3 } }
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].image
+          value: "ghcr.io/teststuffstash/circles:1.2.3"
+
+  # ── CronJob shape ──────────────────────────────────────────────────────────
+  - it: bake.enabled renders the CronJob with the doc's job policy
+    template: cronjob.yaml
+    set: { bake: { enabled: true } }
+    asserts:
+      - hasDocuments: { count: 1 }
+      - isKind: { of: CronJob }
+      - equal: { path: spec.schedule, value: "17 1 * * *" }
+      - equal: { path: spec.concurrencyPolicy, value: Forbid }
+      - equal: { path: spec.successfulJobsHistoryLimit, value: 1 }
+      - equal: { path: spec.failedJobsHistoryLimit, value: 3 }
+      - equal: { path: spec.jobTemplate.spec.backoffLimit, value: 2 }
+      - equal: { path: spec.jobTemplate.spec.ttlSecondsAfterFinished, value: 3600 }
+      - equal: { path: spec.jobTemplate.spec.template.spec.automountServiceAccountToken, value: false }
+      - equal: { path: spec.jobTemplate.spec.template.spec.activeDeadlineSeconds, value: 600 }
+  - it: the bake pod runs as nginx-unprivileged's uid 101, non-root
+    template: cronjob.yaml
+    set: { bake: { enabled: true } }
+    asserts:
+      - equal: { path: spec.jobTemplate.spec.template.spec.securityContext.runAsUser, value: 101 }
+      - equal: { path: spec.jobTemplate.spec.template.spec.securityContext.fsGroup, value: 101 }
+      - equal: { path: spec.jobTemplate.spec.template.spec.securityContext.runAsNonRoot, value: true }
+  - it: required podAffinity pins the bake to the page pod's node (RWO volume)
+    template: cronjob.yaml
+    set: { bake: { enabled: true } }
+    asserts:
+      - equal:
+          path: spec.jobTemplate.spec.template.spec.affinity.podAffinity.requiredDuringSchedulingIgnoredDuringExecution[0].topologyKey
+          value: kubernetes.io/hostname
+      - equal:
+          path: spec.jobTemplate.spec.template.spec.affinity.podAffinity.requiredDuringSchedulingIgnoredDuringExecution[0].labelSelector.matchLabels
+          value: { app.kubernetes.io/name: circles }
+  - it: the bake pod's own label does not match the page Service/affinity selector
+    template: cronjob.yaml
+    set: { bake: { enabled: true } }
+    asserts:
+      - notEqual:
+          path: spec.jobTemplate.spec.template.metadata.labels["app.kubernetes.io/name"]
+          value: circles
+  - it: main container runs the venv python with the exact bake args
+    template: cronjob.yaml
+    set: { bake: { enabled: true } }
+    asserts:
+      - equal:
+          path: spec.jobTemplate.spec.template.spec.containers[0].command
+          value: ["/build/.venv/bin/python", "-m", "bake"]
+      - equal:
+          path: spec.jobTemplate.spec.template.spec.containers[0].args
+          value: ["--config", "/src/repo/circles.yaml", "--out", "/content", "--evaluate", "--stale-after-hours", "36"]
+      - equal: { path: "spec.jobTemplate.spec.template.spec.containers[0].workingDir", value: /build }
+  - it: staleAfterHours + configPath flow into the args
+    template: cronjob.yaml
+    set: { bake: { enabled: true, staleAfterHours: 12, configPath: sub/c.yaml } }
+    asserts:
+      - equal:
+          path: spec.jobTemplate.spec.template.spec.containers[0].args
+          value: ["--config", "/src/repo/sub/c.yaml", "--out", "/content", "--evaluate", "--stale-after-hours", "12"]
+  - it: both containers use the circles-bake image at the chart appVersion by default
+    template: cronjob.yaml
+    set: { bake: { enabled: true } }
+    chart: { appVersion: 2026.9.5-gabc }
+    asserts:
+      - equal:
+          path: spec.jobTemplate.spec.template.spec.containers[0].image
+          value: "ghcr.io/teststuffstash/circles-bake:2026.9.5-gabc"
+      - equal:
+          path: spec.jobTemplate.spec.template.spec.initContainers[0].image
+          value: "ghcr.io/teststuffstash/circles-bake:2026.9.5-gabc"
+  - it: the PVC is mounted RW at /content, the clone lands in an emptyDir at /src
+    template: cronjob.yaml
+    set: { bake: { enabled: true } }
+    asserts:
+      - contains:
+          path: spec.jobTemplate.spec.template.spec.containers[0].volumeMounts
+          content: { name: content, mountPath: /content }
+      - contains:
+          path: spec.jobTemplate.spec.template.spec.volumes
+          content: { name: content, persistentVolumeClaim: { claimName: circles-content } }
+      - contains:
+          path: spec.jobTemplate.spec.template.spec.volumes
+          content: { name: src, emptyDir: {} }
+      - contains:
+          path: spec.jobTemplate.spec.template.spec.initContainers[0].volumeMounts
+          content: { name: src, mountPath: /src }
+
+  # ── the source Secret: files only (CIR-ADAPT-BUDGET#environment-not-inherited-wholesale) ──
+  - it: the source Secret is mounted read-only as files into the clone container only
+    template: cronjob.yaml
+    set: { bake: { enabled: true } }
+    asserts:
+      - contains:
+          path: spec.jobTemplate.spec.template.spec.volumes
+          content: { name: source-secret, secret: { secretName: circles-source-git, defaultMode: 0440 } }
+      - contains:
+          path: spec.jobTemplate.spec.template.spec.initContainers[0].volumeMounts
+          content: { name: source-secret, mountPath: /secrets/source, readOnly: true }
+      - notContains:
+          path: spec.jobTemplate.spec.template.spec.containers[0].volumeMounts
+          content: { name: source-secret, mountPath: /secrets/source, readOnly: true }
+  - it: no container env/envFrom references the Secret (CIR-ADAPT-BUDGET#environment-not-inherited-wholesale)
+    template: cronjob.yaml
+    set: { bake: { enabled: true } }
+    asserts:
+      - notExists: { path: "spec.jobTemplate.spec.template.spec.containers[0].envFrom" }
+      - notExists: { path: "spec.jobTemplate.spec.template.spec.initContainers[0].envFrom" }
+      - notExists: { path: "spec.jobTemplate.spec.template.spec.containers[0].env[?(@.valueFrom)]" }
+      - notExists: { path: "spec.jobTemplate.spec.template.spec.initContainers[0].env[?(@.valueFrom)]" }
+      - notMatchRegexRaw: { pattern: "secretRef|secretKeyRef" }
+  - it: the clone reads URL and token from the mounted files, never inlined
+    template: cronjob.yaml
+    set: { bake: { enabled: true } }
+    asserts:
+      - matchRegex:
+          path: spec.jobTemplate.spec.template.spec.initContainers[0].args[0]
+          pattern: "read -r url < /secrets/source/url"
+      - matchRegex:
+          path: spec.jobTemplate.spec.template.spec.initContainers[0].args[0]
+          pattern: "credential.helper=.*cat /secrets/source/token"
+      - matchRegex:
+          path: spec.jobTemplate.spec.template.spec.initContainers[0].args[0]
+          pattern: "--depth 1"
+
+  # ── schema ────────────────────────────────────────────────────────────────
+  - it: schema rejects an unknown content.mode
+    template: deployment.yaml
+    set: { content: { mode: foo } }
+    asserts:
+      - failedTemplate: {}
+  - it: schema rejects an unknown bake key
+    template: cronjob.yaml
+    set: { bake: { enabled: true, token: oops } }
+    asserts:
+      - failedTemplate: {}
