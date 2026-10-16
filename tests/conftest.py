@@ -7,7 +7,10 @@
 
 from __future__ import annotations
 
+import json
+import os
 import shutil
+import subprocess
 from pathlib import Path
 from typing import Callable
 
@@ -17,7 +20,8 @@ import yaml
 
 from rules import case_title
 
-FIXTURES = Path(__file__).resolve().parent.parent / "fixtures"
+REPO = Path(__file__).resolve().parent.parent
+FIXTURES = REPO / "fixtures"
 ALEX_DIR = FIXTURES / "alex"
 
 AlexCopy = Callable[..., Path]
@@ -82,3 +86,52 @@ def pytest_runtest_call(item: pytest.Item) -> None:
                      getattr(getattr(item, "function", None), "__doc__", None))
     if row:
         allure.dynamic.title(row)
+
+
+# ---------------------------------------------------------------------------- the head stamp
+# CONVENTIONS § The head/artifact stamp (allure-behavior-snippets): every Allure results dir
+# carries environment.properties (`git.commit=<sha>` — the commit the suite ran at) and
+# executor.json (the CI run URL). No `image.digest`: these runs exercise the PR head's source,
+# not the built image, so this is PR-head evidence and the stamp says so by omission.
+
+def head_commit() -> str | None:
+    """The commit the suite proves: ``CIRCLES_HEAD_SHA`` (CI exports the PR head there — on a
+    pull_request event ``GITHUB_SHA`` is the test-merge commit, not the head), else HEAD."""
+    sha = os.environ.get("CIRCLES_HEAD_SHA", "").strip()
+    if sha:
+        return sha
+    try:
+        out = subprocess.run(["git", "rev-parse", "HEAD"], cwd=REPO, capture_output=True,
+                             text=True, timeout=10)
+    except (OSError, subprocess.SubprocessError):
+        return None
+    if out.returncode != 0:
+        return None
+    return out.stdout.strip() or None
+
+
+def executor() -> dict:
+    """Allure's executor.json: the CI run when GitHub Actions env names one, else a local run."""
+    server, repo, run_id = (os.environ.get(k) for k in
+                            ("GITHUB_SERVER_URL", "GITHUB_REPOSITORY", "GITHUB_RUN_ID"))
+    if server and repo and run_id:
+        url = f"{server}/{repo}/actions/runs/{run_id}"
+        return {"name": "GitHub Actions", "type": "github", "url": f"{server}/{repo}",
+                "buildName": f"{os.environ.get('GITHUB_WORKFLOW', 'run')} #{run_id}",
+                "buildUrl": url, "reportName": "circles evidence"}
+    return {"name": "local", "type": "local", "reportName": "circles evidence"}
+
+
+def pytest_sessionfinish(session: pytest.Session) -> None:
+    """Stamp the --alluredir results dir (no-op when the run writes no Allure results)."""
+    results = getattr(session.config.option, "allure_report_dir", None)
+    if not results:
+        return
+    results_dir = Path(results)
+    results_dir.mkdir(parents=True, exist_ok=True)
+    commit = head_commit()
+    lines = [f"git.commit={commit}"] if commit else []
+    (results_dir / "environment.properties").write_text(
+        "".join(line + "\n" for line in lines), encoding="utf-8")
+    (results_dir / "executor.json").write_text(json.dumps(executor(), indent=2) + "\n",
+                                               encoding="utf-8")
