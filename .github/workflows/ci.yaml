@@ -61,7 +61,12 @@ jobs:
 
       # No toolchain install: the ARC runner image bakes single-user Nix + devbox + the LAN
       # nix substituter (homelab docker/arc-runner/, FU-015).
+      # The kind system tier is the e2e job's (above). Since the ephemeral runner gained a docker
+      # daemon (seen 2026-10-16), `devbox run ci` started running test-system here too — two kind
+      # clusters per PR, and the duplicate flaked (etcd timeout on #99). Skip it here explicitly.
       - name: Chart validation + unit tests (devbox run ci)
+        env:
+          CIRCLES_SYSTEM_TEST_SKIP: "1"
         run: devbox run ci
 
       - name: Secret scan (devbox run scan-secrets)
