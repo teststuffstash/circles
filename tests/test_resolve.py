@@ -1,102 +1,165 @@
-# Tests for bake/resolve.py — resolution logic and the baked artifact
+# Evidence for the resolution rules and the baked artifact — status resolution, grey reasons,
+# the failure algebra, the detail line, data.json's shape/determinism/exposure, the adapter
+# contract's observable half, the reference date, and the P0 phase.
 #
-# Every decision-table row of every fully-owned requirement has a citing test,
-# parametrised per CIR-PROC-TEST-ROWS#rows-parametrised-not-copied, with the row id
-# (CIR-<AREA>-<NAME>#<row-id>) cited verbatim in the test name.
+# World: alex — every case starts from fixtures/alex (the spec pages' declared world:
+# specs/data/status-resolution.md, specs/data/data-json.md "World: alex") and turns at most one
+# knob; the knob and its value name the given step. The system boundary these rules are stated
+# against is the bake CLI (`python -m bake`): its exit code, its stderr, and the artifact it
+# writes (out/data.json + out/index.html). Each labelled case reads given (world + knob) → when
+# (ONE bake run) → then (one verdict per claim) — tests/evidence_helpers.py, after
+# allure-behavior-snippets CONVENTIONS § Prime rule of reporting. Each case cites its spec row as
+# CIR-<AREA>-<NAME>#<row-id> (tests/rules.py `case_title`).
 #
-# Tests build inputs from fixtures/ at runtime — no second synthetic person invented
-# in test code (CIR-PROC-TEST-FIXTURES#fixture-row-is-spec-row).
+# Dated rows move the injected reference date (`--reference-date`), never the committed notes
+# (CIR-PROC-TEST-FIXTURES): self/sleep's newest entry is 2026-08-01 (yellow_after 7, red_after
+# 30), self/labs' is 2026-01-15 (yellow_after 100, red_after 190). Expected values come from the
+# spec rows and the fixture's own comments, never from running the bake.
+#
+# The unlabelled tests at the end of each section are unit guards on internals the CLI cannot
+# reach (an injected clock, a monkeypatched adapter, a pure predicate) — CONVENTIONS § Allure
+# taxonomy: they run in the suite but are never evidence.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
+import re
+import stat
 import subprocess
 import sys
 import time
 from datetime import date, datetime, timezone
 from pathlib import Path
 from typing import Any, Callable
+from zoneinfo import ZoneInfo
 
+import allure
 import pytest
 
 import bake.adapters as adapters_module
 import bake.resolve as resolve_module
 from bake.__main__ import default_reference_date
-from bake.config import ConfigError, load_config
+from bake.config import load_config
 from bake.emit import write_artifact
-from bake.resolve import (
-    GreyReason,
-    Status,
-    resolve,
-    window_status,
+from bake.resolve import resolve, window_status
+from evidence_helpers import (
+    FIXTURE_REFERENCE_DATE,
+    REPO,
+    BakeRun,
+    given_alex,
+    item,
+    item_of,
+    then_config_error,
+    verdict,
+    when_bake,
 )
-
 from rules import rule
 
-FIXTURES = Path(__file__).resolve().parent.parent / "fixtures"
+FIXTURES = REPO / "fixtures"
 ALEX_YAML = FIXTURES / "alex" / "circles.yaml"
-FIXTURE_REFERENCE_DATE = date(2026, 8, 3)
-FIXTURE_GENERATED_AT = datetime(2026, 8, 3, 2, 0, 0, tzinfo=timezone.utc)
+# Unit guards inject these into resolve() directly (the CLI stamps the real clock instead).
+UNIT_REFERENCE_DATE = date(2026, 8, 3)
+UNIT_GENERATED_AT = datetime(2026, 8, 3, 2, 0, 0, tzinfo=timezone.utc)
 AlexCopy = Callable[..., Path]  # the `alex_copy` factory fixture (tests/conftest.py)
 
+# The item fields of the artifact — specs/data/data-json.md CIR-BAKE-ARTIFACT field table.
+ITEM_FIELDS = sorted(["id", "label", "status", "grey_reason", "guardrail", "note", "link", "share",
+                      "last_data_date", "detail_line", "detail_page"])
+# The top-level fields — the same table (version … warnings).
+TOP_LEVEL_FIELDS = sorted(["version", "spec_version", "person", "generated_at", "reference_date",
+                           "timezone", "stale_after_hours", "rings", "warnings"])
+PROBE = "./notes/plants-probe.sh"
+# The spec tables' lights → the artifact's wire words (data-json.md CIR-BAKE-STATUS-VALUES, ⚖-R19).
+# A phase's bake = the one entry point plus that phase's flags (CIR-PROC-BAKE-ONE-PATH).
+PHASE_FLAGS = {"P0 build-time": (), "P1 nightly": ("--evaluate",)}
+WIRE = {"🟢": "green", "🟡": "yellow", "🔴": "red", "⚪": "grey"}
+
 
 # ===========================================================================
-# Helpers
+# Local helpers — given (arrange) and then (observe) only; the when is always when_bake
 # ===========================================================================
 
-def _resolve_fixture(
-    *,
-    reference_date: date = FIXTURE_REFERENCE_DATE,
-    generated_at: datetime = FIXTURE_GENERATED_AT,
-    evaluate: bool = False,
-    config_path: Path = ALEX_YAML,
-) -> dict:
-    """Load the fixture config and resolve it (adapters evaluated only on request)."""
-    config = load_config(config_path)
-    return resolve(config, reference_date=reference_date, generated_at=generated_at,
-                   evaluate=evaluate)
+def _items(run: BakeRun) -> dict[str, dict]:
+    """Every item of a baked artifact, keyed by its `<ring>/<item>` ref, in artifact order."""
+    return {f"{r['id']}/{i['id']}": i for r in run.data["rings"] for i in r["items"]}
 
 
-def _sleep_failure(artifact: dict) -> str:
-    """The CIR-DATA-FAILURE-IS-GREY shape for self/sleep: ⚪ by-failure + one warning
-    naming the item, whose text is the detail line's reason segment (⚖-R51)."""
-    sleep = _item_by_id(artifact, "self", "sleep")
-    assert sleep["status"] == "grey"
-    assert sleep["grey_reason"] == "by-failure"
-    assert sleep["last_data_date"] is None
-    messages = [w["message"] for w in artifact["warnings"] if w["item"] == "self/sleep"]
-    assert len(messages) == 1, messages
-    assert messages[0] in sleep["detail_line"]
-    return messages[0]
+def _raw(run: BakeRun) -> str:
+    """out/data.json as the bytes the page's host serves (text)."""
+    return (run.out_dir / "data.json").read_text(encoding="utf-8")
 
 
-def _plants_runs(alex_copy: AlexCopy, body: str) -> Path:
-    """A tmp alex whose wider/plants `command:` runs a real /bin/sh script with *body*."""
-    config_path = alex_copy(commands={"wider/plants": ["./notes/plants-probe.sh"]})
-    script = config_path.parent / "notes" / "plants-probe.sh"
-    script.write_text("#!/bin/sh\n" + body, encoding="utf-8")
-    script.chmod(0o755)
-    return config_path
+def _item_warnings(run: BakeRun, ref: str) -> list[str]:
+    """The artifact's warning messages for one item ref."""
+    return [w["message"] for w in run.data["warnings"] if w["item"] == ref]
 
 
-def _run_bake(*args: str) -> subprocess.CompletedProcess:
-    """Run the ONE bake entry point as a real process (`python -m bake …`)."""
-    return subprocess.run(
-        [sys.executable, "-m", "bake", *args],
-        cwd=Path(__file__).resolve().parent.parent,
-        capture_output=True, text=True, timeout=120,
-    )
+def _masked_digest(raw: str) -> str:
+    """sha256 of a data.json text with its generated_at value masked — CIR-BAKE-DETERMINISM's
+    "byte-identical except generated_at" made comparable as one short value."""
+    masked = re.sub(r'"generated_at": "[^"]*"', '"generated_at": "<masked>"', raw)
+    return hashlib.sha256(masked.encode("utf-8")).hexdigest()[:16]
 
 
-def _item_by_id(artifact: dict, ring_id: str, item_id: str) -> dict:
-    """Find an item dict by ring id and item id."""
-    for ring in artifact["rings"]:
-        if ring["id"] == ring_id:
-            for item in ring["items"]:
-                if item["id"] == item_id:
-                    return item
-    raise KeyError(f"Item {ring_id}/{item_id} not found")
+def _copy_then(alex_copy: AlexCopy, fn: Callable[[Path], None]) -> Callable[[], Path]:
+    """An ``alex_copy`` that also applies a FILE-level knob (a script, a mode bit) to the copy, so
+    given_alex performs it inside its given step."""
+    def make() -> Path:
+        config = alex_copy()
+        fn(config.parent)
+        return config
+    return make
+
+
+def given_plants_runs(alex_copy: AlexCopy, what: str, body: str) -> Path:
+    """Given: world alex whose wider/plants `command:` runs a real /bin/sh probe script.
+
+    ``what`` names the probe's behaviour (the step name threads it); ``body`` is the script."""
+    def write_probe(world: Path) -> None:
+        script = world / "notes" / "plants-probe.sh"
+        script.write_text("#!/bin/sh\n" + body, encoding="utf-8")
+        script.chmod(0o755)
+        allure.attach("#!/bin/sh\n" + body, name=f"notes/plants-probe.sh ({what})",
+                      attachment_type=allure.attachment_type.TEXT)
+    return given_alex(_copy_then(alex_copy, write_probe), f"wider/plants command: [{PROBE}] — {what}",
+                      lambda c: item(c, "wider/plants").update(status={"command": [PROBE]}))
+
+
+def given_prior_bake(root: Path, config: Path, *flags: str, why: str,
+                     env: dict[str, str] | None = None) -> str:
+    """Given: an earlier bake already published ``<root>/out`` — an arrange step that dies loudly
+    on failure (CONVENTIONS § The helper razor). Returns that run's data.json text."""
+    out = root / "out"
+    argv = ["-m", "bake", "--config", str(config), "--out", str(out),
+            "--reference-date", FIXTURE_REFERENCE_DATE, *flags]
+    shown_config = (config.relative_to(REPO) if REPO in config.parents else config.relative_to(root))
+    shown = f"bake --config {shown_config.as_posix()} --out out --reference-date {FIXTURE_REFERENCE_DATE} " + " ".join(flags)
+    run_env = dict(os.environ, PYTHONPATH=os.pathsep.join(filter(None, [str(REPO), os.environ.get("PYTHONPATH")])))
+    run_env.update(env or {})
+    with allure.step(f"Given: a prior bake published out/ ({why}): {shown.strip()}"):
+        proc = subprocess.run([sys.executable, *argv], cwd=root, env=run_env,
+                              capture_output=True, text=True, timeout=60)
+        assert proc.returncode == 0, f"arrange: the prior bake failed:\n{proc.stderr}"
+        raw = (out / "data.json").read_text(encoding="utf-8")
+        allure.attach(raw, name="prior out/data.json", attachment_type=allure.attachment_type.JSON)
+    return raw
+
+
+def then_grey_by_failure(run: BakeRun, ref: str, cause: str) -> None:
+    """The spec phrase "⚪ + build warning, reason by-failure" (CIR-DATA-FAILURE-IS-GREY) as its
+    claims: the page still ships, the light is grey/by-failure with no data date, exactly one
+    warning names the item and the cause, and the detail line carries that same reason (⚖-R51)."""
+    verdict("exit code", run.exit_code, 0)
+    it = item_of(run.data, ref)
+    verdict(f"{ref} status, grey_reason, last_data_date", [it["status"], it["grey_reason"], it["last_data_date"]],
+            ["grey", "by-failure", None])
+    messages = _item_warnings(run, ref)
+    verdict(f"{ref} warning count", len(messages), 1)
+    verdict(f"{ref} warning", messages[0] if messages else "", cause, op="contains")
+    verdict(f"{ref} detail_line", it["detail_line"], messages[0] if messages else "<no warning>",
+            op="contains")
 
 
 # ===========================================================================
@@ -107,191 +170,124 @@ class TestDataStatusResolution:
     """CIR-DATA-STATUS-RESOLUTION — the canonical table."""
 
     @rule("CIR-DATA-STATUS-RESOLUTION")
-    def test_no_adapter_declared(self) -> None:
-        """CIR-DATA-STATUS-RESOLUTION#no-adapter-declared —
-        self/exercise has no status: → ⚪ unmonitored, reason by-choice."""
-        artifact = _resolve_fixture()
-        item = _item_by_id(artifact, "self", "exercise")
-        assert item["status"] == "grey"
-        assert item["grey_reason"] == "by-choice"
+    def test_no_adapter_declared(self, alex_copy) -> None:
+        """CIR-DATA-STATUS-RESOLUTION#no-adapter-declared — self/exercise has no status: →
+        ⚪ unmonitored, reason by-choice."""
+        run = when_bake(given_alex(alex_copy))
+        verdict("exit code", run.exit_code, 0)
+        exercise = item_of(run.data, "self/exercise")
+        verdict("self/exercise status, grey_reason", [exercise["status"], exercise["grey_reason"]],
+                ["grey", "by-choice"])
 
     @rule("CIR-DATA-STATUS-RESOLUTION")
-    def test_manual_green(self) -> None:
-        """CIR-DATA-STATUS-RESOLUTION#manual-green — children/nova manual: green → 🟢."""
-        artifact = _resolve_fixture()
-        item = _item_by_id(artifact, "children", "nova")
-        assert item["status"] == "green"
-        assert item["grey_reason"] is None
+    @pytest.mark.parametrize("ref,light", [
+        pytest.param("children/nova", "green", id="CIR-DATA-STATUS-RESOLUTION#manual-green"),
+        pytest.param("partner/date-night", "yellow", id="CIR-DATA-STATUS-RESOLUTION#manual-yellow"),
+        pytest.param("wider/friends", "red", id="CIR-DATA-STATUS-RESOLUTION#manual-red"),
+    ])
+    def test_manual_light(self, alex_copy, ref: str, light: str) -> None:
+        """CIR-DATA-STATUS-RESOLUTION — `manual: <light>` resolves to that light, no grey reason.
+        alex's children/nova is manual: green, partner/date-night yellow, wider/friends red."""
+        run = when_bake(given_alex(alex_copy))
+        verdict("exit code", run.exit_code, 0)
+        it = item_of(run.data, ref)
+        verdict(f"{ref} status, grey_reason", [it["status"], it["grey_reason"]], [light, None])
+
+    # self/sleep (newest 2026-08-01, yellow_after 7, red_after 30), adapter ON, the reference
+    # date moved so the newest entry lands at the row's age.
 
     @rule("CIR-DATA-STATUS-RESOLUTION")
-    def test_manual_yellow(self) -> None:
-        """CIR-DATA-STATUS-RESOLUTION#manual-yellow — partner/date-night manual: yellow → 🟡."""
-        artifact = _resolve_fixture()
-        item = _item_by_id(artifact, "partner", "date-night")
-        assert item["status"] == "yellow"
-        assert item["grey_reason"] is None
+    def test_freshness_inside_window(self, alex_copy) -> None:
+        """CIR-DATA-STATUS-RESOLUTION#freshness-inside-window — newest date 3d old (reference
+        2026-08-04 vs 2026-08-01), yellow_after 7, red_after 30 → 🟢."""
+        run = when_bake(given_alex(alex_copy), "--evaluate", reference_date="2026-08-04")
+        verdict("exit code", run.exit_code, 0)
+        sleep = item_of(run.data, "self/sleep")
+        verdict("self/sleep status, grey_reason", [sleep["status"], sleep["grey_reason"]], ["green", None])
+        verdict("self/sleep last_data_date", sleep["last_data_date"], "2026-08-01")
 
     @rule("CIR-DATA-STATUS-RESOLUTION")
-    def test_manual_red(self) -> None:
-        """CIR-DATA-STATUS-RESOLUTION#manual-red — wider/friends manual: red → 🔴."""
-        artifact = _resolve_fixture()
-        item = _item_by_id(artifact, "wider", "friends")
-        assert item["status"] == "red"
-        assert item["grey_reason"] is None
-
-    # The freshness rows run the fixture's sleep item (newest date 2026-08-01,
-    # yellow_after 7, red_after 30) with the adapter ON, moving the reference date so the
-    # newest entry lands at the row's age (CIR-PROC-TEST-FIXTURES): the committed note is
-    # never rewritten.
+    def test_freshness_stale(self, alex_copy) -> None:
+        """CIR-DATA-STATUS-RESOLUTION#freshness-stale — newest date 10d old (reference
+        2026-08-11), yellow_after 7, red_after 30 → 🟡."""
+        run = when_bake(given_alex(alex_copy), "--evaluate", reference_date="2026-08-11")
+        verdict("exit code", run.exit_code, 0)
+        sleep = item_of(run.data, "self/sleep")
+        verdict("self/sleep status, grey_reason", [sleep["status"], sleep["grey_reason"]], ["yellow", None])
+        verdict("self/sleep detail_line", sleep["detail_line"], "attention · last data 2026-08-01", op="contains")
 
     @rule("CIR-DATA-STATUS-RESOLUTION")
-    def test_freshness_inside_window(self) -> None:
-        """CIR-DATA-STATUS-RESOLUTION#freshness-inside-window — newest date 3d old,
-        yellow_after 7, red_after 30 → 🟢 (reference 2026-08-04 vs 2026-08-01)."""
-        artifact = _resolve_fixture(reference_date=date(2026, 8, 4), evaluate=True)
-        sleep = _item_by_id(artifact, "self", "sleep")
-        assert sleep["status"] == "green"
-        assert sleep["grey_reason"] is None
-        assert sleep["last_data_date"] == "2026-08-01"
+    def test_freshness_very_stale(self, alex_copy) -> None:
+        """CIR-DATA-STATUS-RESOLUTION#freshness-very-stale — newest date 45d old (reference
+        2026-09-15: 30 + 15), yellow_after 7, red_after 30 → 🔴."""
+        run = when_bake(given_alex(alex_copy), "--evaluate", reference_date="2026-09-15")
+        verdict("exit code", run.exit_code, 0)
+        sleep = item_of(run.data, "self/sleep")
+        verdict("self/sleep status, grey_reason", [sleep["status"], sleep["grey_reason"]], ["red", None])
+        verdict("self/sleep detail_line", sleep["detail_line"], "act · last data 2026-08-01", op="contains")
 
     @rule("CIR-DATA-STATUS-RESOLUTION")
-    def test_freshness_stale(self) -> None:
-        """CIR-DATA-STATUS-RESOLUTION#freshness-stale — newest date 10d old, yellow_after 7,
-        red_after 30 → 🟡 (reference 2026-08-11 vs 2026-08-01)."""
-        artifact = _resolve_fixture(reference_date=date(2026, 8, 11), evaluate=True)
-        sleep = _item_by_id(artifact, "self", "sleep")
-        assert sleep["status"] == "yellow"
-        assert sleep["grey_reason"] is None
-        assert "attention · last data 2026-08-01" in sleep["detail_line"]
+    def test_freshness_source_missing(self, alex_copy) -> None:
+        """CIR-DATA-STATUS-RESOLUTION#freshness-source-missing — source: matches no file → ⚪ +
+        build warning, reason by-failure."""
+        config = given_alex(alex_copy, "self/sleep source: notes/absent.md",
+                            lambda c: item(c, "self/sleep")["status"]["freshness"].update(source="notes/absent.md"))
+        then_grey_by_failure(when_bake(config, "--evaluate"), "self/sleep", "missing source")
 
     @rule("CIR-DATA-STATUS-RESOLUTION")
-    def test_freshness_very_stale(self) -> None:
-        """CIR-DATA-STATUS-RESOLUTION#freshness-very-stale — newest date 45d old,
-        yellow_after 7, red_after 30 → 🔴 (reference 2026-09-15 vs 2026-08-01: 30 + 15)."""
-        artifact = _resolve_fixture(reference_date=date(2026, 9, 15), evaluate=True)
-        sleep = _item_by_id(artifact, "self", "sleep")
-        assert sleep["status"] == "red"
-        assert sleep["grey_reason"] is None
-        assert "act · last data 2026-08-01" in sleep["detail_line"]
-
-    @rule("CIR-DATA-STATUS-RESOLUTION")
-    def test_freshness_source_missing(self, alex_copy: AlexCopy) -> None:
-        """CIR-DATA-STATUS-RESOLUTION#freshness-source-missing — source: matches no file
-        → ⚪ + build warning, reason by-failure."""
-        artifact = _resolve_fixture(
-            evaluate=True, config_path=alex_copy(sleep_source="notes/absent.md"),
-        )
-        assert "missing source" in _sleep_failure(artifact)
-
-    @rule("CIR-DATA-STATUS-RESOLUTION")
-    def test_freshness_source_no_dates(self, alex_copy: AlexCopy) -> None:
+    def test_freshness_source_no_dates(self, alex_copy) -> None:
         """CIR-DATA-STATUS-RESOLUTION#freshness-source-no-dates — source file exists
         (notes/empty-log.md), zero parseable dates → ⚪ + build warning."""
-        artifact = _resolve_fixture(
-            evaluate=True, config_path=alex_copy(sleep_source="notes/empty-log.md"),
-        )
-        assert "no dates found" in _sleep_failure(artifact)
+        config = given_alex(alex_copy, "self/sleep source: notes/empty-log.md",
+                            lambda c: item(c, "self/sleep")["status"]["freshness"].update(source="notes/empty-log.md"))
+        then_grey_by_failure(when_bake(config, "--evaluate"), "self/sleep", "no dates found")
 
     @rule("CIR-DATA-STATUS-RESOLUTION")
-    def test_freshness_all_dates_future(self) -> None:
-        """CIR-DATA-STATUS-RESOLUTION#freshness-all-dates-future — every parseable date is
-        after the reference date → ⚪ + build warning (⚖-R8). Reference 2026-07-29: the
-        sleep-log's 07-30, 07-31 and 08-01 are all ahead of it."""
-        artifact = _resolve_fixture(reference_date=date(2026, 7, 29), evaluate=True)
-        assert "after the reference date" in _sleep_failure(artifact)
+    def test_freshness_all_dates_future(self, alex_copy) -> None:
+        """CIR-DATA-STATUS-RESOLUTION#freshness-all-dates-future — every parseable date is after
+        the reference date → ⚪ + build warning (⚖-R8). Reference 2026-07-29: the sleep-log's
+        07-30, 07-31 and 08-01 are all ahead of it."""
+        run = when_bake(given_alex(alex_copy), "--evaluate", reference_date="2026-07-29")
+        then_grey_by_failure(run, "self/sleep", "after the reference date")
 
     @rule("CIR-DATA-STATUS-RESOLUTION")
-    def test_adapter_not_evaluated_this_phase(self) -> None:
-        """CIR-DATA-STATUS-RESOLUTION#adapter-not-evaluated-this-phase —
-        freshness/command items under P0 → ⚪ + warning, reason not-evaluated (⚖-R50)."""
-        artifact = _resolve_fixture()
+    def test_adapter_not_evaluated_this_phase(self, alex_copy) -> None:
+        """CIR-DATA-STATUS-RESOLUTION#adapter-not-evaluated-this-phase — `command:` (and
+        `freshness:`) under a P0 bake (no --evaluate) → ⚪ + warning "adapter not evaluated in
+        this build", reason not-evaluated (⚖-R2, ⚖-R50)."""
+        run = when_bake(given_alex(alex_copy))
+        verdict("exit code", run.exit_code, 0)
+        items = _items(run)
+        refs = ("self/sleep", "self/labs", "wider/plants")
+        verdict("self/sleep, self/labs, wider/plants status + grey_reason",
+                {ref: [items[ref]["status"], items[ref]["grey_reason"]] for ref in refs},
+                {ref: ["grey", "not-evaluated"] for ref in refs})
+        verdict("their warnings", {ref: _item_warnings(run, ref) for ref in refs},
+                {ref: ["adapter not evaluated in this build"] for ref in refs})
 
-        # self/sleep: freshness adapter → ⚪ not-evaluated
-        sleep = _item_by_id(artifact, "self", "sleep")
-        assert sleep["status"] == "grey"
-        assert sleep["grey_reason"] == "not-evaluated"
-
-        # self/labs: freshness adapter → ⚪ not-evaluated
-        labs = _item_by_id(artifact, "self", "labs")
-        assert labs["status"] == "grey"
-        assert labs["grey_reason"] == "not-evaluated"
-
-        # wider/plants: command adapter → ⚪ not-evaluated
-        plants = _item_by_id(artifact, "wider", "plants")
-        assert plants["status"] == "grey"
-        assert plants["grey_reason"] == "not-evaluated"
-
-        # Check warnings exist for these items
-        warnings = artifact["warnings"]
-        warning_items = {w["item"] for w in warnings}
-        assert "self/sleep" in warning_items
-        assert "self/labs" in warning_items
-        assert "wider/plants" in warning_items
-
-    # The table's five config-error rows. Their behaviour was already asserted
-    # under CIR-DATA-SCHEMA-ADAPTER-SLOT / CIR-DATA-STATUS-MANUAL-VALUES row ids,
-    # which left these five rows of *this* requirement unevidenced — the same
-    # behaviour can satisfy two requirements, but only the row ids actually cited
-    # join to evidence. `empty-status-block` had no citing test under any id.
-    #
-    # The shared claim is the asymmetry the spec calls out: a bad *config* fails
-    # the bake outright, rather than degrading to ⚪ the way a bad *command* does.
+    # The table's five config-error rows. The shared claim is the asymmetry the spec calls out: a
+    # bad *config* fails the bake outright (nothing published), rather than degrading to ⚪ the
+    # way a bad *command* does. Each is self/sleep's status: block replaced.
     @rule("CIR-DATA-STATUS-RESOLUTION")
-    @pytest.mark.parametrize(
-        ("status_block", "message"),
-        [
-            pytest.param(
-                {"manual": "green",
-                 "freshness": {"source": "notes/sleep-log.md", "yellow_after": 7, "red_after": 30}},
-                "multiple adapter keys",
-                id="CIR-DATA-STATUS-RESOLUTION#two-adapters-on-one-item",
-            ),
-            pytest.param(
-                {}, "empty status block",
-                id="CIR-DATA-STATUS-RESOLUTION#empty-status-block",
-            ),
-            pytest.param(
-                {"manual": "amber"}, "not a valid manual value",
-                id="CIR-DATA-STATUS-RESOLUTION#manual-unknown-word",
-            ),
-            pytest.param(
-                {"manual": "grey"}, "grey",
-                id="CIR-DATA-STATUS-RESOLUTION#manual-declares-grey",
-            ),
-            pytest.param(
-                {"sqlite": {"query": "SELECT 1"}}, "unknown adapter",
-                id="CIR-DATA-STATUS-RESOLUTION#unknown-adapter-key",
-            ),
-        ],
-    )
-    def test_config_error_fails_the_bake(
-        self, status_block: dict, message: str, tmp_path: Path,
-    ) -> None:
-        """CIR-DATA-STATUS-RESOLUTION — a config error fails the bake and
-        publishes nothing; it must never degrade to ⚪.
-
-        Row ids are carried by the parametrised case id.
-        """
-        import yaml
-
-        data = {
-            "person": "Alex Example",
-            "rings": [{
-                "id": "self", "label": "① Self",
-                "items": [{"id": "sleep", "label": "Sleep", "status": status_block}],
-            }],
-        }
-        path = tmp_path / "circles.yaml"
-        path.write_text(yaml.dump(data))
-
-        with pytest.raises(ConfigError, match=message) as excinfo:
-            load_config(path)
-
-        # The error names where it is, so a human can fix it before anyone sees a
-        # wrong page — and nothing resolved, so no ⚪ was published in its place.
-        assert "self" in str(excinfo.value) or "sleep" in str(excinfo.value), (
-            f"config error should locate the offending item: {excinfo.value}"
-        )
+    @pytest.mark.parametrize("status,message", [
+        pytest.param({"manual": "green",
+                      "freshness": {"source": "notes/sleep-log.md", "yellow_after": 7, "red_after": 30}},
+                     "multiple adapter keys", id="CIR-DATA-STATUS-RESOLUTION#two-adapters-on-one-item"),
+        pytest.param({}, "empty status block", id="CIR-DATA-STATUS-RESOLUTION#empty-status-block"),
+        pytest.param({"manual": "amber"}, "not a valid manual value",
+                     id="CIR-DATA-STATUS-RESOLUTION#manual-unknown-word"),
+        pytest.param({"manual": "grey"}, "grey", id="CIR-DATA-STATUS-RESOLUTION#manual-declares-grey"),
+        pytest.param({"sqlite": {"query": "SELECT 1"}}, "unknown adapter",
+                     id="CIR-DATA-STATUS-RESOLUTION#unknown-adapter-key"),
+    ])
+    def test_config_error_fails_the_bake(self, alex_copy, status: dict, message: str) -> None:
+        """CIR-DATA-STATUS-RESOLUTION — a config error fails the bake and publishes nothing; it
+        never degrades to ⚪. The message locates the offending item (sleep)."""
+        config = given_alex(alex_copy, f"self/sleep status: {status!r}",
+                            lambda c: item(c, "self/sleep").update(status=status))
+        run = when_bake(config)
+        then_config_error(run, message)
+        verdict("stderr", run.stderr, "sleep", op="contains")
 
 
 # ===========================================================================
@@ -302,26 +298,31 @@ class TestDataGreyReason:
     """CIR-DATA-GREY-REASON — one grey light, three reasons."""
 
     @rule("CIR-DATA-GREY-REASON")
-    def test_unmonitored_by_choice(self) -> None:
-        """CIR-DATA-GREY-REASON#unmonitored-by-choice —
-        no status: block → reason by-choice."""
-        artifact = _resolve_fixture()
-        item = _item_by_id(artifact, "self", "exercise")
-        assert item["status"] == "grey"
-        assert item["grey_reason"] == "by-choice"
+    def test_unmonitored_by_choice(self, alex_copy) -> None:
+        """CIR-DATA-GREY-REASON#unmonitored-by-choice — self/exercise has no status: block and no
+        note: → reason by-choice; detail line "unmonitored"."""
+        run = when_bake(given_alex(alex_copy))
+        verdict("exit code", run.exit_code, 0)
+        exercise = item_of(run.data, "self/exercise")
+        verdict("self/exercise status, grey_reason", [exercise["status"], exercise["grey_reason"]],
+                ["grey", "by-choice"])
+        verdict("self/exercise detail_line", exercise["detail_line"], "unmonitored")
 
     @rule("CIR-DATA-GREY-REASON")
-    def test_unmonitored_not_evaluated(self) -> None:
-        """CIR-DATA-GREY-REASON#unmonitored-not-evaluated —
-        freshness: or command: under P0 → reason not-evaluated."""
-        artifact = _resolve_fixture()
-        sleep = _item_by_id(artifact, "self", "sleep")
-        assert sleep["status"] == "grey"
-        assert sleep["grey_reason"] == "not-evaluated"
-
-        plants = _item_by_id(artifact, "wider", "plants")
-        assert plants["status"] == "grey"
-        assert plants["grey_reason"] == "not-evaluated"
+    def test_unmonitored_not_evaluated(self, alex_copy) -> None:
+        """CIR-DATA-GREY-REASON#unmonitored-not-evaluated — freshness: (self/sleep) and command:
+        (wider/plants) under a P0 bake → reason not-evaluated; detail line "unmonitored · not
+        evaluated in this build" (plants has no guardrail, so the line is exactly that)."""
+        run = when_bake(given_alex(alex_copy))
+        verdict("exit code", run.exit_code, 0)
+        sleep, plants = item_of(run.data, "self/sleep"), item_of(run.data, "wider/plants")
+        verdict("self/sleep status, grey_reason", [sleep["status"], sleep["grey_reason"]],
+                ["grey", "not-evaluated"])
+        verdict("wider/plants status, grey_reason", [plants["status"], plants["grey_reason"]],
+                ["grey", "not-evaluated"])
+        verdict("wider/plants detail_line", plants["detail_line"], "unmonitored · not evaluated in this build")
+        verdict("self/sleep detail_line", sleep["detail_line"], "unmonitored · not evaluated in this build",
+                op="contains")
 
 
 # ===========================================================================
@@ -332,55 +333,52 @@ class TestDataFailureIsGrey:
     """CIR-DATA-FAILURE-IS-GREY — the failure algebra."""
 
     @rule("CIR-DATA-FAILURE-IS-GREY")
-    def test_failure_never_red(self) -> None:
-        """CIR-DATA-FAILURE-IS-GREY#failure-never-red —
-        adapter failure → ⚪, never 🔴."""
-        artifact = _resolve_fixture()
-        # All non-evaluated adapters are ⚪, never red
-        for ring in artifact["rings"]:
-            for item in ring["items"]:
-                if item["status"] == "grey":
-                    assert item["grey_reason"] is not None
-                else:
-                    assert item["status"] in ("green", "yellow", "red")
+    def test_failure_never_red(self, alex_copy) -> None:
+        """CIR-DATA-FAILURE-IS-GREY#failure-never-red — the plants command prints `red` and then
+        exits 3: a failure, so ⚪ + warning — the printed red is never taken."""
+        config = given_plants_runs(alex_copy, "prints red, exits 3", "echo red\nexit 3\n")
+        run = when_bake(config, "--evaluate")
+        then_grey_by_failure(run, "wider/plants", "3")
+        verdict("grey items without a grey_reason",
+                [ref for ref, i in _items(run).items() if i["status"] == "grey" and i["grey_reason"] is None], [])
 
     @rule("CIR-DATA-FAILURE-IS-GREY")
-    def test_failure_never_green(self) -> None:
-        """CIR-DATA-FAILURE-IS-GREY#failure-never-green —
-        adapter failure → ⚪, never 🟢."""
-        artifact = _resolve_fixture()
-        sleep = _item_by_id(artifact, "self", "sleep")
-        assert sleep["status"] == "grey"  # not green
-
+    def test_failure_never_green(self, alex_copy) -> None:
+        """CIR-DATA-FAILURE-IS-GREY#failure-never-green — the plants command prints `green` and
+        then exits 3: a failure, so ⚪ + warning — the printed green is never taken."""
+        config = given_plants_runs(alex_copy, "prints green, exits 3", "echo green\nexit 3\n")
+        then_grey_by_failure(when_bake(config, "--evaluate"), "wider/plants", "3")
 
     @rule("CIR-DATA-FAILURE-IS-GREY")
     @pytest.mark.skipif(os.geteuid() == 0, reason="root reads mode-000 files")
-    def test_unreadable_source_is_grey(self, alex_copy: AlexCopy) -> None:
-        """CIR-DATA-FAILURE-IS-GREY#unreadable-source-is-grey — source exists, permission
-        denied → ⚪ + warning; never 🔴, never 🟢."""
-        config_path = alex_copy()
-        note = config_path.parent / "notes" / "sleep-log.md"
-        note.chmod(0o000)
+    def test_unreadable_source_is_grey(self, alex_copy) -> None:
+        """CIR-DATA-FAILURE-IS-GREY#unreadable-source-is-grey — source exists, permission denied
+        → ⚪ + warning; never 🔴, never 🟢."""
+        note: list[Path] = []
+
+        def unreadable(world: Path) -> None:
+            note.append(world / "notes" / "sleep-log.md")
+            note[0].chmod(0o000)
+        config = given_alex(_copy_then(alex_copy, unreadable), "notes/sleep-log.md mode 000 (config unchanged)",
+                            lambda c: None)
         try:
-            artifact = _resolve_fixture(evaluate=True, config_path=config_path)
+            run = when_bake(config, "--evaluate")
         finally:
-            note.chmod(0o644)
-        message = _sleep_failure(artifact)
-        assert "unreadable source" in message
-        assert "notes/sleep-log.md" in message
+            note[0].chmod(0o644)
+        then_grey_by_failure(run, "self/sleep", "unreadable source")
+        verdict("self/sleep warning", _item_warnings(run, "self/sleep")[0], "notes/sleep-log.md", op="contains")
 
     @rule("CIR-DATA-FAILURE-IS-GREY")
-    def test_warning_names_item(self, alex_copy: AlexCopy) -> None:
-        """CIR-DATA-FAILURE-IS-GREY#warning-names-item — the `plants` command exits 3 →
-        the warning identifies cell `wider/plants` and the exit code; the light is ⚪."""
-        artifact = _resolve_fixture(evaluate=True,
-                                    config_path=_plants_runs(alex_copy, "echo green\nexit 3\n"))
-        plants = _item_by_id(artifact, "wider", "plants")
-        assert plants["status"] == "grey"
-        assert plants["grey_reason"] == "by-failure"
-        warnings = [w for w in artifact["warnings"] if w["item"] == "wider/plants"]
-        assert len(warnings) == 1
-        assert "3" in warnings[0]["message"]
+    def test_warning_names_item(self, alex_copy) -> None:
+        """CIR-DATA-FAILURE-IS-GREY#warning-names-item — the `plants` command exits 3 → the
+        warning identifies cell `wider/plants` and the exit code; the light is ⚪."""
+        config = given_plants_runs(alex_copy, "prints green, exits 3", "echo green\nexit 3\n")
+        run = when_bake(config, "--evaluate")
+        verdict("exit code", run.exit_code, 0)
+        plants = item_of(run.data, "wider/plants")
+        verdict("wider/plants status, grey_reason", [plants["status"], plants["grey_reason"]], ["grey", "by-failure"])
+        verdict("warnings", run.warnings, "wider/plants: command exited", op="contains")
+        verdict("wider/plants warning", " | ".join(_item_warnings(run, "wider/plants")), "3", op="contains")
 
 
 # ===========================================================================
@@ -391,27 +389,31 @@ class TestDataNoAggregation:
     """CIR-DATA-NO-AGGREGATION — no roll-up, ever."""
 
     @rule("CIR-DATA-NO-AGGREGATION")
-    def test_inner_red_outer_untouched(self) -> None:
-        """CIR-DATA-NO-AGGREGATION#inner-red-outer-untouched —
-        wider/friends is 🔴, other items keep their own resolved colours."""
-        artifact = _resolve_fixture()
-        friends = _item_by_id(artifact, "wider", "friends")
-        assert friends["status"] == "red"
-
-        # Other items are unaffected
-        nova = _item_by_id(artifact, "children", "nova")
-        assert nova["status"] == "green"
+    def test_inner_red_outer_untouched(self, alex_copy) -> None:
+        """CIR-DATA-NO-AGGREGATION#inner-red-outer-untouched — self/sleep 🔴 (manual: red),
+        partner/date-night 🟡 → the outer cells keep their own resolved colours (alex's manual
+        lights: date-night yellow, nova/kit green, friends red)."""
+        config = given_alex(alex_copy, "self/sleep status: manual: red",
+                            lambda c: item(c, "self/sleep").update(status={"manual": "red"}))
+        run = when_bake(config)
+        verdict("exit code", run.exit_code, 0)
+        items = _items(run)
+        verdict("self/sleep status", items["self/sleep"]["status"], "red")
+        verdict("outer manual lights",
+                {ref: items[ref]["status"] for ref in ("partner/date-night", "children/nova",
+                                                       "children/kit", "wider/friends")},
+                {"partner/date-night": "yellow", "children/nova": "green", "children/kit": "green",
+                 "wider/friends": "red"})
 
     @rule("CIR-DATA-NO-AGGREGATION")
-    def test_centre_carries_no_status(self) -> None:
-        """CIR-DATA-NO-AGGREGATION#centre-carries-no-status —
-        the artifact has no centre/aggregate field."""
-        artifact = _resolve_fixture()
-        # The artifact has no top-level status field
-        assert "status" not in artifact
-        # No aggregate/score field
-        assert "aggregate" not in artifact
-        assert "score" not in artifact
+    def test_centre_carries_no_status(self, alex_copy) -> None:
+        """CIR-DATA-NO-AGGREGATION#centre-carries-no-status — the artifact carries no light above
+        the item: the top level is exactly data-json.md's field table (no status / aggregate /
+        score), and a ring is id + label + items."""
+        run = when_bake(given_alex(alex_copy))
+        verdict("exit code", run.exit_code, 0)
+        verdict("top-level keys", sorted(run.data), TOP_LEVEL_FIELDS)
+        verdict("ring keys", sorted({k for r in run.data["rings"] for k in r}), ["id", "items", "label"])
 
 
 # ===========================================================================
@@ -422,29 +424,37 @@ class TestDataResolutionTime:
     """CIR-DATA-RESOLUTION-TIME — statuses resolve at bake time only."""
 
     @rule("CIR-DATA-RESOLUTION-TIME")
-    def test_page_never_reevaluates(self) -> None:
-        """CIR-DATA-RESOLUTION-TIME#page-never-reevaluates —
-        statuses are frozen in the artifact."""
-        artifact = _resolve_fixture()
-        # Statuses are just data — no adapter code, no date math
-        assert artifact["rings"][0]["items"][0]["status"] is not None
+    def test_p0_manual_roundtrip(self, alex_copy) -> None:
+        """CIR-DATA-RESOLUTION-TIME#p0-manual-roundtrip — a P0 bake: alex's manual statuses pass
+        through unchanged into the artifact."""
+        run = when_bake(given_alex(alex_copy))
+        verdict("exit code", run.exit_code, 0)
+        items = _items(run)
+        verdict("manual lights", {ref: items[ref]["status"] for ref in
+                                  ("children/nova", "children/kit", "partner/date-night", "wider/friends")},
+                {"children/nova": "green", "children/kit": "green", "partner/date-night": "yellow",
+                 "wider/friends": "red"})
 
     @rule("CIR-DATA-RESOLUTION-TIME")
-    def test_p0_manual_roundtrip(self) -> None:
-        """CIR-DATA-RESOLUTION-TIME#p0-manual-roundtrip —
-        manual statuses pass through unchanged."""
-        artifact = _resolve_fixture()
-        assert _item_by_id(artifact, "children", "nova")["status"] == "green"
-        assert _item_by_id(artifact, "children", "kit")["status"] == "green"
-        assert _item_by_id(artifact, "partner", "date-night")["status"] == "yellow"
-        assert _item_by_id(artifact, "wider", "friends")["status"] == "red"
+    def test_one_reference_date_per_bake(self, alex_copy) -> None:
+        """CIR-DATA-RESOLUTION-TIME#one-reference-date-per-bake — two freshness items (self/sleep,
+        self/labs) in one evaluated bake both age against 2026-08-03: sleep age 2 ≤ 7 → 🟢, labs
+        age 200 > 190 → 🔴 (the fixture's comments)."""
+        run = when_bake(given_alex(alex_copy), "--evaluate")
+        verdict("exit code", run.exit_code, 0)
+        verdict("reference_date", run.data["reference_date"], "2026-08-03")
+        items = _items(run)
+        verdict("self/sleep, self/labs status + last_data_date",
+                {ref: [items[ref]["status"], items[ref]["last_data_date"]] for ref in ("self/sleep", "self/labs")},
+                {"self/sleep": ["green", "2026-08-01"], "self/labs": ["red", "2026-01-15"]})
 
-    @rule("CIR-DATA-RESOLUTION-TIME")
-    def test_one_reference_date_per_bake(self) -> None:
-        """CIR-DATA-RESOLUTION-TIME#one-reference-date-per-bake —
-        all items age against the same reference date."""
-        artifact = _resolve_fixture()
-        assert artifact["reference_date"] == "2026-08-03"
+
+def test_page_never_reevaluates_unit() -> None:
+    """Unit guard (was CIR-DATA-RESOLUTION-TIME#page-never-reevaluates — a page-load claim the
+    bake CLI cannot observe; the browser tier owns it): resolve() freezes a status into the dict."""
+    artifact = resolve(load_config(ALEX_YAML), reference_date=UNIT_REFERENCE_DATE,
+                       generated_at=UNIT_GENERATED_AT)
+    assert artifact["rings"][0]["items"][0]["status"] is not None
 
 
 # ===========================================================================
@@ -455,43 +465,46 @@ class TestDataDetailLine:
     """CIR-DATA-DETAIL-LINE — what hover shows."""
 
     @rule("CIR-DATA-DETAIL-LINE")
-    def test_full_detail_line(self) -> None:
-        """CIR-DATA-DETAIL-LINE#full-detail-line —
-        guardrail + status word for a manual item."""
-        artifact = _resolve_fixture()
-        # partner/date-night has guardrail + manual yellow
-        item = _item_by_id(artifact, "partner", "date-night")
-        assert "Protected evening, twice a month" in item["detail_line"]
-        assert "attention" in item["detail_line"]  # display word for yellow
+    def test_full_detail_line(self, alex_copy) -> None:
+        """CIR-DATA-DETAIL-LINE#full-detail-line — guardrail + freshness adapter with a date →
+        "guardrail · status · last data YYYY-MM-DD": self/sleep evaluated at 2026-08-03 reads
+        "Lights out by 23:00 on weeknights · ok · last data 2026-08-01" (data-json.md's example).
+        A manual item with a guardrail (partner/date-night) has no date segment."""
+        run = when_bake(given_alex(alex_copy), "--evaluate")
+        verdict("exit code", run.exit_code, 0)
+        verdict("self/sleep detail_line", item_of(run.data, "self/sleep")["detail_line"],
+                "Lights out by 23:00 on weeknights · ok · last data 2026-08-01")
+        verdict("partner/date-night detail_line", item_of(run.data, "partner/date-night")["detail_line"],
+                "Protected evening, twice a month · attention")
 
     @rule("CIR-DATA-DETAIL-LINE")
-    def test_no_guardrail(self) -> None:
-        """CIR-DATA-DETAIL-LINE#no-guardrail —
-        item without guardrail starts at the status."""
-        artifact = _resolve_fixture()
-        # children/nova has no guardrail
-        item = _item_by_id(artifact, "children", "nova")
-        assert item["guardrail"] is None
-        assert item["detail_line"] == "ok"  # just the status word
+    def test_no_guardrail(self, alex_copy) -> None:
+        """CIR-DATA-DETAIL-LINE#no-guardrail — children/nova has no guardrail → the line starts at
+        the status: exactly "ok"."""
+        run = when_bake(given_alex(alex_copy))
+        verdict("exit code", run.exit_code, 0)
+        nova = item_of(run.data, "children/nova")
+        verdict("children/nova guardrail", nova["guardrail"], None)
+        verdict("children/nova detail_line", nova["detail_line"], "ok")
 
     @rule("CIR-DATA-DETAIL-LINE")
-    def test_manual_item_has_no_data_date(self) -> None:
-        """CIR-DATA-DETAIL-LINE#manual-item-has-no-data-date —
-        manual items have no 'last data' segment."""
-        artifact = _resolve_fixture()
-        item = _item_by_id(artifact, "children", "nova")
-        assert item["last_data_date"] is None
-        assert "last data" not in item["detail_line"]
+    def test_manual_item_has_no_data_date(self, alex_copy) -> None:
+        """CIR-DATA-DETAIL-LINE#manual-item-has-no-data-date — children/nova is `manual: green` →
+        no date field, no "last data" segment."""
+        run = when_bake(given_alex(alex_copy), "--evaluate")
+        verdict("exit code", run.exit_code, 0)
+        nova = item_of(run.data, "children/nova")
+        verdict("children/nova last_data_date", nova["last_data_date"], None)
+        verdict("children/nova detail_line", nova["detail_line"], "last data", op="not contains")
 
     @rule("CIR-DATA-DETAIL-LINE")
-    def test_detail_line_is_plain_text(self) -> None:
-        """CIR-DATA-DETAIL-LINE#detail-line-is-plain-text —
-        detail lines contain no markup."""
-        artifact = _resolve_fixture()
-        for ring in artifact["rings"]:
-            for item in ring["items"]:
-                assert isinstance(item["detail_line"], str)
-                assert "<" not in item["detail_line"]  # no HTML
+    def test_detail_line_is_plain_text(self, alex_copy) -> None:
+        """CIR-DATA-DETAIL-LINE#detail-line-is-plain-text — any item: a plain string, no markup."""
+        run = when_bake(given_alex(alex_copy), "--evaluate")
+        verdict("exit code", run.exit_code, 0)
+        verdict("items whose detail_line is not a string or carries '<'",
+                [ref for ref, i in _items(run).items()
+                 if not isinstance(i["detail_line"], str) or "<" in i["detail_line"]], [])
 
 
 # ===========================================================================
@@ -502,51 +515,45 @@ class TestBakeArtifact:
     """CIR-BAKE-ARTIFACT — what a bake produces."""
 
     @rule("CIR-BAKE-ARTIFACT")
-    def test_artifact_fixture_roundtrip(self) -> None:
-        """CIR-BAKE-ARTIFACT#artifact-fixture-roundtrip —
-        bake over fixtures/alex/circles.yaml produces correct structure."""
-        artifact = _resolve_fixture()
-
-        # Top-level fields
-        assert artifact["version"] == 1
-        assert artifact["spec_version"] == 0
-        assert artifact["person"] == "Alex Example"
-        assert artifact["generated_at"] == "2026-08-03T02:00:00Z"
-        assert artifact["reference_date"] == "2026-08-03"
-        assert artifact["timezone"] == "UTC"
-        assert artifact["stale_after_hours"] is None
-
-        # 4 rings in order
-        assert len(artifact["rings"]) == 4
-        assert [r["id"] for r in artifact["rings"]] == ["self", "partner", "children", "wider"]
-
-        # 8 items total
-        total_items = sum(len(r["items"]) for r in artifact["rings"])
-        assert total_items == 8
-
-        # self/exercise has status: grey, grey_reason: by-choice, share: 1
-        exercise = _item_by_id(artifact, "self", "exercise")
-        assert exercise["status"] == "grey"
-        assert exercise["grey_reason"] == "by-choice"
-        assert exercise["share"] == 1
-        assert exercise["guardrail"] is None
-        assert exercise["note"] is None
-        assert exercise["link"] is None
+    def test_artifact_fixture_roundtrip(self, alex_copy) -> None:
+        """CIR-BAKE-ARTIFACT#artifact-fixture-roundtrip — bake over fixtures/alex/circles.yaml:
+        rings/items keep config order and ids; self/exercise is grey/by-choice, share 1, nulls
+        for its absent fields; the top-level fields are data-json.md's example values."""
+        run = when_bake(given_alex(alex_copy))
+        verdict("exit code", run.exit_code, 0)
+        verdict("artifact files in out/", run.artifact_files, ["data.json", "index.html"])
+        d = run.data
+        verdict("version, spec_version, person, reference_date, timezone, stale_after_hours",
+                [d["version"], d["spec_version"], d["person"], d["reference_date"], d["timezone"],
+                 d["stale_after_hours"]],
+                [1, 0, "Alex Example", "2026-08-03", "UTC", None])
+        verdict("generated_at is RFC 3339 UTC (YYYY-MM-DDTHH:MM:SSZ)",
+                bool(re.fullmatch(r"\d{4}-\d\d-\d\dT\d\d:\d\d:\d\dZ", d["generated_at"])), True)
+        verdict("items per ring", {r["id"]: [i["id"] for i in r["items"]] for r in d["rings"]}, {
+            "self": ["sleep", "labs", "exercise"], "partner": ["date-night"],
+            "children": ["nova", "kit"], "wider": ["friends", "plants"],
+        })
+        exercise = item_of(d, "self/exercise")
+        verdict("self/exercise status, grey_reason, share, guardrail, note, link",
+                [exercise[k] for k in ("status", "grey_reason", "share", "guardrail", "note", "link")],
+                ["grey", "by-choice", 1, None, None, None])
 
     @rule("CIR-BAKE-ARTIFACT")
-    def test_warnings_empty_array(self) -> None:
-        """CIR-BAKE-ARTIFACT#warnings-empty-array —
-        a fully healthy bake carries `warnings: []` — present, never omitted."""
-        # The zero-warning variant of the fixture person: every monitored item is
-        # `manual:` (nothing left unevaluated at P0), both half-arc siblings declare
-        # `share:` (no ⚖-R12 mixed-share warning), and the one adapter-less item is an
-        # honest ⚪ by-choice, which is not a warning
-        # (CIR-DATA-STATUS-RESOLUTION#no-adapter-declared). Expected from the spec row:
-        # `warnings: []` — the empty array itself, not merely "some list".
-        config = load_config(FIXTURES / "alex" / "circles-zero-warnings.yaml")
-        artifact = resolve(config, reference_date=FIXTURE_REFERENCE_DATE, generated_at=FIXTURE_GENERATED_AT)
-        assert "warnings" in artifact
-        assert artifact["warnings"] == []
+    def test_warnings_empty_array(self, alex_copy) -> None:
+        """CIR-BAKE-ARTIFACT#warnings-empty-array — a fully healthy bake carries `warnings: []`.
+        alex made healthy (the circles-zero-warnings.yaml variant): every monitored item manual
+        (nothing unevaluated at P0); nova/kit already both declare share:; exercise's ⚪ by-choice
+        is not a warning (CIR-DATA-STATUS-RESOLUTION#no-adapter-declared)."""
+        def healthy(c):
+            item(c, "self/sleep").update(status={"manual": "green"})
+            item(c, "self/labs").update(status={"manual": "red"})
+            item(c, "wider/plants").update(status={"manual": "yellow"})
+        config = given_alex(alex_copy, "self/sleep, self/labs, wider/plants status: manual (green, red, yellow)",
+                            healthy)
+        run = when_bake(config)
+        verdict("exit code", run.exit_code, 0)
+        verdict("warnings key present", "warnings" in run.data, True)
+        verdict("warnings", run.data["warnings"], [])
 
 
 # ===========================================================================
@@ -554,37 +561,35 @@ class TestBakeArtifact:
 # ===========================================================================
 
 class TestBakeStatusValues:
-    """CIR-BAKE-STATUS-VALUES — wire values are not display words."""
+    """CIR-BAKE-STATUS-VALUES — wire values are not display words. Each case bakes alex with the
+    adapters ON, so every road to a light (manual, freshness, command, none) is in the artifact."""
 
     @rule("CIR-BAKE-STATUS-VALUES")
-    def test_status_wire_vocabulary(self) -> None:
-        """CIR-BAKE-STATUS-VALUES#status-wire-vocabulary —
-        status is one of green|yellow|red|grey."""
-        artifact = _resolve_fixture()
-        valid_statuses = {"green", "yellow", "red", "grey"}
-        for ring in artifact["rings"]:
-            for item in ring["items"]:
-                assert item["status"] in valid_statuses
+    def test_status_wire_vocabulary(self, alex_copy) -> None:
+        """CIR-BAKE-STATUS-VALUES#status-wire-vocabulary — status is one of green|yellow|red|grey."""
+        run = when_bake(given_alex(alex_copy), "--evaluate")
+        verdict("exit code", run.exit_code, 0)
+        verdict("statuses outside green|yellow|red|grey",
+                {ref: i["status"] for ref, i in _items(run).items()
+                 if i["status"] not in ("green", "yellow", "red", "grey")}, {})
 
     @rule("CIR-BAKE-STATUS-VALUES")
-    def test_status_never_emoji(self) -> None:
-        """CIR-BAKE-STATUS-VALUES#status-never-emoji —
-        no emoji in the artifact."""
-        artifact = _resolve_fixture()
-        raw = json.dumps(artifact)
-        assert "🟢" not in raw
-        assert "🟡" not in raw
-        assert "🔴" not in raw
-        assert "⚪" not in raw
+    def test_status_never_emoji(self, alex_copy) -> None:
+        """CIR-BAKE-STATUS-VALUES#status-never-emoji — never 🟢🟡🔴⚪ anywhere in data.json."""
+        run = when_bake(given_alex(alex_copy), "--evaluate")
+        verdict("exit code", run.exit_code, 0)
+        raw = _raw(run)
+        verdict("light emoji in data.json", [e for e in ("🟢", "🟡", "🔴", "⚪") if e in raw], [])
 
     @rule("CIR-BAKE-STATUS-VALUES")
-    def test_status_never_display_words(self) -> None:
-        """CIR-BAKE-STATUS-VALUES#status-never-display-words —
-        never 'ok'/'attention'/'act'/'unmonitored' in status field."""
-        artifact = _resolve_fixture()
-        for ring in artifact["rings"]:
-            for item in ring["items"]:
-                assert item["status"] not in ("ok", "attention", "act", "unmonitored")
+    def test_status_never_display_words(self, alex_copy) -> None:
+        """CIR-BAKE-STATUS-VALUES#status-never-display-words — never ok/attention/act/unmonitored
+        as a status value."""
+        run = when_bake(given_alex(alex_copy), "--evaluate")
+        verdict("exit code", run.exit_code, 0)
+        verdict("statuses that are display words",
+                {ref: i["status"] for ref, i in _items(run).items()
+                 if i["status"] in ("ok", "attention", "act", "unmonitored")}, {})
 
 
 # ===========================================================================
@@ -595,62 +600,65 @@ class TestBakeVersion:
     """CIR-BAKE-VERSION — artifact versioning."""
 
     @rule("CIR-BAKE-VERSION")
-    def test_version_recognized(self) -> None:
-        """CIR-BAKE-VERSION#version-recognized — version: 1."""
-        artifact = _resolve_fixture()
-        assert artifact["version"] == 1
+    def test_version_recognized(self, alex_copy) -> None:
+        """CIR-BAKE-VERSION#version-recognized — the bake's half of the row: it writes `version: 1`
+        and the page beside it (that the page renders it is the browser tier's half)."""
+        run = when_bake(given_alex(alex_copy))
+        verdict("exit code", run.exit_code, 0)
+        verdict("version", run.data["version"], 1)
+        verdict("artifact files in out/", run.artifact_files, ["data.json", "index.html"])
 
 
 # ===========================================================================
-# CIR-BAKE-GENERATED-AT — the honesty stamp
+# CIR-BAKE-GENERATED-AT — the honesty stamp (spec: no rows; unit guard only)
 # ===========================================================================
 
-class TestBakeGeneratedAt:
-    """CIR-BAKE-GENERATED-AT — the honesty stamp."""
-
-    def test_generated_at_present(self) -> None:
-        """generated_at is present and is an RFC 3339 UTC timestamp."""
-        artifact = _resolve_fixture()
-        assert "generated_at" in artifact
-        assert artifact["generated_at"].endswith("Z")
-        assert "T" in artifact["generated_at"]
+def test_generated_at_present_unit() -> None:
+    """Unit guard: generated_at is present and is an RFC 3339 UTC timestamp."""
+    artifact = resolve(load_config(ALEX_YAML), reference_date=UNIT_REFERENCE_DATE,
+                       generated_at=UNIT_GENERATED_AT)
+    assert "generated_at" in artifact
+    assert artifact["generated_at"].endswith("Z")
+    assert "T" in artifact["generated_at"]
 
 
 # ===========================================================================
-# CIR-BAKE-STALE-SELF — the page's own freshness
+# CIR-BAKE-STALE-SELF — the page's own freshness (the bake's half: the field)
 # ===========================================================================
 
 class TestBakeStaleSelf:
-    """CIR-BAKE-STALE-SELF — the page's own freshness."""
+    """CIR-BAKE-STALE-SELF — the bake writes the threshold the page reads."""
 
     @rule("CIR-BAKE-STALE-SELF")
-    def test_no_threshold_no_banner(self) -> None:
-        """CIR-BAKE-STALE-SELF#no-threshold-no-banner —
-        stale_after_hours is null at P0."""
-        artifact = _resolve_fixture()
-        assert artifact["stale_after_hours"] is None
+    def test_no_threshold_no_banner(self, alex_copy) -> None:
+        """CIR-BAKE-STALE-SELF#no-threshold-no-banner — the bake's half of the row: a P0 bake (no
+        --stale-after-hours) writes `stale_after_hours: null` (the banner half is the browser
+        tier's)."""
+        run = when_bake(given_alex(alex_copy))
+        verdict("exit code", run.exit_code, 0)
+        verdict("stale_after_hours", run.data["stale_after_hours"], None)
 
-    @rule("CIR-BAKE-STALE-SELF")
-    def test_stale_after_hours_flag(self, tmp_path: Path) -> None:
-        """CIR-BAKE-STALE-SELF#no-threshold-no-banner — the bake writes `null` unless the
-        nightly bake declares its cadence with --stale-after-hours N (P1), which lands as
-        integer N; a non-positive or non-integer N is a config-style error (nonzero exit)."""
-        base = ["--config", str(ALEX_YAML), "--reference-date", "2026-08-03"]
-        omitted = _run_bake(*base, "--out", str(tmp_path / "p0"))
-        assert omitted.returncode == 0, omitted.stderr
-        assert json.loads((tmp_path / "p0" / "data.json").read_text())["stale_after_hours"] is None
+    # No spec row states the flag itself (`--stale-after-hours N` → the field; bad N rejected):
+    # these are unlabelled CLI guards, not evidence.
 
-        declared = _run_bake(*base, "--out", str(tmp_path / "p1"), "--evaluate",
-                             "--stale-after-hours", "36")
-        assert declared.returncode == 0, declared.stderr
-        assert json.loads((tmp_path / "p1" / "data.json").read_text())["stale_after_hours"] == 36
+    def test_declared_cadence_lands_in_the_field(self, alex_copy) -> None:
+        """--stale-after-hours 36 (the nightly bake's cadence) lands as integer 36."""
+        run = when_bake(given_alex(alex_copy), "--evaluate", "--stale-after-hours", "36")
+        verdict("exit code", run.exit_code, 0)
+        verdict("stale_after_hours", run.data["stale_after_hours"], 36)
 
-        for bad in ("0", "-1", "1.5", "abc"):
-            out = tmp_path / f"bad{bad}"
-            rejected = _run_bake(*base, "--out", str(out), f"--stale-after-hours={bad}")
-            assert rejected.returncode != 0, bad
-            assert "stale-after-hours" in rejected.stderr
-            assert not (out / "data.json").exists()
+    @pytest.mark.parametrize("bad", [
+        pytest.param("0", id="zero hours"),
+        pytest.param("-1", id="negative hours"),
+        pytest.param("1.5", id="fractional hours"),
+        pytest.param("abc", id="not a number"),
+    ])
+    def test_bad_cadence_rejected(self, alex_copy, bad: str) -> None:
+        """A non-positive or non-integer N fails the bake and publishes nothing."""
+        run = when_bake(given_alex(alex_copy), f"--stale-after-hours={bad}")
+        verdict("exit code is non-zero", run.exit_code != 0, True)
+        verdict("stderr", run.stderr, "stale-after-hours", op="contains")
+        verdict("artifact files in out/", run.artifact_files, [])
 
 
 # ===========================================================================
@@ -661,23 +669,25 @@ class TestBakeWarnings:
     """CIR-BAKE-WARNINGS — where build warnings surface."""
 
     @rule("CIR-BAKE-WARNINGS")
-    def test_warning_carries_cell_ref(self) -> None:
-        """CIR-BAKE-WARNINGS#warning-carries-cell-ref —
-        warning for plants carries wider/plants."""
-        artifact = _resolve_fixture()
-        warnings = artifact["warnings"]
-        plant_warnings = [w for w in warnings if w["item"] == "wider/plants"]
-        assert len(plant_warnings) >= 1
+    def test_warning_carries_cell_ref(self, alex_copy) -> None:
+        """CIR-BAKE-WARNINGS#warning-carries-cell-ref — the plants command exits 1 →
+        `{"item": "wider/plants", …}`."""
+        config = given_plants_runs(alex_copy, "exits 1", "exit 1\n")
+        run = when_bake(config, "--evaluate")
+        verdict("exit code", run.exit_code, 0)
+        verdict("warning item refs", [w["item"] for w in run.data["warnings"]], "wider/plants", op="contains")
 
     @rule("CIR-BAKE-WARNINGS")
-    def test_config_level_warning_has_null_item(self) -> None:
-        """CIR-BAKE-WARNINGS#config-level-warning-has-null-item —
-        config-level warnings have null item."""
-        # The fixture has no config-level warnings, but the field is always present
-        artifact = _resolve_fixture()
-        for w in artifact["warnings"]:
-            assert "item" in w
-            assert "message" in w
+    def test_config_level_warning_has_null_item(self, alex_copy) -> None:
+        """CIR-BAKE-WARNINGS#config-level-warning-has-null-item — an unknown top-level key →
+        a warning `{"item": null, …}` naming the key."""
+        config = given_alex(alex_copy, "top-level colour_scheme: dark (an unknown key)",
+                            lambda c: c.update(colour_scheme="dark"))
+        run = when_bake(config)
+        verdict("exit code", run.exit_code, 0)
+        verdict("warnings", run.warnings, "-: unknown top-level key 'colour_scheme'", op="contains")
+        verdict("every warning has item + message keys",
+                all({"item", "message"} <= set(w) for w in run.data["warnings"]), True)
 
 
 # ===========================================================================
@@ -688,205 +698,158 @@ class TestBakeDetailFields:
     """CIR-BAKE-DETAIL-FIELDS — structured fields and one composed line."""
 
     @rule("CIR-BAKE-DETAIL-FIELDS")
-    def test_detail_line_is_baked(self) -> None:
-        """CIR-BAKE-DETAIL-FIELDS#detail-line-is-baked —
-        detail_line is present on every item."""
-        artifact = _resolve_fixture()
-        for ring in artifact["rings"]:
-            for item in ring["items"]:
-                assert "detail_line" in item
-                assert isinstance(item["detail_line"], str)
-                assert len(item["detail_line"]) > 0
+    def test_detail_line_is_baked(self, alex_copy) -> None:
+        """CIR-BAKE-DETAIL-FIELDS#detail-line-is-baked — every item carries a non-empty
+        detail_line string."""
+        run = when_bake(given_alex(alex_copy), "--evaluate")
+        verdict("exit code", run.exit_code, 0)
+        verdict("items without a non-empty detail_line string",
+                [ref for ref, i in _items(run).items()
+                 if not isinstance(i.get("detail_line"), str) or not i["detail_line"]], [])
 
     @rule("CIR-BAKE-DETAIL-FIELDS")
-    def test_structured_fields_also_present(self) -> None:
-        """CIR-BAKE-DETAIL-FIELDS#structured-fields-also-present —
-        guardrail, status, last_data_date, note, grey_reason are all present."""
-        artifact = _resolve_fixture()
-        for ring in artifact["rings"]:
-            for item in ring["items"]:
-                assert "guardrail" in item
-                assert "status" in item
-                assert "last_data_date" in item
-                assert "note" in item
-                assert "grey_reason" in item
+    def test_structured_fields_also_present(self, alex_copy) -> None:
+        """CIR-BAKE-DETAIL-FIELDS#structured-fields-also-present — guardrail, status,
+        last_data_date, note, grey_reason are individually present on every item."""
+        run = when_bake(given_alex(alex_copy), "--evaluate")
+        verdict("exit code", run.exit_code, 0)
+        fields = ("guardrail", "status", "last_data_date", "note", "grey_reason")
+        verdict("items missing a structured field",
+                {ref: [f for f in fields if f not in i] for ref, i in _items(run).items()
+                 if any(f not in i for f in fields)}, {})
 
 
 # ===========================================================================
-# CIR-ADAPT-CONTRACT — one adapter, one answer
+# CIR-ADAPT-CONTRACT — one adapter, one answer (the observable half)
 # ===========================================================================
 
 class TestAdaptContract:
     """CIR-ADAPT-CONTRACT — one adapter, one answer."""
 
     @rule("CIR-ADAPT-CONTRACT")
-    def test_adapter_resolves_one_item(self) -> None:
-        """CIR-ADAPT-CONTRACT#adapter-resolves-one-item —
-        one `status:` block produces exactly one status."""
-        artifact = _resolve_fixture()
-        # Every item with an adapter has exactly one status
-        for ring in artifact["rings"]:
-            for item in ring["items"]:
-                if item.get("grey_reason") != "not-evaluated":
-                    assert item["status"] in ("green", "yellow", "red", "grey")
+    def test_adapter_resolves_one_item(self, alex_copy) -> None:
+        """CIR-ADAPT-CONTRACT#adapter-resolves-one-item — one `status:` block → exactly one status:
+        alex's 8 config items bake to 8 artifact items, each with one status word."""
+        run = when_bake(given_alex(alex_copy), "--evaluate")
+        verdict("exit code", run.exit_code, 0)
+        items = _items(run)
+        verdict("artifact item count", len(items), 8)
+        verdict("items without exactly one status word",
+                [ref for ref, i in items.items() if i["status"] not in ("green", "yellow", "red", "grey")], [])
 
     @rule("CIR-ADAPT-CONTRACT")
-    def test_adapter_never_reads_the_clock(self) -> None:
-        """CIR-ADAPT-CONTRACT#adapter-never-reads-the-clock —
-        adapter uses injected reference date, not the system clock."""
-        # resolve() takes reference_date as explicit parameter
-        # Two bakes with different reference dates produce different generated_at
-        # but the same stale_after_hours structure
-        config = load_config(ALEX_YAML)
-        art1 = resolve(config, reference_date=date(2026, 8, 3), generated_at=FIXTURE_GENERATED_AT)
-        art2 = resolve(config, reference_date=date(2026, 8, 10), generated_at=FIXTURE_GENERATED_AT)
-        # Both resolve; the reference_date is injected, never read from a clock
-        assert art1["reference_date"] == "2026-08-03"
-        assert art2["reference_date"] == "2026-08-10"
+    def test_adapter_never_reads_the_clock(self, alex_copy) -> None:
+        """CIR-ADAPT-CONTRACT#adapter-never-reads-the-clock — the freshness adapter ages self/sleep
+        against the injected 2026-08-04 (age 3 ≤ 7 → 🟢). Against the running day's calendar
+        (any day after 2026-08-31) it would be 🔴 — the light shows which clock was read."""
+        run = when_bake(given_alex(alex_copy), "--evaluate", reference_date="2026-08-04")
+        verdict("exit code", run.exit_code, 0)
+        verdict("reference_date", run.data["reference_date"], "2026-08-04")
+        sleep = item_of(run.data, "self/sleep")
+        verdict("self/sleep status, last_data_date", [sleep["status"], sleep["last_data_date"]],
+                ["green", "2026-08-01"])
 
     @rule("CIR-ADAPT-CONTRACT")
-    def test_adapter_never_writes(self, tmp_path: Path) -> None:
-        """CIR-ADAPT-CONTRACT#adapter-never-writes —
-        adapters do not write to the config dir; the bake owns all output."""
-        # Create a command adapter whose argv[0] would create a file if executed.
-        # At P0, resolve() does NOT evaluate commands — it returns not-evaluated.
-        # If it DID execute, it would leave a file behind; verify no file is written.
-        import yaml
-
-        script_path = tmp_path / "emit.sh"
-        marker_path = tmp_path / "adapter-was-run.marker"
-        script_path.write_text("#!/usr/bin/env bash\ntouch " + str(marker_path))
-        script_path.chmod(0o755)
-
-        data = {
-            "person": "Test",
-            "rings": [{
-                "id": "a", "label": "A",
-                "items": [{
-                    "id": "x", "label": "X",
-                    "status": {"command": [str(script_path)]},
-                }],
-            }],
-        }
-        config_path = tmp_path / "circles.yaml"
-        config_path.write_text(yaml.dump(data))
-
-        config = load_config(config_path)
-        artifact = resolve(config, reference_date=date(2026, 8, 3), generated_at=FIXTURE_GENERATED_AT)
-
-        # The adapter was NOT executed — no marker file was written
-        assert not marker_path.exists(), (
-            f"Command adapter was executed — marker file exists at {marker_path}"
-        )
-        # The item resolves to grey/not-evaluated (P0 contract)
-        item = _item_by_id(artifact, "a", "x")
-        assert item["status"] == "grey"
-        assert item["grey_reason"] == "not-evaluated"
+    def test_adapter_unknown_name_is_config_error(self, alex_copy) -> None:
+        """CIR-ADAPT-CONTRACT#adapter-unknown-name — status: {prometheus: …} on a build without it
+        → config error."""
+        config = given_alex(alex_copy, "self/exercise status: prometheus: {query: up}",
+                            lambda c: item(c, "self/exercise").update(status={"prometheus": {"query": "up"}}))
+        then_config_error(when_bake(config), "unknown adapter")
 
     @rule("CIR-ADAPT-CONTRACT")
-    def test_adapter_unknown_name_is_config_error(self, tmp_path: Path) -> None:
-        """CIR-ADAPT-CONTRACT#adapter-unknown-name —
-        status: {prometheus: …} on a build without it → config error."""
-        import yaml
-        data = {
-            "person": "Test",
-            "rings": [{
-                "id": "a", "label": "A",
-                "items": [{"id": "x", "label": "X", "status": {"prometheus": {"query": "up"}}}],
-            }],
-        }
-        path = tmp_path / "circles.yaml"
-        path.write_text(yaml.dump(data))
-        with pytest.raises(ConfigError, match="unknown adapter"):
-            load_config(path)
+    @pytest.mark.parametrize("word", [
+        pytest.param("green", id="an adapter answering green is green, not grey"),
+        pytest.param("yellow", id="an adapter answering yellow is yellow, not grey"),
+        pytest.param("red", id="an adapter answering red is red, not grey"),
+    ])
+    def test_adapter_answer_is_never_grey(self, alex_copy, word: str) -> None:
+        """CIR-ADAPT-CONTRACT#adapter-cannot-return-grey — every answer an adapter can give
+        resolves to that non-grey light, with no grey reason (⚪ only from absence or failure)."""
+        config = given_alex(alex_copy, f"children/nova status: manual: {word}",
+                            lambda c: item(c, "children/nova").update(status={"manual": word}))
+        run = when_bake(config)
+        verdict("exit code", run.exit_code, 0)
+        nova = item_of(run.data, "children/nova")
+        verdict("children/nova status, grey_reason", [nova["status"], nova["grey_reason"]], [word, None])
 
     @rule("CIR-ADAPT-CONTRACT")
-    def test_adapter_cannot_return_grey(self, tmp_path: Path) -> None:
-        """CIR-ADAPT-CONTRACT#adapter-cannot-return-grey —
-        ⚪ is not in an adapter's return vocabulary; it comes only from absence
-        or failure (CIR-DATA-GREY-REASON).
+    def test_adapter_cannot_declare_grey(self, alex_copy) -> None:
+        """CIR-ADAPT-CONTRACT#adapter-cannot-return-grey — grey is not expressible as an answer:
+        the one adapter that states a light outright (manual: grey) is a config error."""
+        config = given_alex(alex_copy, "children/nova status: manual: grey",
+                            lambda c: item(c, "children/nova").update(status={"manual": "grey"}))
+        then_config_error(when_bake(config), "grey")
 
-        Asserted from both ends: an adapter that *answers* never produces grey,
-        and an adapter that tries to declare grey is rejected before it can.
-        """
-        import yaml
+    # Unlabelled (seat ruling 2026-10-16): the row's input is an adapter RAISING; a command exiting
+    # 3 is a different input (that is CIR-DATA-FAILURE-IS-GREY). Kept as a boundary guard.
+    def test_adapter_failure_is_isolated(self, alex_copy) -> None:
+        """CIR-ADAPT-CONTRACT#adapter-failure-is-isolated — one of alex's adapters fails (the plants
+        command exits 3): that item is ⚪ + warning; every other item resolves exactly as alex
+        does at 2026-08-03 (sleep 🟢, labs 🔴, exercise ⚪ by-choice, the manual lights). The
+        row's "raises an unexpected exception" input is not reachable through the CLI — the
+        unit guard below drives it."""
+        config = given_plants_runs(alex_copy, "exits 3", "exit 3\n")
+        run = when_bake(config, "--evaluate")
+        verdict("exit code", run.exit_code, 0)
+        items = _items(run)
+        verdict("wider/plants status, grey_reason",
+                [items["wider/plants"]["status"], items["wider/plants"]["grey_reason"]], ["grey", "by-failure"])
+        verdict("wider/plants warning", " | ".join(_item_warnings(run, "wider/plants")), "3", op="contains")
+        verdict("the other seven lights", {ref: items[ref]["status"] for ref in items if ref != "wider/plants"}, {
+            "self/sleep": "green", "self/labs": "red", "self/exercise": "grey",
+            "partner/date-night": "yellow", "children/nova": "green", "children/kit": "green",
+            "wider/friends": "red",
+        })
 
-        data = {
-            "person": "Alex Example",
-            "rings": [{
-                "id": "self", "label": "① Self",
-                "items": [{"id": "x", "label": "X", "status": {"manual": "green"}}],
-            }],
-        }
-        path = tmp_path / "circles.yaml"
 
-        # 1. Every value an adapter can return resolves to a non-grey light.
-        for manual_value in ("green", "yellow", "red"):
-            data["rings"][0]["items"][0]["status"] = {"manual": manual_value}
-            path.write_text(yaml.dump(data))
-            artifact = resolve(
-                load_config(path),
-                reference_date=FIXTURE_REFERENCE_DATE,
-                generated_at=FIXTURE_GENERATED_AT,
-            )
-            item = _item_by_id(artifact, "self", "x")
-            assert item["status"] == manual_value
-            assert item["status"] != "grey", "an adapter's answer must never be grey"
-            assert item["grey_reason"] is None, "a non-grey item must carry no grey reason"
+def test_adapter_raising_is_fenced_unit(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Unit guard (CIR-ADAPT-CONTRACT#adapter-failure-is-isolated's exception input — only a
+    monkeypatched adapter can raise): an adapter that RAISES is fenced into ⚪ by-failure for its
+    own item; the others resolve normally, and the exception text (which may carry host paths) is
+    not forwarded — only its class name is. At P0 nothing is evaluated, so nothing cascades."""
+    config = load_config(ALEX_YAML)
+    p0 = resolve(config, reference_date=UNIT_REFERENCE_DATE, generated_at=UNIT_GENERATED_AT)
+    assert item_of(p0, "wider/plants")["status"] == "grey"
+    assert item_of(p0, "wider/plants")["grey_reason"] == "not-evaluated"
+    assert item_of(p0, "wider/friends")["status"] == "red"
+    assert item_of(p0, "children/nova")["status"] == "green"
 
-        # 2. Grey is not expressible as an adapter answer at all — the one adapter
-        #    that states a status outright cannot state this one.
-        data["rings"][0]["items"][0]["status"] = {"manual": "grey"}
-        path.write_text(yaml.dump(data))
-        with pytest.raises(ConfigError, match="grey"):
-            load_config(path)
+    def _explodes(*_args: Any, **_kwargs: Any) -> Any:
+        raise RuntimeError("/home/alex/secret/notes.md")
 
-        # 3. So every grey that does exist is attributed to absence or
-        #    non-evaluation, never to an adapter having answered ⚪.
-        for ring in _resolve_fixture()["rings"]:
-            for fixture_item in ring["items"]:
-                if fixture_item["status"] == "grey":
-                    assert fixture_item["grey_reason"] in (
-                        "by-choice", "by-failure", "not-evaluated",
-                    ), (
-                        f"{ring['id']}/{fixture_item['id']} is grey with reason "
-                        f"{fixture_item['grey_reason']!r} — grey must always name "
-                        f"the absence or failure it came from"
-                    )
+    monkeypatch.setattr(resolve_module, "evaluate_freshness", _explodes)
+    exploded = resolve(config, reference_date=UNIT_REFERENCE_DATE, generated_at=UNIT_GENERATED_AT,
+                       evaluate=True)
+    sleep = item_of(exploded, "self/sleep")
+    assert sleep["status"] == "grey"
+    assert sleep["grey_reason"] == "by-failure"
+    assert "adapter raised RuntimeError" in sleep["detail_line"]
+    assert [w["message"] for w in exploded["warnings"] if w["item"] == "self/sleep"] == ["adapter raised RuntimeError"]
+    assert item_of(exploded, "wider/friends")["status"] == "red"
+    assert item_of(exploded, "children/nova")["status"] == "green"
+    assert item_of(exploded, "partner/date-night")["status"] == "yellow"
 
-    @rule("CIR-ADAPT-CONTRACT")
-    def test_adapter_failure_is_isolated(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        """CIR-ADAPT-CONTRACT#adapter-failure-is-isolated —
-        one failing adapter does not affect other items (at P0, adapters are
-        not-evaluated, so no failure cascades)."""
-        artifact = _resolve_fixture()
-        # wider/plants (command adapter, not-evaluated) is ⚪
-        plants = _item_by_id(artifact, "wider", "plants")
-        assert plants["status"] == "grey"
-        assert plants["grey_reason"] == "not-evaluated"
-        # Other items are unaffected
-        friends = _item_by_id(artifact, "wider", "friends")
-        assert friends["status"] == "red"
-        nova = _item_by_id(artifact, "children", "nova")
-        assert nova["status"] == "green"
 
-        # With the adapter ON, an adapter that RAISES is fenced into ⚪ by-failure for its
-        # own item; the other nine resolve normally, and the exception text (which may
-        # carry host paths) is not forwarded — only its class name is.
-        def _explodes(*_args: Any, **_kwargs: Any) -> Any:
-            raise RuntimeError("/home/alex/secret/notes.md")
+def test_p0_never_runs_a_command_unit(tmp_path: Path) -> None:
+    """Unit guard (was CIR-ADAPT-CONTRACT#adapter-never-writes — unproven: under --evaluate a
+    command CAN write into the config dir, so the row is not evidence-backed): at P0, resolve()
+    does not execute a `command:` — a script that would leave a marker leaves none."""
+    import yaml
 
-        monkeypatch.setattr(resolve_module, "evaluate_freshness", _explodes)
-        exploded = _resolve_fixture(evaluate=True)
-        sleep = _item_by_id(exploded, "self", "sleep")
-        assert sleep["status"] == "grey"
-        assert sleep["grey_reason"] == "by-failure"
-        assert "adapter raised RuntimeError" in sleep["detail_line"]
-        messages = [w["message"] for w in exploded["warnings"] if w["item"] == "self/sleep"]
-        assert messages == ["adapter raised RuntimeError"]
-        assert _item_by_id(exploded, "wider", "friends")["status"] == "red"
-        assert _item_by_id(exploded, "children", "nova")["status"] == "green"
-        assert _item_by_id(exploded, "partner", "date-night")["status"] == "yellow"
+    script_path = tmp_path / "emit.sh"
+    marker_path = tmp_path / "adapter-was-run.marker"
+    script_path.write_text("#!/usr/bin/env bash\ntouch " + str(marker_path))
+    script_path.chmod(0o755)
+    data = {"person": "Test", "rings": [{"id": "a", "label": "A", "items": [
+        {"id": "x", "label": "X", "status": {"command": [str(script_path)]}}]}]}
+    config_path = tmp_path / "circles.yaml"
+    config_path.write_text(yaml.dump(data))
+    artifact = resolve(load_config(config_path), reference_date=UNIT_REFERENCE_DATE,
+                       generated_at=UNIT_GENERATED_AT)
+    assert not marker_path.exists(), f"Command adapter was executed — marker file exists at {marker_path}"
+    assert item_of(artifact, "a/x")["status"] == "grey"
+    assert item_of(artifact, "a/x")["grey_reason"] == "not-evaluated"
 
 
 # ===========================================================================
@@ -897,123 +860,117 @@ class TestAdaptReferenceDate:
     """CIR-ADAPT-REFERENCE-DATE — one clock per bake, injected."""
 
     @rule("CIR-ADAPT-REFERENCE-DATE")
-    def test_reference_date_shared(self) -> None:
-        """CIR-ADAPT-REFERENCE-DATE#reference-date-shared —
-        all items in one bake share the same reference date."""
-        artifact = _resolve_fixture()
-        # The artifact carries one reference_date for all items
-        assert artifact["reference_date"] == "2026-08-03"
-        # No per-item reference date field exists
-        for ring in artifact["rings"]:
-            for item in ring["items"]:
-                assert "reference_date" not in item
+    def test_reference_date_shared(self, alex_copy) -> None:
+        """CIR-ADAPT-REFERENCE-DATE#reference-date-shared — two freshness items in one bake age
+        against the one reference date: the artifact carries a single reference_date, no item
+        carries its own, and both lights are the ones 2026-08-03 gives (sleep 🟢, labs 🔴)."""
+        run = when_bake(given_alex(alex_copy), "--evaluate")
+        verdict("exit code", run.exit_code, 0)
+        verdict("reference_date", run.data["reference_date"], "2026-08-03")
+        items = _items(run)
+        verdict("items carrying their own reference_date", [ref for ref, i in items.items() if "reference_date" in i], [])
+        verdict("self/sleep, self/labs status", {ref: items[ref]["status"] for ref in ("self/sleep", "self/labs")},
+                {"self/sleep": "green", "self/labs": "red"})
 
     @rule("CIR-ADAPT-REFERENCE-DATE")
-    def test_reference_date_injectable(self) -> None:
-        """CIR-ADAPT-REFERENCE-DATE#reference-date-injectable —
-        test supplies a fixed reference date, ages are deterministic."""
-        config = load_config(ALEX_YAML)
-        # Same inputs produce same artifact (except generated_at is also injected)
-        art1 = resolve(config, reference_date=date(2026, 8, 3), generated_at=FIXTURE_GENERATED_AT)
-        art2 = resolve(config, reference_date=date(2026, 8, 3), generated_at=FIXTURE_GENERATED_AT)
-        # Identical (same generated_at since we inject it)
-        import json
-        assert json.dumps(art1, sort_keys=True) == json.dumps(art2, sort_keys=True)
+    def test_reference_date_injectable(self, alex_copy) -> None:
+        """CIR-ADAPT-REFERENCE-DATE#reference-date-injectable — a fixed injected reference date
+        makes the evaluated ages reproducible: a second bake at 2026-08-03 writes the same
+        data.json as the first, generated_at aside."""
+        config = given_alex(alex_copy)
+        prior = given_prior_bake(config.parent.parent, config, "--evaluate", why="first evaluated bake at 2026-08-03")
+        run = when_bake(config, "--evaluate")
+        verdict("exit code", run.exit_code, 0)
+        verdict("data.json sha256 (generated_at masked)", _masked_digest(_raw(run)), _masked_digest(prior))
+        verdict("self/sleep last_data_date", item_of(run.data, "self/sleep")["last_data_date"], "2026-08-01")
 
     @rule("CIR-ADAPT-REFERENCE-DATE")
-    def test_reference_date_crosses_midnight(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        """CIR-ADAPT-REFERENCE-DATE#reference-date-crosses-midnight —
-        a bake that starts at 23:59:59 and runs past midnight dates every item
-        by the reference date captured at bake start, not by the day it finishes.
-
-        The bake entry point captures the date once, before resolution
-        (bake/__main__.py), and resolution is handed that value. This test pins
-        the other half: that resolution cannot reach around it to a wall clock
-        that has since rolled over.
-        """
-        bake_start = datetime(2026, 8, 3, 23, 59, 59, tzinfo=timezone.utc)
-        captured_date = bake_start.date()
-
-        class _RolledOverClock:
-            """The wall clock, already into the next day. Reading it is the defect."""
-
-            @staticmethod
-            def now(tz: Any = None) -> Any:
-                raise AssertionError(
-                    "resolution read the wall clock (now()) — it must use the "
-                    "reference date captured at bake start"
-                )
-
-            @staticmethod
-            def today() -> Any:
-                raise AssertionError(
-                    "resolution read the wall clock (today()) — it must use the "
-                    "reference date captured at bake start"
-                )
-
-        monkeypatch.setattr(resolve_module, "datetime", _RolledOverClock)
-        monkeypatch.setattr(resolve_module, "date", _RolledOverClock)
-
-        config = load_config(ALEX_YAML)
-        artifact = resolve(config, reference_date=captured_date, generated_at=bake_start)
-
-        # One date for the whole run, and it is bake start's — not 2026-08-04.
-        assert artifact["reference_date"] == "2026-08-03"
-        assert artifact["generated_at"] == "2026-08-03T23:59:59Z"
-
-        # Every item is dated by that one capture: no item carries a date of its
-        # own, so none of them can have aged against a different day.
-        for ring in artifact["rings"]:
-            for item in ring["items"]:
-                assert "reference_date" not in item
-                assert item["last_data_date"] is None or (
-                    item["last_data_date"] <= "2026-08-03"
-                ), (
-                    f"{ring['id']}/{item['id']} is dated {item['last_data_date']} — "
-                    f"after the reference date captured at bake start"
-                )
-
-        # Finishing a second later, on the far side of midnight, changes only the
-        # finish stamp we pass in — never an item.
-        finished_after_midnight = datetime(2026, 8, 4, 0, 0, 1, tzinfo=timezone.utc)
-        later = resolve(
-            config, reference_date=captured_date, generated_at=finished_after_midnight,
-        )
-        assert later["rings"] == artifact["rings"]
-        assert later["reference_date"] == artifact["reference_date"]
+    def test_reference_date_fixture_pinned(self, alex_copy) -> None:
+        """CIR-ADAPT-REFERENCE-DATE#reference-date-fixture-pinned — a bake over fixtures/alex
+        given the fixture reference date carries 2026-08-03, never the running day."""
+        run = when_bake(given_alex(alex_copy))
+        verdict("exit code", run.exit_code, 0)
+        verdict("reference_date", run.data["reference_date"], "2026-08-03")
 
     @rule("CIR-ADAPT-REFERENCE-DATE")
-    def test_reference_date_fixture_pinned(self) -> None:
-        """CIR-ADAPT-REFERENCE-DATE#reference-date-fixture-pinned —
-        fixture bakes use injected 2026-08-03, never today."""
-        artifact = _resolve_fixture()
-        assert artifact["reference_date"] == "2026-08-03"
-        assert artifact["generated_at"] == "2026-08-03T02:00:00Z"
+    @pytest.mark.parametrize("config_tz,host_tz", [
+        # UTC−12 vs UTC+14: 26 h apart, so the two zones never share a calendar date.
+        pytest.param("Pacific/Kiritimati", "Etc/GMT+12", id="config Pacific/Kiritimati, host TZ Etc/GMT+12"),
+        pytest.param("omitted (UTC)", "Pacific/Kiritimati", id="config timezone omitted (UTC), host TZ Pacific/Kiritimati"),
+    ])
+    def test_reference_date_default_is_config_timezone(self, alex_copy, monkeypatch: pytest.MonkeyPatch,
+                                                       config_tz: str, host_tz: str) -> None:
+        """CIR-ADAPT-REFERENCE-DATE#reference-date-default-is-config-timezone — no injected date:
+        today is the current instant's date in the config's `timezone:` (UTC when omitted); the
+        host's TZ must not leak."""
+        omitted = config_tz == "omitted (UTC)"
+        if omitted:
+            config = given_alex(alex_copy)
+        else:
+            config = given_alex(alex_copy, f"timezone: {config_tz}", lambda c: c.update(timezone=config_tz))
+        with allure.step(f"Given: host TZ={host_tz} (the bake process's local zone)"):
+            monkeypatch.setenv("TZ", host_tz)
+        zone = ZoneInfo("UTC" if omitted else config_tz)
+        before = datetime.now(zone).date().isoformat()
+        run = when_bake(config, reference_date=None)
+        if datetime.now(zone).date().isoformat() != before:
+            pytest.skip("the config zone's calendar day rolled over during the bake")
+        verdict("exit code", run.exit_code, 0)
+        verdict(f"reference_date (today in config timezone {config_tz})", run.data["reference_date"], before)
 
-    @rule("CIR-ADAPT-REFERENCE-DATE")
-    def test_reference_date_default_is_config_timezone(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        """CIR-ADAPT-REFERENCE-DATE#reference-date-default-is-config-timezone —
-        the config provides a timezone; the host's local zone must not leak."""
-        # The fixture declares no timezone → the config default UTC rides in the artifact
-        artifact = _resolve_fixture()
-        assert artifact["timezone"] == "UTC"
 
-        # The default reference date is the current instant reduced to a calendar date in
-        # the CONFIG's zone. At 2026-08-03T22:30Z it is still 08-03 in UTC and Los Angeles
-        # (15:30 PDT), but already 08-04 in Auckland (10:30 NZST, UTC+12).
-        now = datetime(2026, 8, 3, 22, 30, tzinfo=timezone.utc)
+def test_reference_date_crosses_midnight_unit(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Unit guard (CIR-ADAPT-REFERENCE-DATE#reference-date-crosses-midnight — the bake's clock is
+    not controllable from the CLI): resolution uses the reference date captured at bake start and
+    never reaches around it to a wall clock that has since rolled over."""
+    bake_start = datetime(2026, 8, 3, 23, 59, 59, tzinfo=timezone.utc)
+    captured_date = bake_start.date()
+
+    class _RolledOverClock:
+        """The wall clock, already into the next day. Reading it is the defect."""
+
+        @staticmethod
+        def now(tz: Any = None) -> Any:
+            raise AssertionError("resolution read the wall clock (now()) — it must use the "
+                                 "reference date captured at bake start")
+
+        @staticmethod
+        def today() -> Any:
+            raise AssertionError("resolution read the wall clock (today()) — it must use the "
+                                 "reference date captured at bake start")
+
+    monkeypatch.setattr(resolve_module, "datetime", _RolledOverClock)
+    monkeypatch.setattr(resolve_module, "date", _RolledOverClock)
+
+    config = load_config(ALEX_YAML)
+    artifact = resolve(config, reference_date=captured_date, generated_at=bake_start)
+    assert artifact["reference_date"] == "2026-08-03"
+    assert artifact["generated_at"] == "2026-08-03T23:59:59Z"
+    for ring in artifact["rings"]:
+        for it in ring["items"]:
+            assert "reference_date" not in it
+            assert it["last_data_date"] is None or it["last_data_date"] <= "2026-08-03"
+    later = resolve(config, reference_date=captured_date,
+                    generated_at=datetime(2026, 8, 4, 0, 0, 1, tzinfo=timezone.utc))
+    assert later["rings"] == artifact["rings"]
+    assert later["reference_date"] == artifact["reference_date"]
+
+
+def test_default_reference_date_unit(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Unit guard on default_reference_date (a fixed instant, which the CLI cannot inject): at
+    2026-08-03T22:30Z it is still 08-03 in UTC and Los Angeles (15:30 PDT) but already 08-04 in
+    Auckland (10:30 NZST, UTC+12); a host running in Auckland does not move a UTC config's date."""
+    now = datetime(2026, 8, 3, 22, 30, tzinfo=timezone.utc)
+    assert default_reference_date("UTC", now) == date(2026, 8, 3)
+    assert default_reference_date("America/Los_Angeles", now) == date(2026, 8, 3)
+    assert default_reference_date("Pacific/Auckland", now) == date(2026, 8, 4)
+    monkeypatch.setenv("TZ", "Pacific/Auckland")
+    time.tzset()
+    try:
         assert default_reference_date("UTC", now) == date(2026, 8, 3)
-        assert default_reference_date("America/Los_Angeles", now) == date(2026, 8, 3)
-        assert default_reference_date("Pacific/Auckland", now) == date(2026, 8, 4)
-
-        # A host running in Auckland does not move a UTC config's date.
-        monkeypatch.setenv("TZ", "Pacific/Auckland")
+    finally:
+        monkeypatch.delenv("TZ")
         time.tzset()
-        try:
-            assert default_reference_date("UTC", now) == date(2026, 8, 3)
-        finally:
-            monkeypatch.delenv("TZ")
-            time.tzset()
 
 
 # ===========================================================================
@@ -1021,34 +978,27 @@ class TestAdaptReferenceDate:
 # ===========================================================================
 
 class TestAdaptNoPageLogic:
-    """CIR-ADAPT-NO-PAGE-LOGIC — the page is adapter-blind."""
+    """CIR-ADAPT-NO-PAGE-LOGIC — the page is adapter-blind: the artifact (all the page reads)
+    carries no adapter vocabulary and one item shape whatever the adapter."""
 
     @rule("CIR-ADAPT-NO-PAGE-LOGIC")
-    def test_page_has_no_adapter_vocabulary(self) -> None:
-        """CIR-ADAPT-NO-PAGE-LOGIC#page-has-no-adapter-vocabulary —
-        the artifact never branches on which adapter produced a status."""
-        artifact = _resolve_fixture()
-        # No adapter kind info leaks into the artifact
-        for ring in artifact["rings"]:
-            for item in ring["items"]:
-                assert "adapter" not in item
-                assert "adapter_kind" not in item
-                assert "adapter_name" not in item
+    def test_page_has_no_adapter_vocabulary(self, alex_copy) -> None:
+        """CIR-ADAPT-NO-PAGE-LOGIC#page-has-no-adapter-vocabulary — no item names the adapter that
+        produced its status (no adapter / adapter_kind / adapter_name field)."""
+        run = when_bake(given_alex(alex_copy), "--evaluate")
+        verdict("exit code", run.exit_code, 0)
+        verdict("item fields naming an adapter",
+                sorted({k for i in _items(run).values() for k in i if k.startswith("adapter")}), [])
 
     @rule("CIR-ADAPT-NO-PAGE-LOGIC")
-    def test_new_adapter_changes_no_page_code(self) -> None:
-        """CIR-ADAPT-NO-PAGE-LOGIC#new-adapter-changes-no-page-code —
-        the artifact shape is fixed regardless of adapter kind."""
-        artifact = _resolve_fixture()
-        # All items have the same set of fields regardless of adapter
-        expected_fields = {"id", "label", "status", "grey_reason", "guardrail", "note",
-                          "link", "share", "last_data_date", "detail_line", "detail_page"}
-        for ring in artifact["rings"]:
-            for item in ring["items"]:
-                assert set(item.keys()) == expected_fields, (
-                    f"Item {ring['id']}/{item['id']} has unexpected fields: "
-                    f"{set(item.keys()) - expected_fields}"
-                )
+    def test_new_adapter_changes_no_page_code(self, alex_copy) -> None:
+        """CIR-ADAPT-NO-PAGE-LOGIC#new-adapter-changes-no-page-code — the artifact shape is fixed
+        regardless of adapter kind: manual, freshness, command and no-adapter items all carry
+        exactly data-json.md's 11 item fields."""
+        run = when_bake(given_alex(alex_copy), "--evaluate")
+        verdict("exit code", run.exit_code, 0)
+        verdict("items whose fields differ from the item table",
+                {ref: sorted(i) for ref, i in _items(run).items() if sorted(i) != ITEM_FIELDS}, {})
 
 
 # ===========================================================================
@@ -1058,40 +1008,45 @@ class TestAdaptNoPageLogic:
 class TestBakeAtomicWrite:
     """CIR-BAKE-ATOMIC-WRITE — publishing discipline."""
 
+    @rule("CIR-BAKE-ATOMIC-WRITE")
+    def test_failed_bake_keeps_last_good(self, alex_copy) -> None:
+        """CIR-BAKE-ATOMIC-WRITE#failed-bake-keeps-last-good — run N−1 (the unmodified world)
+        published out/; run N fails validation (manual: amber) → run N−1's data.json is still
+        there, byte-for-byte, beside its index.html."""
+        config = given_alex(alex_copy, "self/sleep status: manual: amber (run N's config error)",
+                            lambda c: item(c, "self/sleep").update(status={"manual": "amber"}))
+        root = config.parent.parent
+        prior = given_prior_bake(root, ALEX_YAML, why="run N−1 over the unmodified world alex")
+        run = when_bake(config)
+        verdict("exit code", run.exit_code, 1)
+        verdict("artifact files in out/", run.artifact_files, ["data.json", "index.html"])
+        verdict("out/data.json sha256", hashlib.sha256(_raw(run).encode()).hexdigest()[:16],
+                hashlib.sha256(prior.encode()).hexdigest()[:16])
+
+    @rule("CIR-BAKE-ATOMIC-WRITE")
+    def test_write_artifact_is_world_readable(self, alex_copy) -> None:
+        """CIR-BAKE-ATOMIC-WRITE#permissions-world-readable — data.json's file mode is 0o644 so
+        non-root nginx-unprivileged can serve it (regression: tempfile.mkstemp creates 0o600)."""
+        run = when_bake(given_alex(alex_copy))
+        verdict("exit code", run.exit_code, 0)
+        verdict("out/data.json mode", oct(stat.S_IMODE((run.out_dir / "data.json").stat().st_mode)), "0o644")
+
     def test_write_artifact_creates_file(self, tmp_path: Path) -> None:
-        """write_artifact creates data.json in the output directory."""
-        artifact = _resolve_fixture()
+        """Unit guard: write_artifact creates data.json in the output directory."""
+        artifact = resolve(load_config(ALEX_YAML), reference_date=UNIT_REFERENCE_DATE,
+                           generated_at=UNIT_GENERATED_AT)
         out_path = write_artifact(artifact, tmp_path)
         assert out_path == tmp_path / "data.json"
-        assert out_path.exists()
         assert out_path.is_file()
 
     def test_write_artifact_is_valid_json(self, tmp_path: Path) -> None:
-        """Written data.json is valid JSON."""
-        artifact = _resolve_fixture()
+        """Unit guard: written data.json is valid JSON."""
+        artifact = resolve(load_config(ALEX_YAML), reference_date=UNIT_REFERENCE_DATE,
+                           generated_at=UNIT_GENERATED_AT)
         write_artifact(artifact, tmp_path)
-        raw = (tmp_path / "data.json").read_text(encoding="utf-8")
-        parsed = json.loads(raw)
+        parsed = json.loads((tmp_path / "data.json").read_text(encoding="utf-8"))
         assert parsed["version"] == 1
         assert parsed["person"] == "Alex Example"
-
-    @rule("CIR-BAKE-ATOMIC-WRITE")
-    def test_write_artifact_is_world_readable(self, tmp_path: Path) -> None:
-        """CIR-BAKE-ATOMIC-WRITE#permissions-world-readable —
-        data.json must be world-readable (mode 0o644) so non-root
-        nginx-unprivileged can serve it (regression: tempfile.mkstemp
-        creates with mode 0o600 by default)."""
-        import stat
-        artifact = _resolve_fixture()
-        write_artifact(artifact, tmp_path)
-        out_path = tmp_path / "data.json"
-        mode = out_path.stat().st_mode
-        # Must be readable by owner, group, and world (0o644 ≡ 0o100644 on disk)
-        assert bool(mode & stat.S_IRUSR), "owner cannot read"
-        assert bool(mode & stat.S_IRGRP), "group cannot read"
-        assert bool(mode & stat.S_IROTH), "world cannot read"
-        # Must NOT be writable by world (security — only owner writes)
-        assert not bool(mode & stat.S_IWOTH), "world can write"
 
 
 # ===========================================================================
@@ -1102,55 +1057,49 @@ class TestBakeDeterminism:
     """CIR-BAKE-DETERMINISM — same inputs, same output."""
 
     @rule("CIR-BAKE-DETERMINISM")
-    def test_two_bakes_agree(self, tmp_path: Path) -> None:
-        """CIR-BAKE-DETERMINISM#two-bakes-agree —
-        same config, same reference date → byte-identical except generated_at."""
-        config = load_config(ALEX_YAML)
-
-        # First bake
-        artifact1 = resolve(config, reference_date=FIXTURE_REFERENCE_DATE, generated_at=FIXTURE_GENERATED_AT)
-        write_artifact(artifact1, tmp_path / "run1")
-        raw1 = (tmp_path / "run1" / "data.json").read_text(encoding="utf-8")
-
-        # Second bake (same inputs)
-        artifact2 = resolve(config, reference_date=FIXTURE_REFERENCE_DATE, generated_at=FIXTURE_GENERATED_AT)
-        write_artifact(artifact2, tmp_path / "run2")
-        raw2 = (tmp_path / "run2" / "data.json").read_text(encoding="utf-8")
-
-        # Byte-identical (same generated_at since we inject it)
-        assert raw1 == raw2
+    def test_two_bakes_agree(self, alex_copy) -> None:
+        """CIR-BAKE-DETERMINISM#two-bakes-agree — same config, same injected reference date →
+        byte-identical artifact except generated_at."""
+        config = given_alex(alex_copy)
+        prior = given_prior_bake(config.parent.parent, config, why="first bake, same config + date")
+        run = when_bake(config)
+        verdict("exit code", run.exit_code, 0)
+        verdict("data.json sha256 (generated_at masked)", _masked_digest(_raw(run)), _masked_digest(prior))
 
     @rule("CIR-BAKE-DETERMINISM")
-    def test_ordering_is_stable(self) -> None:
-        """CIR-BAKE-DETERMINISM#ordering-is-stable —
-        rings and items in file order; warnings in item order."""
-        artifact = _resolve_fixture()
-        # Rings in config order
-        assert [r["id"] for r in artifact["rings"]] == ["self", "partner", "children", "wider"]
-        # Items in config order
-        assert [i["id"] for i in artifact["rings"][0]["items"]] == ["sleep", "labs", "exercise"]
-
+    def test_ordering_is_stable(self, alex_copy) -> None:
+        """CIR-BAKE-DETERMINISM#ordering-is-stable — rings and items in file order; warnings in
+        item order (P0: sleep, labs, plants — their order in circles.yaml)."""
+        run = when_bake(given_alex(alex_copy))
+        verdict("exit code", run.exit_code, 0)
+        verdict("ring ids", [r["id"] for r in run.data["rings"]], ["self", "partner", "children", "wider"])
+        verdict("self item ids", [i["id"] for i in run.data["rings"][0]["items"]], ["sleep", "labs", "exercise"])
+        verdict("warning item order", [w["item"] for w in run.data["warnings"]],
+                ["self/sleep", "self/labs", "wider/plants"])
 
     @rule("CIR-BAKE-DETERMINISM")
-    def test_host_timezone_does_not_leak(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-        """CIR-BAKE-DETERMINISM#host-timezone-does-not-leak — the evaluated bake under a
-        non-UTC TZ is byte-identical to the UTC one; the config's timezone: governs."""
+    def test_host_timezone_does_not_leak(self, alex_copy, monkeypatch: pytest.MonkeyPatch) -> None:
+        """CIR-BAKE-DETERMINISM#host-timezone-does-not-leak — the evaluated bake under host
+        TZ=Pacific/Auckland is identical (generated_at aside) to the one under TZ=UTC; the
+        config's timezone: governs."""
+        config = given_alex(alex_copy)
+        prior = given_prior_bake(config.parent.parent, config, "--evaluate", why="evaluated, host TZ=UTC",
+                                 env={"TZ": "UTC"})
+        monkeypatch.setenv("TZ", "Pacific/Auckland")
+        run = when_bake(config, "--evaluate")
+        verdict("exit code", run.exit_code, 0)
+        verdict("data.json sha256 (generated_at masked)", _masked_digest(_raw(run)), _masked_digest(prior))
+        verdict("self/sleep last_data_date (the evaluated artifact)",
+                item_of(run.data, "self/sleep")["last_data_date"], "2026-08-01")
+
+    def test_deterministic_output_unit(self, tmp_path: Path) -> None:
+        """Unit guard: two resolve()+write_artifact() runs with an injected generated_at are
+        byte-identical (no masking needed when the stamp is injected)."""
         config = load_config(ALEX_YAML)
-        raw: dict[str, bytes] = {}
-        for host_tz in ("UTC", "Pacific/Auckland"):
-            monkeypatch.setenv("TZ", host_tz)
-            time.tzset()
-            try:
-                artifact = resolve(config, reference_date=FIXTURE_REFERENCE_DATE,
-                                   generated_at=FIXTURE_GENERATED_AT, evaluate=True)
-                write_artifact(artifact, tmp_path / host_tz.replace("/", "-"))
-            finally:
-                monkeypatch.delenv("TZ")
-                time.tzset()
-            raw[host_tz] = (tmp_path / host_tz.replace("/", "-") / "data.json").read_bytes()
-        assert raw["UTC"] == raw["Pacific/Auckland"]
-        # …and it is the evaluated artifact, not an accidentally unevaluated one.
-        assert _item_by_id(artifact, "self", "sleep")["last_data_date"] == "2026-08-01"
+        for name in ("a", "b"):
+            write_artifact(resolve(config, reference_date=UNIT_REFERENCE_DATE,
+                                   generated_at=UNIT_GENERATED_AT), tmp_path / name)
+        assert (tmp_path / "a" / "data.json").read_bytes() == (tmp_path / "b" / "data.json").read_bytes()
 
 
 # ===========================================================================
@@ -1161,72 +1110,75 @@ class TestBakeExposure:
     """CIR-BAKE-EXPOSURE — everything in the artifact is public."""
 
     @rule("CIR-BAKE-EXPOSURE")
-    def test_no_absolute_host_paths(self, alex_copy: AlexCopy) -> None:
-        """CIR-BAKE-EXPOSURE#no-absolute-host-paths —
-        warnings use config-relative paths only."""
-        artifact = _resolve_fixture()
-        for w in artifact["warnings"]:
-            if w["message"]:
-                assert "/home/" not in w["message"]
-                assert "/etc/" not in w["message"]
-
-        # A missing source under evaluation: the warning names `notes/absent.md`, never
-        # the absolute directory the config was loaded from.
-        config_path = alex_copy(sleep_source="notes/absent.md")
-        evaluated = _resolve_fixture(evaluate=True, config_path=config_path)
-        message = _sleep_failure(evaluated)
-        assert "notes/absent.md" in message
-        assert str(config_path.parent) not in json.dumps(evaluated)
-        assert "/home/" not in json.dumps(evaluated)
+    def test_no_absolute_host_paths(self, alex_copy) -> None:
+        """CIR-BAKE-EXPOSURE#no-absolute-host-paths — a missing source: the warning names the
+        config-relative path `notes/absent.md`, and data.json never names the absolute directory
+        the config was loaded from (nor any /home/ or /etc/ path)."""
+        config = given_alex(alex_copy, "self/sleep source: notes/absent.md",
+                            lambda c: item(c, "self/sleep")["status"]["freshness"].update(source="notes/absent.md"))
+        run = when_bake(config, "--evaluate")
+        verdict("exit code", run.exit_code, 0)
+        verdict("self/sleep warning", " | ".join(_item_warnings(run, "self/sleep")), "notes/absent.md", op="contains")
+        raw = _raw(run)
+        verdict("data.json names the config dir's absolute path", str(config.parent.resolve()) in raw, False)
+        verdict("data.json", raw, "/home/", op="not contains")
+        verdict("data.json", raw, "/etc/", op="not contains")
 
     @rule("CIR-BAKE-EXPOSURE")
-    def test_no_source_content_in_the_artifact(self) -> None:
-        """CIR-BAKE-EXPOSURE#no-source-content-in-the-artifact — only the date is
-        carried from a freshness source, never the surrounding text."""
-        serialised = json.dumps(_resolve_fixture(evaluate=True), ensure_ascii=False)
-        assert "2026-08-01" in serialised  # the date is carried…
-        for note in ("sleep-log.md", "labs.md"):
-            for line in (FIXTURES / "alex" / "notes" / note).read_text(encoding="utf-8").splitlines():
-                if not line.startswith("- "):
-                    continue
-                # …but the entry's own words (`7h20m`, `panel done, all fine`) are not.
-                remainder = line.split("—", 1)[1].strip()
-                assert remainder not in serialised, f"{note}: {remainder!r} leaked"
+    def test_no_source_content_in_the_artifact(self, alex_copy) -> None:
+        """CIR-BAKE-EXPOSURE#no-source-content-in-the-artifact — from a freshness source only the
+        date is carried: the evaluated artifact holds 2026-08-01 but none of the entries' own
+        words (`7h20m`, `panel done, all fine …`) from notes/sleep-log.md and notes/labs.md."""
+        config = given_alex(alex_copy)
+        entry_words = [line.split("—", 1)[1].strip()
+                       for note in ("sleep-log.md", "labs.md")
+                       for line in (config.parent / "notes" / note).read_text(encoding="utf-8").splitlines()
+                       if line.startswith("- ")]
+        run = when_bake(config, "--evaluate")
+        verdict("exit code", run.exit_code, 0)
+        raw = _raw(run)
+        verdict("data.json", raw, "2026-08-01", op="contains")
+        verdict("note entry words found in data.json", [w for w in entry_words if w in raw], [])
 
     @rule("CIR-BAKE-EXPOSURE")
-    def test_command_stderr_not_passed_through(self, alex_copy: AlexCopy,
-                                               monkeypatch: pytest.MonkeyPatch) -> None:
-        """CIR-BAKE-EXPOSURE#command-stderr-not-passed-through — a command prints a stack
-        trace with paths and env to stderr: the warning is a bounded, sanitized summary."""
-        monkeypatch.setenv("CIRCLES_SECRET", "s3cret-value")
+    def test_command_stderr_not_passed_through(self, alex_copy, monkeypatch: pytest.MonkeyPatch) -> None:
+        """CIR-BAKE-EXPOSURE#command-stderr-not-passed-through — the plants command prints a stack
+        trace with paths and its env to stderr (the bake's env holds CIRCLES_SECRET): the warning
+        is a bounded, sanitized summary — none of it reaches data.json."""
         body = ('echo "Traceback (most recent call last):" >&2\n'
                 'echo "  File \\"$0\\", line 7, in /home/alex/bin/probe" >&2\n'
                 'env >&2\nexit 1\n')
-        artifact = _resolve_fixture(evaluate=True, config_path=_plants_runs(alex_copy, body))
-        serialised = json.dumps(artifact)
-        for leaked in ("Traceback", "/home/alex", "PATH=", "CIRCLES_SECRET", "s3cret-value",
-                       "plants-probe.sh"):
-            assert leaked not in serialised, leaked
-        message = next(w["message"] for w in artifact["warnings"] if w["item"] == "wider/plants")
-        assert len(message) <= adapters_module.WARNING_MAX_CHARS
+        config = given_plants_runs(alex_copy, "stack trace + env on stderr, exits 1", body)
+        monkeypatch.setenv("CIRCLES_SECRET", "s3cret-value")
+        run = when_bake(config, "--evaluate")
+        verdict("exit code", run.exit_code, 0)
+        raw = _raw(run)
+        verdict("stderr fragments found in data.json",
+                [s for s in ("Traceback", "/home/alex", "PATH=", "CIRCLES_SECRET", "s3cret-value", "plants-probe.sh")
+                 if s in raw], [])
+        message = " | ".join(_item_warnings(run, "wider/plants"))
+        verdict(f"wider/plants warning length ≤ {adapters_module.WARNING_MAX_CHARS}",
+                0 < len(message) <= adapters_module.WARNING_MAX_CHARS, True)
 
     @rule("CIR-BAKE-EXPOSURE")
     @pytest.mark.parametrize("stream", [
         pytest.param("stderr", id="10 MB on stderr, command fails"),
         pytest.param("stdout-first-line", id="10 MB as the status word"),
     ])
-    def test_warning_text_is_bounded(self, alex_copy: AlexCopy, stream: str) -> None:
-        """CIR-BAKE-EXPOSURE#warning-text-is-bounded — a command prints 10 MB (to stderr,
-        or as its unknown status word) → the warning is truncated at a fixed cap."""
+    def test_warning_text_is_bounded(self, alex_copy, stream: str) -> None:
+        """CIR-BAKE-EXPOSURE#warning-text-is-bounded — a command prints 10 MB (to stderr, or as
+        its unknown status word) → ⚪, and the warning is truncated at a fixed cap, three orders of
+        magnitude under the output; data.json stays small."""
         ten_mb = "head -c 10485760 /dev/zero | tr '\\0' 'x'"
-        body = (f"{ten_mb} >&2\nexit 1\n" if stream == "stderr" else f"{ten_mb}\necho\n")
-        artifact = _resolve_fixture(evaluate=True, config_path=_plants_runs(alex_copy, body))
-        plants = _item_by_id(artifact, "wider", "plants")
-        assert plants["status"] == "grey"
-        message = next(w["message"] for w in artifact["warnings"] if w["item"] == "wider/plants")
-        # The cap is a fixed constant, three orders of magnitude under the output.
-        assert len(message) <= adapters_module.WARNING_MAX_CHARS < 10_000
-        assert len(json.dumps(artifact)) < 100_000
+        body = f"{ten_mb} >&2\nexit 1\n" if stream == "stderr" else f"{ten_mb}\necho\n"
+        config = given_plants_runs(alex_copy, f"prints 10 MB ({stream})", body)
+        run = when_bake(config, "--evaluate")
+        verdict("exit code", run.exit_code, 0)
+        verdict("wider/plants status", item_of(run.data, "wider/plants")["status"], "grey")
+        message = " | ".join(_item_warnings(run, "wider/plants"))
+        cap = adapters_module.WARNING_MAX_CHARS
+        verdict(f"wider/plants warning length ≤ cap {cap} < 10000", 0 < len(message) <= cap < 10_000, True)
+        verdict("data.json size < 100000 bytes", len(_raw(run).encode()) < 100_000, True)
 
 
 # ===========================================================================
@@ -1237,39 +1189,52 @@ class TestBakePageDoesNotResolve:
     """CIR-BAKE-PAGE-DOES-NOT-RESOLVE — the page renders, it never decides."""
 
     @rule("CIR-BAKE-PAGE-DOES-NOT-RESOLVE")
-    def test_page_contains_no_adapter_code(self) -> None:
-        """CIR-BAKE-PAGE-DOES-NOT-RESOLVE#page-contains-no-adapter-code —
-        the artifact is pure data, no code."""
-        artifact = _resolve_fixture()
-        # The artifact is a plain dict with no callable or code references
-        assert isinstance(artifact, dict)
-        # No adapter evaluation metadata leaks into the artifact
-        for ring in artifact["rings"]:
-            for item in ring["items"]:
-                assert "adapter" not in item
+    def test_page_contains_no_adapter_code(self, alex_copy) -> None:
+        """CIR-BAKE-PAGE-DOES-NOT-RESOLVE#page-contains-no-adapter-code — the shipped page
+        (out/index.html) carries none of resolution's inputs — no thresholds (yellow_after /
+        red_after), no source paths, no command argv — so it has nothing to parse, compare or run."""
+        run = when_bake(given_alex(alex_copy))
+        verdict("exit code", run.exit_code, 0)
+        page = (run.out_dir / "index.html").read_text(encoding="utf-8")
+        verdict("resolution inputs found in index.html",
+                [s for s in ("yellow_after", "red_after", "notes/sleep-log.md", "notes/labs.md",
+                             "plants-status.sh") if s in page], [])
 
 
 # ===========================================================================
-# CIR-DATA-FRESHNESS-WINDOW — the boundary predicate (pure, unwired at P0)
+# CIR-DATA-FRESHNESS-WINDOW — thresholds and boundaries, through the bake
 # ===========================================================================
 
 class TestDataFreshnessWindow:
-    """CIR-DATA-FRESHNESS-WINDOW — thresholds and boundaries (pure predicate only)."""
+    """CIR-DATA-FRESHNESS-WINDOW — self/sleep (newest 2026-08-01, yellow_after 7, red_after 30)
+    evaluated with the reference date moved so the newest entry is the row's age (⚖-R6 strict >)."""
 
     @rule("CIR-DATA-FRESHNESS-WINDOW")
-    @pytest.mark.parametrize("age,yellow,red,expected", [
-        pytest.param(6, 7, 30, "green", id="CIR-DATA-FRESHNESS-WINDOW#window-inside"),
-        pytest.param(7, 7, 30, "green", id="CIR-DATA-FRESHNESS-WINDOW#window-at-yellow-boundary"),
-        pytest.param(8, 7, 30, "yellow", id="CIR-DATA-FRESHNESS-WINDOW#window-just-past-yellow"),
-        pytest.param(29, 7, 30, "yellow", id="CIR-DATA-FRESHNESS-WINDOW#window-mid"),
-        pytest.param(30, 7, 30, "yellow", id="CIR-DATA-FRESHNESS-WINDOW#window-at-red-boundary"),
-        pytest.param(31, 7, 30, "red", id="CIR-DATA-FRESHNESS-WINDOW#window-just-past-red"),
-        pytest.param(45, 7, 30, "red", id="CIR-DATA-FRESHNESS-WINDOW#window-far-past-red"),
+    @pytest.mark.parametrize("reference,expected", [
+        pytest.param("2026-08-07", "🟢", id="CIR-DATA-FRESHNESS-WINDOW#window-inside"),
+        pytest.param("2026-08-08", "🟢", id="CIR-DATA-FRESHNESS-WINDOW#window-at-yellow-boundary"),
+        pytest.param("2026-08-09", "🟡", id="CIR-DATA-FRESHNESS-WINDOW#window-just-past-yellow"),
+        pytest.param("2026-08-30", "🟡", id="CIR-DATA-FRESHNESS-WINDOW#window-mid"),
+        pytest.param("2026-08-31", "🟡", id="CIR-DATA-FRESHNESS-WINDOW#window-at-red-boundary"),
+        pytest.param("2026-09-01", "🔴", id="CIR-DATA-FRESHNESS-WINDOW#window-just-past-red"),
+        pytest.param("2026-09-15", "🔴", id="CIR-DATA-FRESHNESS-WINDOW#window-far-past-red"),
     ])
-    def test_window_boundaries(self, age: int, yellow: int, red: int, expected: str) -> None:
-        """CIR-DATA-FRESHNESS-WINDOW — boundary behaviour per ⚖-R6 strict `>`."""
-        result = window_status(age, yellow, red)
-        assert result == expected
+    def test_window_through_the_bake(self, alex_copy, reference: str, expected: str) -> None:
+        """CIR-DATA-FRESHNESS-WINDOW — ages 6/7/8/29/30/31/45 days (reference − 2026-08-01); the
+        spec's light (expected) is checked as its wire word (CIR-BAKE-STATUS-VALUES)."""
+        run = when_bake(given_alex(alex_copy), "--evaluate", reference_date=reference)
+        verdict("exit code", run.exit_code, 0)
+        sleep = item_of(run.data, "self/sleep")
+        verdict(f"self/sleep status (expected {expected})", sleep["status"], WIRE[expected])
+        verdict("self/sleep last_data_date", sleep["last_data_date"], "2026-08-01")
+
+    @pytest.mark.parametrize("age,yellow,red,expected", [
+        (6, 7, 30, "green"), (7, 7, 30, "green"), (8, 7, 30, "yellow"), (29, 7, 30, "yellow"),
+        (30, 7, 30, "yellow"), (31, 7, 30, "red"), (45, 7, 30, "red"),
+    ])
+    def test_window_predicate_unit(self, age: int, yellow: int, red: int, expected: str) -> None:
+        """Unit guard on the pure predicate window_status (⚖-R6 strict `>`)."""
+        assert window_status(age, yellow, red) == expected
 
 
 # ===========================================================================
@@ -1280,26 +1245,38 @@ class TestAdaptManual:
     """CIR-ADAPT-MANUAL — hand-set light."""
 
     @rule("CIR-ADAPT-MANUAL")
-    def test_manual_returns_declared_light(self) -> None:
-        """CIR-ADAPT-MANUAL#manual-returns-declared-light —
-        manual: green → 🟢."""
-        artifact = _resolve_fixture()
-        assert _item_by_id(artifact, "children", "nova")["status"] == "green"
+    def test_manual_returns_declared_light(self, alex_copy) -> None:
+        """CIR-ADAPT-MANUAL#manual-returns-declared-light — children/nova `manual: green` → 🟢,
+        no data date."""
+        run = when_bake(given_alex(alex_copy))
+        verdict("exit code", run.exit_code, 0)
+        nova = item_of(run.data, "children/nova")
+        verdict("children/nova status, last_data_date", [nova["status"], nova["last_data_date"]], ["green", None])
 
     @rule("CIR-ADAPT-MANUAL")
-    def test_manual_has_no_data_date(self) -> None:
-        """CIR-ADAPT-MANUAL#manual-has-no-data-date —
-        manual items have no last_data_date."""
-        artifact = _resolve_fixture()
-        item = _item_by_id(artifact, "children", "nova")
-        assert item["last_data_date"] is None
+    def test_manual_has_no_data_date(self, alex_copy) -> None:
+        """CIR-ADAPT-MANUAL#manual-has-no-data-date — any manual item (date-night, nova, kit,
+        friends): no last_data_date, no "last data" segment in the detail line."""
+        run = when_bake(given_alex(alex_copy), "--evaluate")
+        verdict("exit code", run.exit_code, 0)
+        items = _items(run)
+        manual = ("partner/date-night", "children/nova", "children/kit", "wider/friends")
+        verdict("manual items with a data date or a 'last data' segment",
+                [ref for ref in manual if items[ref]["last_data_date"] is not None
+                 or "last data" in items[ref]["detail_line"]], [])
 
     @rule("CIR-ADAPT-MANUAL")
-    def test_manual_available_in_every_phase(self) -> None:
-        """CIR-ADAPT-MANUAL#manual-available-in-every-phase —
-        manual works at P0."""
-        artifact = _resolve_fixture()
-        assert _item_by_id(artifact, "partner", "date-night")["status"] == "yellow"
+    @pytest.mark.parametrize("phase", [
+        pytest.param("P0 build-time", id="P0 build-time bake"),
+        pytest.param("P1 nightly", id="P1 nightly bake (--evaluate)"),
+    ])
+    def test_manual_available_in_every_phase(self, alex_copy, phase: str) -> None:
+        """CIR-ADAPT-MANUAL#manual-available-in-every-phase — partner/date-night `manual: yellow`
+        resolves 🟡 in every phase's bake."""
+        run = when_bake(given_alex(alex_copy), *PHASE_FLAGS[phase])
+        verdict(f"exit code ({phase} bake)", run.exit_code, 0)
+        verdict(f"partner/date-night status ({phase} bake)",
+                item_of(run.data, "partner/date-night")["status"], "yellow")
 
 
 # ===========================================================================
@@ -1310,45 +1287,43 @@ class TestProcPhaseP0:
     """CIR-PROC-PHASE-P0 — hand-set statuses on the existing pipeline."""
 
     @rule("CIR-PROC-PHASE-P0")
-    def test_p0_manual_end_to_end(self) -> None:
-        """CIR-PROC-PHASE-P0#p0-manual-end-to-end —
-        fixture-style config with manual items resolves correctly."""
-        artifact = _resolve_fixture()
-        assert _item_by_id(artifact, "children", "nova")["status"] == "green"
-        assert _item_by_id(artifact, "children", "kit")["status"] == "green"
-        assert _item_by_id(artifact, "partner", "date-night")["status"] == "yellow"
-        assert _item_by_id(artifact, "wider", "friends")["status"] == "red"
+    def test_p0_manual_end_to_end(self, alex_copy) -> None:
+        """CIR-PROC-PHASE-P0#p0-manual-end-to-end — the bake's half (serving it from the image is
+        the system tier's): a P0 bake writes the page + the artifact with alex's manual statuses."""
+        run = when_bake(given_alex(alex_copy))
+        verdict("exit code", run.exit_code, 0)
+        verdict("artifact files in out/", run.artifact_files, ["data.json", "index.html"])
+        items = _items(run)
+        verdict("manual lights", {ref: items[ref]["status"] for ref in
+                                  ("children/nova", "children/kit", "partner/date-night", "wider/friends")},
+                {"children/nova": "green", "children/kit": "green", "partner/date-night": "yellow",
+                 "wider/friends": "red"})
 
     @rule("CIR-PROC-PHASE-P0")
-    def test_p0_unevaluated_adapters_are_grey(self) -> None:
-        """CIR-PROC-PHASE-P0#p0-unevaluated-adapters-are-grey —
-        freshness and command items → ⚪ + warning, grey_reason: not-evaluated."""
-        artifact = _resolve_fixture()
-
-        sleep = _item_by_id(artifact, "self", "sleep")
-        assert sleep["status"] == "grey"
-        assert sleep["grey_reason"] == "not-evaluated"
-
-        labs = _item_by_id(artifact, "self", "labs")
-        assert labs["status"] == "grey"
-        assert labs["grey_reason"] == "not-evaluated"
-
-        plants = _item_by_id(artifact, "wider", "plants")
-        assert plants["status"] == "grey"
-        assert plants["grey_reason"] == "not-evaluated"
-
-        # Check warnings
-        warnings = artifact["warnings"]
-        warning_msgs = [w["message"] for w in warnings if w["item"] in ("self/sleep", "self/labs", "wider/plants")]
-        assert all("not evaluated" in m for m in warning_msgs)
+    def test_p0_unevaluated_adapters_are_grey(self, alex_copy) -> None:
+        """CIR-PROC-PHASE-P0#p0-unevaluated-adapters-are-grey — the fixture's freshness: (sleep,
+        labs) and command: (plants) items → ⚪ + warning "adapter not evaluated in this build",
+        grey_reason not-evaluated (⚖-R50)."""
+        run = when_bake(given_alex(alex_copy))
+        verdict("exit code", run.exit_code, 0)
+        items = _items(run)
+        refs = ("self/sleep", "self/labs", "wider/plants")
+        verdict("status + grey_reason", {ref: [items[ref]["status"], items[ref]["grey_reason"]] for ref in refs},
+                {ref: ["grey", "not-evaluated"] for ref in refs})
+        verdict("warnings", {ref: _item_warnings(run, ref) for ref in refs},
+                {ref: ["adapter not evaluated in this build"] for ref in refs})
 
     @rule("CIR-PROC-PHASE-P0")
-    def test_p0_config_stays_valid(self) -> None:
-        """CIR-PROC-PHASE-P0#p0-config-stays-valid —
-        the fixture config validates at P0."""
-        config = load_config(ALEX_YAML)
-        assert config.person == "Alex Example"
-        assert len(config.rings) == 4
+    @pytest.mark.parametrize("phase", [
+        pytest.param("P0 build-time", id="validates at P0 (build-time bake)"),
+        pytest.param("P1 nightly", id="validates at P1 (--evaluate), no migration"),
+    ])
+    def test_p0_config_stays_valid(self, alex_copy, phase: str) -> None:
+        """CIR-PROC-PHASE-P0#p0-config-stays-valid — the fixture config unchanged bakes at P0 and
+        at P1."""
+        run = when_bake(given_alex(alex_copy), *PHASE_FLAGS[phase])
+        verdict(f"exit code ({phase} bake)", run.exit_code, 0)
+        verdict("person, ring count", [run.data["person"], len(run.data["rings"])], ["Alex Example", 4])
 
 
 # ===========================================================================
@@ -1359,132 +1334,23 @@ class TestProcBakeOnePath:
     """CIR-PROC-BAKE-ONE-PATH — one bake, several triggers."""
 
     @rule("CIR-PROC-BAKE-ONE-PATH")
-    def test_bake_same_code_both_triggers(self) -> None:
-        """CIR-PROC-BAKE-ONE-PATH#bake-same-code-both-triggers —
-        resolve() is the single resolution path."""
-        # Just verify the function exists and works
-        artifact = _resolve_fixture()
-        assert artifact["version"] == 1
-
-
-# ===========================================================================
-# Fixture acceptance — the eight items resolve exactly as specified
-# ===========================================================================
-
-class TestFixtureAcceptance:
-    """The fixture resolves to the exact lights specified in the issue."""
-
-    def test_fixture_resolves_correctly(self) -> None:
-        """All eight items resolve to the expected statuses at the fixture reference date."""
-        artifact = _resolve_fixture()
-
-        # self/sleep ⚪ not-evaluated (freshness adapter, P0)
-        assert _item_by_id(artifact, "self", "sleep")["status"] == "grey"
-        assert _item_by_id(artifact, "self", "sleep")["grey_reason"] == "not-evaluated"
-
-        # self/labs ⚪ not-evaluated (freshness adapter, P0)
-        assert _item_by_id(artifact, "self", "labs")["status"] == "grey"
-        assert _item_by_id(artifact, "self", "labs")["grey_reason"] == "not-evaluated"
-
-        # self/exercise ⚪ by-choice (no adapter)
-        assert _item_by_id(artifact, "self", "exercise")["status"] == "grey"
-        assert _item_by_id(artifact, "self", "exercise")["grey_reason"] == "by-choice"
-
-        # partner/date-night 🟡 (manual: yellow)
-        assert _item_by_id(artifact, "partner", "date-night")["status"] == "yellow"
-
-        # children/nova 🟢 (manual: green)
-        assert _item_by_id(artifact, "children", "nova")["status"] == "green"
-
-        # children/kit 🟢 (manual: green)
-        assert _item_by_id(artifact, "children", "kit")["status"] == "green"
-
-        # wider/friends 🔴 (manual: red)
-        assert _item_by_id(artifact, "wider", "friends")["status"] == "red"
-
-        # wider/plants ⚪ not-evaluated (command adapter, P0)
-        assert _item_by_id(artifact, "wider", "plants")["status"] == "grey"
-        assert _item_by_id(artifact, "wider", "plants")["grey_reason"] == "not-evaluated"
-
-
-# ===========================================================================
-# CIR-BAKE-DETERMINISM — two runs at same reference date produce byte-identical data.json
-# ===========================================================================
-
-class TestBakeDeterminismExact:
-    """Two runs at the same reference date produce byte-identical data.json (except generated_at)."""
-
-    def test_deterministic_output(self, tmp_path: Path) -> None:
-        """Two runs with identical inputs produce identical output."""
-        config = load_config(ALEX_YAML)
-
-        # Run 1
-        art1 = resolve(config, reference_date=FIXTURE_REFERENCE_DATE, generated_at=FIXTURE_GENERATED_AT)
-        write_artifact(art1, tmp_path / "a")
-
-        # Run 2
-        art2 = resolve(config, reference_date=FIXTURE_REFERENCE_DATE, generated_at=FIXTURE_GENERATED_AT)
-        write_artifact(art2, tmp_path / "b")
-
-        raw_a = (tmp_path / "a" / "data.json").read_bytes()
-        raw_b = (tmp_path / "b" / "data.json").read_bytes()
-        assert raw_a == raw_b
-
-
-# ===========================================================================
-# CIR-BAKE-ARTIFACT — stale_after_hours is null
-# ===========================================================================
-
-class TestBakeStaleAfterHours:
-    """stale_after_hours is null at P0."""
-
-    @rule("CIR-BAKE-STALE-SELF")
-    def test_stale_after_hours_null(self) -> None:
-        """CIR-BAKE-STALE-SELF#no-threshold-no-banner — stale_after_hours ships null at P0."""
-        artifact = _resolve_fixture()
-        assert artifact["stale_after_hours"] is None
-
-
-# ===========================================================================
-# CIR-BAKE-ARTIFACT — artifact validates against schema
-# ===========================================================================
-
-class TestBakeArtifactSchema:
-    """The artifact validates against CIR-BAKE-ARTIFACT schema."""
-
-    def test_artifact_has_required_fields(self) -> None:
-        """All required top-level fields are present."""
-        artifact = _resolve_fixture()
-        required = ["version", "spec_version", "person", "generated_at", "reference_date",
-                     "timezone", "stale_after_hours", "rings", "warnings"]
-        for field in required:
-            assert field in artifact, f"Missing required field: {field}"
-
-    def test_artifact_types(self) -> None:
-        """Field types match the schema."""
-        artifact = _resolve_fixture()
-        assert isinstance(artifact["version"], int)
-        assert isinstance(artifact["spec_version"], int)
-        assert isinstance(artifact["person"], str)
-        assert isinstance(artifact["generated_at"], str)
-        assert isinstance(artifact["reference_date"], str)
-        assert isinstance(artifact["timezone"], str)
-        assert artifact["stale_after_hours"] is None
-        assert isinstance(artifact["rings"], list)
-        assert isinstance(artifact["warnings"], list)
-
-    def test_item_fields(self) -> None:
-        """Every item has the required fields with correct types."""
-        artifact = _resolve_fixture()
-        for ring in artifact["rings"]:
-            for item in ring["items"]:
-                assert isinstance(item["id"], str)
-                assert isinstance(item["label"], str)
-                assert item["status"] in ("green", "yellow", "red", "grey")
-                assert item["grey_reason"] in (None, "by-choice", "by-failure", "not-evaluated")
-                assert isinstance(item["share"], (int, float))
-                assert isinstance(item["detail_line"], str)
-                assert "detail_page" in item
+    def test_bake_same_code_both_triggers(self, alex_copy) -> None:
+        """CIR-PROC-BAKE-ONE-PATH#bake-same-code-both-triggers — the build-time run (no flag) and
+        the scheduled run (--evaluate) are the same entry point differing only in configuration:
+        the same artifact shape, the same rings/items, the same manual lights — only the
+        evaluated items' lights differ."""
+        config = given_alex(alex_copy)
+        prior = json.loads(given_prior_bake(config.parent.parent, config, why="build-time trigger (P0)"))
+        run = when_bake(config, "--evaluate")
+        verdict("exit code", run.exit_code, 0)
+        verdict("top-level keys (scheduled = build-time)", sorted(run.data), sorted(prior))
+        verdict("items per ring (scheduled = build-time)",
+                {r["id"]: [i["id"] for i in r["items"]] for r in run.data["rings"]},
+                {r["id"]: [i["id"] for i in r["items"]] for r in prior["rings"]})
+        manual = ("partner/date-night", "children/nova", "children/kit", "wider/friends")
+        verdict("manual lights (scheduled = build-time)",
+                {ref: item_of(run.data, ref)["status"] for ref in manual},
+                {ref: item_of(prior, ref)["status"] for ref in manual})
 
 
 # ===========================================================================
@@ -1495,27 +1361,68 @@ class TestAdaptBudgetExitCode:
     """CIR-ADAPT-BUDGET — failed adapters publish with warnings; only config errors fail."""
 
     @rule("CIR-ADAPT-BUDGET")
-    def test_bake_exit_code_only_for_config_errors(self, alex_copy: AlexCopy,
-                                                   tmp_path: Path) -> None:
-        """CIR-ADAPT-BUDGET#bake-exit-code-only-for-config-errors — some adapters failed,
-        none was a config error → exit 0 and the artifact is written with warnings; a
-        config error (a string `command:`) → nonzero and nothing written."""
-        config_path = _plants_runs(alex_copy, "echo red\nexit 3\n")
-        out = tmp_path / "out"
-        ran = _run_bake("--config", str(config_path), "--out", str(out), "--evaluate",
-                        "--reference-date", "2026-08-03")
-        assert ran.returncode == 0, ran.stderr
-        artifact = json.loads((out / "data.json").read_text())
-        assert any(w["item"] == "wider/plants" for w in artifact["warnings"])
-        assert (out / "index.html").exists()
+    def test_bake_exit_code_only_for_config_errors(self, alex_copy) -> None:
+        """CIR-ADAPT-BUDGET#bake-exit-code-only-for-config-errors — some adapters failed (plants
+        prints red, exits 3), none was a config error → exit 0; the page is published with
+        warnings."""
+        config = given_plants_runs(alex_copy, "prints red, exits 3", "echo red\nexit 3\n")
+        run = when_bake(config, "--evaluate")
+        verdict("exit code", run.exit_code, 0)
+        verdict("artifact files in out/", run.artifact_files, ["data.json", "index.html"])
+        verdict("warning item refs", [w["item"] for w in run.data["warnings"]], "wider/plants", op="contains")
 
-        broken = config_path.read_text().replace("- ./notes/plants-probe.sh",
-                                                 "./notes/plants-probe.sh", 1)
-        broken = broken.replace("command:\n", "command: ", 1)
-        config_path.write_text(broken)
-        bad_out = tmp_path / "bad"
-        failed = _run_bake("--config", str(config_path), "--out", str(bad_out), "--evaluate",
-                           "--reference-date", "2026-08-03")
-        assert failed.returncode != 0
-        assert "array" in failed.stderr  # the config error names the argv-array form
-        assert not (bad_out / "data.json").exists()
+
+# ===========================================================================
+# Unit guards — resolve() over the fixture, the artifact's types (never evidence)
+# ===========================================================================
+
+def _unit_artifact() -> dict:
+    return resolve(load_config(ALEX_YAML), reference_date=UNIT_REFERENCE_DATE, generated_at=UNIT_GENERATED_AT)
+
+
+def test_fixture_resolves_correctly_unit() -> None:
+    """All eight items resolve to the expected P0 statuses at the fixture reference date."""
+    a = _unit_artifact()
+    expected = {
+        "self/sleep": ("grey", "not-evaluated"), "self/labs": ("grey", "not-evaluated"),
+        "self/exercise": ("grey", "by-choice"), "partner/date-night": ("yellow", None),
+        "children/nova": ("green", None), "children/kit": ("green", None),
+        "wider/friends": ("red", None), "wider/plants": ("grey", "not-evaluated"),
+    }
+    for ref, (status, reason) in expected.items():
+        assert item_of(a, ref)["status"] == status, ref
+        assert item_of(a, ref)["grey_reason"] == reason, ref
+
+
+def test_artifact_has_required_fields_unit() -> None:
+    """All required top-level fields are present."""
+    a = _unit_artifact()
+    for field in TOP_LEVEL_FIELDS:
+        assert field in a, f"Missing required field: {field}"
+
+
+def test_artifact_types_unit() -> None:
+    """Field types match the schema."""
+    a = _unit_artifact()
+    assert isinstance(a["version"], int)
+    assert isinstance(a["spec_version"], int)
+    assert isinstance(a["person"], str)
+    assert isinstance(a["generated_at"], str)
+    assert isinstance(a["reference_date"], str)
+    assert isinstance(a["timezone"], str)
+    assert a["stale_after_hours"] is None
+    assert isinstance(a["rings"], list)
+    assert isinstance(a["warnings"], list)
+
+
+def test_item_fields_unit() -> None:
+    """Every item has the required fields with correct types."""
+    for ring in _unit_artifact()["rings"]:
+        for it in ring["items"]:
+            assert isinstance(it["id"], str)
+            assert isinstance(it["label"], str)
+            assert it["status"] in ("green", "yellow", "red", "grey")
+            assert it["grey_reason"] in (None, "by-choice", "by-failure", "not-evaluated")
+            assert isinstance(it["share"], (int, float))
+            assert isinstance(it["detail_line"], str)
+            assert "detail_page" in it
