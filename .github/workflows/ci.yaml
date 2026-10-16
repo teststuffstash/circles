@@ -5,11 +5,11 @@
 # Runs on the homelab self-hosted runner (Actions Runner Controller, ephemeral laptop tier):
 # runs-on: homelab-ephemeral.
 #
-# pull_request ONLY (no push:master): the PR run is the required-check gate that must be green before
-# merge. On a squash-merge the master commit is identical content, so re-running on master would just
-# re-test the same tree — and it fires in PARALLEL with deploy.yaml (which doesn't wait for it), so it
-# can't gate a deploy anyway. The PR gate is the control; a direct admin push to master is the only
-# untested path and a parallel job couldn't stop it regardless.
+# The PR run is the required-check gate that must be green before merge. push:master runs too, but
+# NOT as a gate (it fires in parallel with deploy.yaml and can't stop it): it exists so master
+# re-earns its OWN evidence against the merged sha and the `evidence` job publishes the master specs
+# site with it (homelab ADR-156 / oracle-fleet shape, circles#103) — a PR run never writes master's
+# "latest". This replaced specs-site.yaml, which published master from committed text only.
 name: CI
 
 on:
@@ -21,6 +21,8 @@ on:
     # check that can never report. Found exactly that way: circles#24 sat APPROVED + armed and
     # permanently BLOCKED, because `ci` was required on goal/** and this trigger said master only.
     branches: [master, 'goal/**']
+  push:
+    branches: [master]
   workflow_dispatch: {}
 
 # One live run per PR (org standard — homelab docs/ci.md §Concurrency, from oracle-fleet#222):
@@ -41,6 +43,9 @@ jobs:
   # change) — make it required once it has a green streak.
   e2e:
     runs-on: [self-hosted, proxmox-vm]
+    timeout-minutes: 30
+    # a PR head and its identical push:master sha never hold two VM slots at once (oracle-fleet)
+    concurrency: e2e-${{ github.sha }}
     steps:
       - uses: actions/checkout@v4
       - name: Kind system test (devbox run test-system)
@@ -53,6 +58,16 @@ jobs:
         env:
           CIRCLES_BROWSER_RUNNER: docker
         run: devbox run test-browser
+      # Raw Allure results for the trailing `evidence` job. A red or skipped browser run still
+      # uploads what it has; an absent artifact renders the browser rows as ∅ there, never PASS.
+      - name: Upload browser Allure results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-allure-results
+          path: allure-results-browser/
+          retention-days: 1 # homelab GithubStorageHeldHigh — the published site is the record
+          if-no-files-found: warn
 
   ci:
     runs-on: homelab-ephemeral
@@ -72,19 +87,60 @@ jobs:
       - name: Secret scan (devbox run scan-secrets)
         run: devbox run scan-secrets
 
-      # ── specs-site preview (ADR-092) ─────────────────────────────────────────────────────
-      # PR runs render the specs site into the pr-<N>/ bucket prefix →
-      # https://specs-<N>.circles.teststuff.net (route lifecycle: specs-pr-site.yaml). The
-      # master site is published by specs-site.yaml on merge — never from here. `if: always()`
-      # so a red gate still publishes the render (seeing the failing spec tree is the point).
-      # specs-publish.sh soft-skips when the SPECS_S3_* secrets are absent.
+      - name: Upload unit Allure results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: unit-allure-results
+          path: allure-results/
+          retention-days: 1
+          if-no-files-found: warn
+
+  # ── evidence: the trailing, NON-required publish job (homelab python-stack.md §CI job shape,
+  # kind-ci.md rule 8; oracle-fleet's ci.yaml) ────────────────────────────────────────────────
+  # Merges the unit + browser Allure results (uuid-named files — a copy is the merge), renders the
+  # reviewer pack + per-rule fragments with the pinned allure-behavior-snippets (`devbox run
+  # evidence`, circles#103 / homelab ADR-156) and publishes the specs site with the fragments
+  # transcluded: PR runs → pr-<N>/ (https://specs-<N>.circles.teststuff.net), push:master → the
+  # bucket root (https://specs.circles.teststuff.net). `if: always()` + continue-on-error
+  # downloads: a red or skipped tier still publishes what exists, and its rows read ∅.
+  evidence:
+    needs: [ci, e2e]
+    if: always()
+    runs-on: homelab-ephemeral
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download unit + browser Allure results
+        continue-on-error: true
+        uses: actions/download-artifact@v4
+        with:
+          pattern: "*-allure-results"
+          path: allure-merged/
+          merge-multiple: true
+
+      - name: Evidence pack + fragments (devbox run evidence)
+        run: |
+          mkdir -p allure-merged
+          devbox run evidence -- allure-merged allure-evidence
+
+      - name: Upload the evidence pack
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: circles-evidence
+          path: allure-evidence/
+          retention-days: 1
+          if-no-files-found: warn
+
+      # specs-publish.sh soft-skips when the SPECS_S3_* secrets are absent; SITE_PREFIX empty =
+      # the bucket root (master).
       - name: Site identity
         id: site
-        if: github.event_name == 'pull_request'
-        run: echo "prefix=pr-${{ github.event.number }}" >> "$GITHUB_OUTPUT"
+        run: echo "prefix=${{ github.event_name == 'pull_request' && format('pr-{0}', github.event.number) || '' }}" >> "$GITHUB_OUTPUT"
 
-      - name: Publish specs site (PR preview)
-        if: always() && github.event_name == 'pull_request'
+      - name: Publish specs site
+        if: github.event_name != 'workflow_dispatch' || github.ref == 'refs/heads/master'
         env:
           SPECS_S3_ENDPOINT: http://garage.garage.svc.cluster.local:3900
           SPECS_S3_ACCESS_KEY_ID: ${{ secrets.SPECS_S3_ACCESS_KEY_ID }}
