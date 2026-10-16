@@ -8,7 +8,9 @@ and [`fixtures/alex/notes/labs.md`](../../fixtures/alex/notes/labs.md) (very sta
 
 **World: alex** — every table on this page states behavior against the fixture person.
 
-## CIR-DATA-SOURCE-PATH — where sources are read from
+## CIR-DATA-SOURCE-PATH
+
+**— where sources are read from**
 
 `source:` is a path **or glob** resolved relative to the directory holding `circles.yaml` (the
 fixture's `notes/sleep-log.md` is `fixtures/alex/notes/sleep-log.md`). It **may not escape that
@@ -31,27 +33,15 @@ The two escape rows overlap — an absolute path is also outside the config dire
 absoluteness is a syntactic property tested before resolution, so each row's message is
 independently triggerable.
 
-<details class="evidence-block">
-<summary>Evidence: 8 test case(s) — alex</summary>
+<details markdown="1"><summary>Evidence — latest run</summary>
 
-**Requirement:** CIR-DATA-SOURCE-PATH — **World:** alex
-
-| Case ID | Status | Detail |
-|---------|--------|--------|
-| `source-absolute-path` | PASS | — |
-| `source-glob-no-match` | PASS | — |
-| `source-glob-union` | PASS | — |
-| `source-non-literal-parent-traversal` | PASS | — |
-| `source-parent-traversal` | PASS | — |
-| `source-path-missing` | PASS | — |
-| `source-single-file` | PASS | — |
-| `source-unreadable` | PASS | — |
-
-[View full report](../../specs-site/evidence)
+--8<-- "CIR-DATA-SOURCE-PATH.md"
 
 </details>
 
-## CIR-DATA-DATE-PARSE — which date tokens count
+## CIR-DATA-DATE-PARSE
+
+**— which date tokens count**
 
 Sources are human notes, so parsing is deliberately narrow: **ISO-8601 dates only**,
 `YYYY-MM-DD`, optionally followed by a time and offset. Anything else is not a date. A narrow
@@ -82,29 +72,15 @@ silently guess wrong on ambiguous strings, which is worse than not recognizing t
 config later demands a format, it is added to this list explicitly under a new requirement ID,
 never via heuristics.
 
-<details class="evidence-block">
-<summary>Evidence: 10 test case(s) — alex</summary>
+<details markdown="1"><summary>Evidence — latest run</summary>
 
-**Requirement:** CIR-DATA-DATE-PARSE — **World:** alex
-
-| Case ID | Status | Detail |
-|---------|--------|--------|
-| `date-anywhere-in-line` | PASS | — |
-| `date-datetime-form` | PASS | — |
-| `date-heading-prose` | PASS | — |
-| `date-impossible-calendar` | PASS | — |
-| `date-iso-calendar` | PASS | — |
-| `date-iso-substring` | PASS | — |
-| `date-newest-wins` | PASS | — |
-| `date-none-parseable` | PASS | — |
-| `date-slash-format` | PASS | — |
-| `date-written-month` | PASS | — |
-
-[View full report](../../specs-site/evidence)
+--8<-- "CIR-DATA-DATE-PARSE.md"
 
 </details>
 
-## CIR-DATA-AGE-CALENDAR — age is calendar days in the config's timezone
+## CIR-DATA-AGE-CALENDAR
+
+**— age is calendar days in the config's timezone**
 
 Age is the number of **calendar day boundaries** between the source date and the reference
 date, evaluated in the config's `timezone:`. It is not `(now − then) ÷ 86400`, and it never
@@ -130,27 +106,15 @@ determinism — two people looking at the same page would see different lights �
 page to resolve, which it must not. Whole-day granularity makes the choice DST-immune either
 way; the ⚖ is only about *whose midnight*.
 
-<details class="evidence-block">
-<summary>Evidence: 8 test case(s) — alex</summary>
+<details markdown="1"><summary>Evidence — latest run</summary>
 
-**Requirement:** CIR-DATA-AGE-CALENDAR — **World:** alex
-
-| Case ID | Status | Detail |
-|---------|--------|--------|
-| `age-datetime-reduced-to-local-date` | PASS | — |
-| `age-dst-fall-back` | PASS | — |
-| `age-dst-spring-forward` | PASS | — |
-| `age-host-zone-irrelevant` | PASS | — |
-| `age-ignores-time-of-day` | PASS | — |
-| `age-same-day-is-zero` | PASS | — |
-| `age-year-boundary` | PASS | — |
-| `age-yesterday-is-one` | PASS | — |
-
-[View full report](../../specs-site/evidence)
+--8<-- "CIR-DATA-AGE-CALENDAR.md"
 
 </details>
 
-## CIR-DATA-FRESHNESS-WINDOW — thresholds and boundaries
+## CIR-DATA-FRESHNESS-WINDOW
+
+**— thresholds and boundaries**
 
 An item is 🟢 while `age_days ≤ yellow_after`, 🟡 while `yellow_after < age_days ≤ red_after`,
 and 🔴 once `age_days > red_after`. **At exactly the threshold the item still holds its better
@@ -175,26 +139,15 @@ light. This is a deliberate 1-of-4 minority ruling and it is cheap to flip (thre
 plus the glossary entry), but it must be flipped *before* tests exist, because row ids are
 evidence join keys.
 
-<details class="evidence-block">
-<summary>Evidence: 7 test case(s) — alex</summary>
+<details markdown="1"><summary>Evidence — latest run</summary>
 
-**Requirement:** CIR-DATA-FRESHNESS-WINDOW — **World:** alex
-
-| Case ID | Status | Detail |
-|---------|--------|--------|
-| `window-at-red-boundary` | PASS | — |
-| `window-at-yellow-boundary` | PASS | — |
-| `window-far-past-red` | PASS | — |
-| `window-inside` | PASS | — |
-| `window-just-past-red` | PASS | — |
-| `window-just-past-yellow` | PASS | — |
-| `window-mid` | PASS | — |
-
-[View full report](../../specs-site/evidence)
+--8<-- "CIR-DATA-FRESHNESS-WINDOW.md"
 
 </details>
 
-## CIR-DATA-FRESHNESS-THRESHOLDS — threshold validity
+## CIR-DATA-FRESHNESS-THRESHOLDS
+
+**— threshold validity**
 
 `yellow_after` and `red_after` are integers in whole days with `1 ≤ yellow_after < red_after`.
 Violations are config errors — a config whose yellow can never show is a typo, not a policy.
@@ -208,25 +161,15 @@ Violations are config errors — a config whose yellow can never show is a typo,
 | threshold-fractional | `yellow_after: 3.5` | config error, bake fails |
 | threshold-missing | `freshness:` with `source:` only | config error, bake fails |
 
-<details class="evidence-block">
-<summary>Evidence: 6 test case(s) — alex</summary>
+<details markdown="1"><summary>Evidence — latest run</summary>
 
-**Requirement:** CIR-DATA-FRESHNESS-THRESHOLDS — **World:** alex
-
-| Case ID | Status | Detail |
-|---------|--------|--------|
-| `threshold-fractional` | PASS | — |
-| `threshold-missing` | PASS | — |
-| `threshold-zero` | PASS | — |
-| `thresholds-equal` | PASS | — |
-| `thresholds-inverted` | PASS | — |
-| `thresholds-valid` | PASS | — |
-
-[View full report](../../specs-site/evidence)
+--8<-- "CIR-DATA-FRESHNESS-THRESHOLDS.md"
 
 </details>
 
-## CIR-DATA-FRESHNESS-EMPTY — a source with no usable dates
+## CIR-DATA-FRESHNESS-EMPTY
+
+**— a source with no usable dates**
 
 | row id | inputs | expected |
 |---|---|---|
@@ -241,21 +184,15 @@ tooling guess (`CIR-DATA-FAILURE-IS-GREY`). The build warning carries the signal
 who *can* tell the difference. Someone who genuinely wants "no entries ⇒ act" can express it
 today with `command:` — count the entries, print red when zero.
 
-<details class="evidence-block">
-<summary>Evidence: 2 test case(s) — alex</summary>
+<details markdown="1"><summary>Evidence — latest run</summary>
 
-**Requirement:** CIR-DATA-FRESHNESS-EMPTY — **World:** alex
-
-| Case ID | Status | Detail |
-|---------|--------|--------|
-| `source-file-empty` | PASS | — |
-| `source-no-parseable-dates` | PASS | — |
-
-[View full report](../../specs-site/evidence)
+--8<-- "CIR-DATA-FRESHNESS-EMPTY.md"
 
 </details>
 
-## CIR-DATA-FRESHNESS-FUTURE — dates after the reference date
+## CIR-DATA-FRESHNESS-FUTURE
+
+**— dates after the reference date**
 
 | row id | inputs | expected |
 |---|---|---|
@@ -273,18 +210,9 @@ data. Note this is ruled without a skew tolerance: a single day of forward skew 
 exclude (the next-newest date is almost certainly today), while a one-day tolerance is exactly
 the window a typo slips through.
 
-<details class="evidence-block">
-<summary>Evidence: 3 test case(s) — alex</summary>
+<details markdown="1"><summary>Evidence — latest run</summary>
 
-**Requirement:** CIR-DATA-FRESHNESS-FUTURE — **World:** alex
-
-| Case ID | Status | Detail |
-|---------|--------|--------|
-| `future-date-mixed` | PASS | — |
-| `future-date-tomorrow` | PASS | — |
-| `future-dates-only` | PASS | — |
-
-[View full report](../../specs-site/evidence)
+--8<-- "CIR-DATA-FRESHNESS-FUTURE.md"
 
 </details>
 

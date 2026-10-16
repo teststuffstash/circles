@@ -6,7 +6,9 @@ issue: **record it, don't re-litigate it.**
 
 **World: alex** — every table on this page states behavior against the fixture person.
 
-## CIR-PROC-TEST-TIERS — the three tiers
+## CIR-PROC-TEST-TIERS
+
+**— the three tiers**
 
 | tier | ruled meaning | circles examples |
 |---|---|---|
@@ -29,7 +31,9 @@ Adjacent ruled facts, recorded so specs do not demand what the platform cannot g
 
 _Evidence: none yet — unverified._
 
-## CIR-PROC-TEST-ROWS — a row is a test
+## CIR-PROC-TEST-ROWS
+
+**— a row is a test**
 
 Every decision-table row in this tree is written to be executable: the **row id** becomes the
 test case id verbatim, `inputs` becomes the fixture, `expected` becomes the assertion. A test
@@ -50,7 +54,9 @@ page carries a ✓ or 🚧 marker claiming otherwise.
 
 _Evidence: none yet — unverified._
 
-## CIR-PROC-TEST-FIXTURES — tests build from the fixture person
+## CIR-PROC-TEST-FIXTURES
+
+**— tests build from the fixture person**
 
 Tests construct inputs **from `fixtures/` rows at runtime** — no hidden or binary fixtures, and
 no second synthetic person invented inside test code. Date-sensitive rows are built against the
@@ -77,21 +83,15 @@ statement about (source dates, reference date), which is a complete and time-ind
 (a) makes the committed file a lie about what tests actually run; (c) turns the calendar into a
 CI outage, failing unrelated PRs on a date nobody chose.
 
-<details class="evidence-block">
-<summary>Evidence: 2 test case(s) — alex</summary>
+<details markdown="1"><summary>Evidence — latest run</summary>
 
-**Requirement:** CIR-PROC-TEST-FIXTURES — **World:** alex
-
-| Case ID | Status | Detail |
-|---------|--------|--------|
-| `dates-relative-to-injected-reference` | PASS | — |
-| `fixture-validates-against-the-schema` | PASS | — |
-
-[View full report](../../specs-site/evidence)
+--8<-- "CIR-PROC-TEST-FIXTURES.md"
 
 </details>
 
-## CIR-PROC-SPEC-GATE — the spec tree gates itself
+## CIR-PROC-SPEC-GATE
+
+**— the spec tree gates itself**
 
 A spec-only PR has no product tests to run, so the tree is checked mechanically instead. This is
 what `scripts/lint-specs.sh` enforces today; it is the reason the conventions survive a
@@ -103,15 +103,23 @@ what `scripts/lint-specs.sh` enforces today; it is the reason the conventions su
 | spec-area-vocabulary-is-closed | `CIR-WIDGET-FOO` | gate fails — the area list in [../README.md](../README.md) is authoritative |
 | spec-links-resolve | a link to a missing page | gate fails |
 | spec-row-ids-unique-in-table | a table with two identical row ids | gate fails — row ids are evidence join keys |
-| spec-evidence-line-present | a requirement with neither an evidence line nor an evidence block | gate fails |
+| spec-evidence-line-present | a requirement with neither the unverified marker nor an evidence pointer, both, a pointer to another rule's fragment, or a slot that disagrees with the tests (pointer with no `@rule` label, marker despite one) | gate fails |
+| spec-heading-is-the-id | `## CIR-ADAPT-COMMAND — the escape hatch` | gate fails — the heading is the bare id, the anchor links and fragments join on |
+| spec-labelled-params-have-ids | a `@rule`-labelled parametrized test with auto-generated ids | gate fails — every evidence row carries a human-authored intent id |
 | spec-declares-no-verifiedness | a ✓ or 🚧 marker in a requirement | gate fails |
 | spec-world-declared | a page with tables and no `World:` line | gate fails |
 | spec-ambiguity-indexed | a `⚖-R<n>` not listed in `open-questions.md` | gate fails |
 | spec-fixture-sources-resolve | a fixture `source:` pointing nowhere | gate fails |
 
-_Evidence: none yet — unverified._
+<details markdown="1"><summary>Evidence — latest run</summary>
 
-## CIR-PROC-GATE — what `devbox run ci` must grow
+--8<-- "CIR-PROC-SPEC-GATE.md"
+
+</details>
+
+## CIR-PROC-GATE
+
+**— what `devbox run ci` must grow**
 
 `scripts/ci.sh` is the one place the gate grows. Today it is the spec gate plus chart validation
 and chart unit tests. As the product lands it must gain, in this order, cheapest first:
@@ -125,20 +133,15 @@ and chart unit tests. As the product lands it must gain, in this order, cheapest
 | gate-no-dangling-spec-reference | a `CIR-*` cited in code or tests that no longer exists | fails, so a superseded id cannot rot silently |
 | gate-secrets-scan-clean | any change | `devbox run scan-secrets` |
 
-<details class="evidence-block">
-<summary>Evidence: 1 test case(s) — alex</summary>
+<details markdown="1"><summary>Evidence — latest run</summary>
 
-**Requirement:** CIR-PROC-GATE — **World:** alex
-
-| Case ID | Status | Detail |
-|---------|--------|--------|
-| `gate-no-dangling-spec-reference` | PASS | — |
-
-[View full report](../../specs-site/evidence)
+--8<-- "CIR-PROC-GATE.md"
 
 </details>
 
-## CIR-PROC-BROWSER-EVIDENCE — the render requirements need a browser
+## CIR-PROC-BROWSER-EVIDENCE
+
+**— the render requirements need a browser**
 
 A large share of this tree — one screen, one A4, print backgrounds, contrast, focus order, no-JS
 rendering, touch targets — cannot be evidenced by any of the three tiers as they stand. It needs
@@ -151,13 +154,6 @@ named gap in the ruled taxonomy, not an oversight.
 | no-render-claim-from-source-alone | print colour | grepping for `print-color-adjust` is not evidence that fills print |
 | screenshots-are-not-the-assertion | any visual requirement | the assertion is a measurable property — no scroll, page count, computed contrast — never an image someone eyeballs |
 
-**P0 note — proxies must say they are proxies.** Both P0 experiment arms shipped before any
-browser harness existed, and the acceptance's 1280×800 no-scroll check ran as a static
-viewBox/overflow-geometry assertion (one arm added a single manual headless-Chromium run). Under
-this requirement that is a **proxy, not evidence** — useful as a fast regression tripwire, never
-as satisfaction of `render-requirements-state-their-path`. Until the browser harness lands (its
-own issue: which browser image, how it installs, how it wires into `devbox`), a proxy check must
-be labelled as such in its test id or docstring, so the evidence chain cannot silently count it.
 The harness is `devbox run test-browser` (`scripts/test-browser.sh`, `tests/browser/`), a
 system-tier gate that needs a browser (local Playwright or the Microsoft Playwright image in CI).
 
@@ -171,7 +167,9 @@ against real components" — the only stretch is that the real component is not 
 
 _Evidence: none yet — unverified._
 
-## CIR-PROC-BUG-CROSSES-AS-A-ROW — how a defect enters the contract
+## CIR-PROC-BUG-CROSSES-AS-A-ROW
+
+**— how a defect enters the contract**
 
 A bug found in a real deployment cannot be reproduced here with the data that produced it, since
 this repo is synthetic-only. It crosses the boundary as a **new fixture row plus a new decision

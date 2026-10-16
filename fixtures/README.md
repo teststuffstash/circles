@@ -15,8 +15,7 @@ source files their adapters read (`notes/`).
 Variants: the same person, re-cut so one spec row has a committed key example — never a second
 person. `alex/circles-zero-warnings.yaml` is Alex with every adapter hand-set (`manual:`) so the
 bake is clean (`CIR-BAKE-ARTIFACT#warnings-empty-array`); `click-destinations.yaml` is the
-per-row click-destination table for `CIR-RENDER-CLICK`; `evidence-dedup.yaml` is the case-id
-collision table for the evidence join (`scripts/generate-evidence.py`).
+per-row click-destination table for `CIR-RENDER-CLICK`.
 
 ## The fixture reference date — 2026-08-03
 

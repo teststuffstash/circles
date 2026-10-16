@@ -26,6 +26,8 @@ from bake.config import (
     load_config,
 )
 
+from rules import rule
+
 FIXTURES = Path(__file__).resolve().parent.parent / "fixtures"
 ALEX_YAML = FIXTURES / "alex" / "circles.yaml"
 
@@ -37,6 +39,7 @@ ALEX_YAML = FIXTURES / "alex" / "circles.yaml"
 class TestSchemaToplevel:
     """CIR-DATA-SCHEMA-TOPLEVEL — top-level shape."""
 
+    @rule("CIR-DATA-SCHEMA-TOPLEVEL")
     @pytest.mark.parametrize("data,expected_person,expected_rings", [
         pytest.param(
             {"person": "Test", "rings": [{"id": "a", "label": "A", "items": [{"id": "x", "label": "X"}]}]},
@@ -51,18 +54,21 @@ class TestSchemaToplevel:
         assert len(cfg.rings) == expected_rings
         assert cfg.rings[0].items[0].adapter is None  # ⚪ unmonitored
 
+    @rule("CIR-DATA-SCHEMA-TOPLEVEL")
     def test_person_missing(self, tmp_path: Path) -> None:
         """CIR-DATA-SCHEMA-TOPLEVEL#person-missing — no person: key → config error."""
         data = {"rings": [{"id": "a", "label": "A", "items": [{"id": "x", "label": "X"}]}]}
         with pytest.raises(ConfigError, match="person"):
             _write_and_load(tmp_path, data)
 
+    @rule("CIR-DATA-SCHEMA-TOPLEVEL")
     def test_rings_empty(self, tmp_path: Path) -> None:
         """CIR-DATA-SCHEMA-TOPLEVEL#rings-empty — rings: [] → config error."""
         data = {"person": "Test", "rings": []}
         with pytest.raises(ConfigError, match="nothing to draw"):
             _write_and_load(tmp_path, data)
 
+    @rule("CIR-DATA-SCHEMA-TOPLEVEL")
     def test_rings_order_is_inside_out(self, tmp_path: Path) -> None:
         """CIR-DATA-SCHEMA-TOPLEVEL#rings-order-is-inside-out — array order is geometry order."""
         data = {
@@ -77,12 +83,14 @@ class TestSchemaToplevel:
         cfg = _write_and_load(tmp_path, data)
         assert [r.id for r in cfg.rings] == ["self", "partner", "children", "wider"]
 
+    @rule("CIR-DATA-SCHEMA-TOPLEVEL")
     def test_timezone_omitted(self, tmp_path: Path) -> None:
         """CIR-DATA-SCHEMA-TOPLEVEL#timezone-omitted — defaults to UTC."""
         data = {"person": "Test", "rings": [{"id": "a", "label": "A", "items": [{"id": "x", "label": "X"}]}]}
         cfg = _write_and_load(tmp_path, data)
         assert cfg.timezone == "UTC"
 
+    @rule("CIR-DATA-SCHEMA-TOPLEVEL")
     def test_timezone_valid(self, tmp_path: Path) -> None:
         """CIR-DATA-SCHEMA-TOPLEVEL#timezone-valid — accepted as-is."""
         data = {
@@ -101,12 +109,14 @@ class TestSchemaToplevel:
 class TestSchemaVersion:
     """CIR-DATA-SCHEMA-VERSION — spec_version guards the format."""
 
+    @rule("CIR-DATA-SCHEMA-VERSION")
     def test_version_absent_defaults_zero(self, tmp_path: Path) -> None:
         """CIR-DATA-SCHEMA-VERSION#version-absent-defaults-zero — no spec_version → v0."""
         data = {"person": "Test", "rings": [{"id": "a", "label": "A", "items": [{"id": "x", "label": "X"}]}]}
         cfg = _write_and_load(tmp_path, data)
         assert cfg.spec_version == 0
 
+    @rule("CIR-DATA-SCHEMA-VERSION")
     def test_version_matches(self, tmp_path: Path) -> None:
         """CIR-DATA-SCHEMA-VERSION#version-matches — spec_version: 0 is valid."""
         data = {
@@ -117,6 +127,7 @@ class TestSchemaVersion:
         cfg = _write_and_load(tmp_path, data)
         assert cfg.spec_version == 0
 
+    @rule("CIR-DATA-SCHEMA-VERSION")
     def test_version_from_the_future(self, tmp_path: Path) -> None:
         """CIR-DATA-SCHEMA-VERSION#version-from-the-future — spec_version: 1 → config error."""
         data = {
@@ -135,18 +146,21 @@ class TestSchemaVersion:
 class TestSchemaRing:
     """CIR-DATA-SCHEMA-RING — ring fields."""
 
+    @rule("CIR-DATA-SCHEMA-RING")
     def test_ring_id_slug(self, tmp_path: Path) -> None:
         """CIR-DATA-SCHEMA-RING#ring-id-slug — valid slug accepted."""
         data = {"person": "Test", "rings": [{"id": "self", "label": "Self", "items": [{"id": "x", "label": "X"}]}]}
         cfg = _write_and_load(tmp_path, data)
         assert cfg.rings[0].id == "self"
 
+    @rule("CIR-DATA-SCHEMA-RING")
     def test_ring_id_not_slug(self, tmp_path: Path) -> None:
         """CIR-DATA-SCHEMA-RING#ring-id-not-slug — non-slug → config error."""
         data = {"person": "Test", "rings": [{"id": "My Ring!", "label": "Self", "items": [{"id": "x", "label": "X"}]}]}
         with pytest.raises(ConfigError, match="slug"):
             _write_and_load(tmp_path, data)
 
+    @rule("CIR-DATA-SCHEMA-RING")
     def test_ring_id_duplicate(self, tmp_path: Path) -> None:
         """CIR-DATA-SCHEMA-RING#ring-id-duplicate — duplicate ring id → config error."""
         data = {
@@ -159,12 +173,14 @@ class TestSchemaRing:
         with pytest.raises(ConfigError, match="duplicate ring id"):
             _write_and_load(tmp_path, data)
 
+    @rule("CIR-DATA-SCHEMA-RING")
     def test_ring_label_missing(self, tmp_path: Path) -> None:
         """CIR-DATA-SCHEMA-RING#ring-label-missing — ring without label → config error."""
         data = {"person": "Test", "rings": [{"id": "self", "items": [{"id": "x", "label": "X"}]}]}
         with pytest.raises(ConfigError, match="label"):
             _write_and_load(tmp_path, data)
 
+    @rule("CIR-DATA-SCHEMA-RING")
     def test_ring_label_glyphs(self, tmp_path: Path) -> None:
         """CIR-DATA-SCHEMA-RING#ring-label-glyphs — labels are opaque Unicode."""
         data = {"person": "Test", "rings": [{"id": "children", "label": "③ Children", "items": [{"id": "x", "label": "X"}]}]}
@@ -179,6 +195,7 @@ class TestSchemaRing:
 class TestSchemaItem:
     """CIR-DATA-SCHEMA-ITEM — item fields."""
 
+    @rule("CIR-DATA-SCHEMA-ITEM")
     def test_item_minimal(self, tmp_path: Path) -> None:
         """CIR-DATA-SCHEMA-ITEM#item-minimal — id + label only → valid, ⚪, share 1."""
         data = {"person": "Test", "rings": [{"id": "a", "label": "A", "items": [{"id": "x", "label": "X"}]}]}
@@ -191,6 +208,7 @@ class TestSchemaItem:
         assert item.link is None
         assert item.adapter is None
 
+    @rule("CIR-DATA-SCHEMA-ITEM")
     def test_item_id_duplicate_in_ring(self, tmp_path: Path) -> None:
         """CIR-DATA-SCHEMA-ITEM#item-id-duplicate-in-ring — duplicate item id → config error."""
         data = {
@@ -206,18 +224,21 @@ class TestSchemaItem:
         with pytest.raises(ConfigError, match="duplicate item id"):
             _write_and_load(tmp_path, data)
 
+    @rule("CIR-DATA-SCHEMA-ITEM")
     def test_guardrail_absent(self, tmp_path: Path) -> None:
         """CIR-DATA-SCHEMA-ITEM#guardrail-absent — no guardrail → None."""
         data = {"person": "Test", "rings": [{"id": "a", "label": "A", "items": [{"id": "x", "label": "X"}]}]}
         cfg = _write_and_load(tmp_path, data)
         assert cfg.rings[0].items[0].guardrail is None
 
+    @rule("CIR-DATA-SCHEMA-ITEM")
     def test_note_absent(self, tmp_path: Path) -> None:
         """CIR-DATA-SCHEMA-ITEM#note-absent — no note → None."""
         data = {"person": "Test", "rings": [{"id": "a", "label": "A", "items": [{"id": "x", "label": "X"}]}]}
         cfg = _write_and_load(tmp_path, data)
         assert cfg.rings[0].items[0].note is None
 
+    @rule("CIR-DATA-SCHEMA-ITEM")
     def test_share_default(self, tmp_path: Path) -> None:
         """CIR-DATA-SCHEMA-ITEM#share-default — no share → weight 1."""
         data = {"person": "Test", "rings": [{"id": "a", "label": "A", "items": [{"id": "x", "label": "X"}]}]}
@@ -232,6 +253,7 @@ class TestSchemaItem:
 class TestDataIdentity:
     """CIR-DATA-IDENTITY — ids, uniqueness and the item ref."""
 
+    @rule("CIR-DATA-IDENTITY")
     @pytest.mark.parametrize("item_id", [
         pytest.param("sleep", id="valid-simple"),
         pytest.param("date-night", id="valid-hyphen"),
@@ -244,6 +266,7 @@ class TestDataIdentity:
         cfg = _write_and_load(tmp_path, data)
         assert cfg.rings[0].items[0].id == item_id
 
+    @rule("CIR-DATA-IDENTITY")
     @pytest.mark.parametrize("item_id,error_pattern", [
         pytest.param("date night", "space", id="invalid-space"),
         pytest.param("a/b", "slash", id="invalid-slash"),
@@ -256,12 +279,14 @@ class TestDataIdentity:
         with pytest.raises(ConfigError, match=error_pattern):
             _write_and_load(tmp_path, data)
 
+    @rule("CIR-DATA-IDENTITY")
     def test_id_missing(self, tmp_path: Path) -> None:
         """CIR-DATA-IDENTITY#id-missing — item without id → config error."""
         data = {"person": "Test", "rings": [{"id": "a", "label": "A", "items": [{"label": "X"}]}]}
         with pytest.raises(ConfigError, match="id"):
             _write_and_load(tmp_path, data)
 
+    @rule("CIR-DATA-IDENTITY")
     def test_same_id_different_rings(self, tmp_path: Path) -> None:
         """CIR-DATA-IDENTITY#same-id-different-rings — same id in different rings is valid."""
         data = {
@@ -284,12 +309,14 @@ class TestDataIdentity:
 class TestSchemaAdapterSlot:
     """CIR-DATA-SCHEMA-ADAPTER-SLOT — the status map."""
 
+    @rule("CIR-DATA-SCHEMA-ADAPTER-SLOT")
     def test_status_absent(self, tmp_path: Path) -> None:
         """CIR-DATA-SCHEMA-ADAPTER-SLOT#status-absent — no status → ⚪ unmonitored."""
         data = {"person": "Test", "rings": [{"id": "a", "label": "A", "items": [{"id": "x", "label": "X"}]}]}
         cfg = _write_and_load(tmp_path, data)
         assert cfg.rings[0].items[0].adapter is None
 
+    @rule("CIR-DATA-SCHEMA-ADAPTER-SLOT")
     def test_status_two_adapters(self, tmp_path: Path) -> None:
         """CIR-DATA-SCHEMA-ADAPTER-SLOT#status-two-adapters — both manual and freshness → config error."""
         data = {
@@ -302,6 +329,7 @@ class TestSchemaAdapterSlot:
         with pytest.raises(ConfigError, match="multiple adapter keys"):
             _write_and_load(tmp_path, data)
 
+    @rule("CIR-DATA-SCHEMA-ADAPTER-SLOT")
     def test_status_unknown_adapter(self, tmp_path: Path) -> None:
         """CIR-DATA-SCHEMA-ADAPTER-SLOT#status-unknown-adapter — unknown adapter → config error."""
         data = {
@@ -314,6 +342,7 @@ class TestSchemaAdapterSlot:
         with pytest.raises(ConfigError, match="unknown adapter"):
             _write_and_load(tmp_path, data)
 
+    @rule("CIR-DATA-SCHEMA-ADAPTER-SLOT")
     def test_manual_invalid_word(self, tmp_path: Path) -> None:
         """CIR-DATA-SCHEMA-ADAPTER-SLOT#manual-invalid-word — manual: blue → config error."""
         data = {
@@ -334,6 +363,7 @@ class TestSchemaAdapterSlot:
 class TestSchemaLink:
     """CIR-DATA-SCHEMA-LINK — click-through targets."""
 
+    @rule("CIR-DATA-SCHEMA-LINK")
     @pytest.mark.parametrize("link", [
         pytest.param("https://example.test/labs", id="CIR-DATA-SCHEMA-LINK#link-https"),
         pytest.param("/details/self-sleep.html", id="CIR-DATA-SCHEMA-LINK#link-root-relative"),
@@ -351,6 +381,7 @@ class TestSchemaLink:
         cfg = _write_and_load(tmp_path, data)
         assert cfg.rings[0].items[0].link == link
 
+    @rule("CIR-DATA-SCHEMA-LINK")
     @pytest.mark.parametrize("link,error_pattern", [
         pytest.param("javascript:alert(1)", "javascript", id="CIR-DATA-SCHEMA-LINK#link-javascript-scheme"),
         pytest.param("data:text/html,hi", "data:", id="CIR-DATA-SCHEMA-LINK#link-data-scheme"),
@@ -377,6 +408,7 @@ class TestSchemaLink:
 class TestDataShare:
     """CIR-DATA-SHARE — arc weights within a ring."""
 
+    @rule("CIR-DATA-SHARE")
     def test_shares_equal_halves(self, tmp_path: Path) -> None:
         """CIR-DATA-SHARE#shares-equal-halves — two siblings share: 0.5 each → two 180° arcs."""
         data = {
@@ -396,6 +428,7 @@ class TestDataShare:
         total = sum(i.share for i in items)
         assert math.isclose(total, 1.0)
 
+    @rule("CIR-DATA-SHARE")
     def test_shares_absent_equal(self, tmp_path: Path) -> None:
         """CIR-DATA-SHARE#shares-absent-equal — three siblings, no share → three 120° arcs."""
         data = {
@@ -413,6 +446,7 @@ class TestDataShare:
         for item in cfg.rings[0].items:
             assert item.share == 1.0
 
+    @rule("CIR-DATA-SHARE")
     def test_shares_mixed(self, tmp_path: Path) -> None:
         """CIR-DATA-SHARE#shares-mixed — share: 2 + absent → 240°/120°, plus warning."""
         data = {
@@ -431,6 +465,7 @@ class TestDataShare:
         # Check mixed share warning
         assert any("mixes declared and undeclared" in w.message for w in cfg.warnings)
 
+    @rule("CIR-DATA-SHARE")
     def test_shares_mixed_fractional(self, tmp_path: Path) -> None:
         """CIR-DATA-SHARE#shares-mixed-fractional — share: 0.5 + absent → 120°/240°, plus warning."""
         data = {
@@ -448,6 +483,7 @@ class TestDataShare:
         assert cfg.rings[0].items[1].share == 1.0
         assert any("mixes declared and undeclared" in w.message for w in cfg.warnings)
 
+    @rule("CIR-DATA-SHARE")
     def test_share_zero(self, tmp_path: Path) -> None:
         """CIR-DATA-SHARE#share-zero — share: 0 → config error."""
         data = {
@@ -460,6 +496,7 @@ class TestDataShare:
         with pytest.raises(ConfigError, match="> 0"):
             _write_and_load(tmp_path, data)
 
+    @rule("CIR-DATA-SHARE")
     def test_share_negative(self, tmp_path: Path) -> None:
         """CIR-DATA-SHARE#share-negative — share: -1 → config error."""
         data = {
@@ -480,6 +517,7 @@ class TestDataShare:
 class TestDataValidation:
     """CIR-DATA-VALIDATION — fail vs warn."""
 
+    @rule("CIR-DATA-VALIDATION")
     def test_one_bad_item_fails_bake(self, tmp_path: Path) -> None:
         """CIR-DATA-VALIDATION#one-bad-item-fails-bake — one bad item fails the whole bake."""
         data = {
@@ -496,6 +534,7 @@ class TestDataValidation:
         with pytest.raises(ConfigError):
             _write_and_load(tmp_path, data)
 
+    @rule("CIR-DATA-VALIDATION")
     def test_unknown_toplevel_key(self, tmp_path: Path) -> None:
         """CIR-DATA-VALIDATION#unknown-toplevel-key — unknown key → warning, bake proceeds."""
         data = {
@@ -506,6 +545,7 @@ class TestDataValidation:
         cfg = _write_and_load(tmp_path, data)
         assert any("sprinkles" in w.message for w in cfg.warnings)
 
+    @rule("CIR-DATA-VALIDATION")
     def test_unknown_item_key(self, tmp_path: Path) -> None:
         """CIR-DATA-VALIDATION#unknown-item-key — unknown item key → warning, bake proceeds."""
         data = {
@@ -518,6 +558,7 @@ class TestDataValidation:
         cfg = _write_and_load(tmp_path, data)
         assert any("prioritiy" in w.message for w in cfg.warnings)
 
+    @rule("CIR-DATA-VALIDATION")
     def test_unknown_status_key(self, tmp_path: Path) -> None:
         """CIR-DATA-VALIDATION#unknown-status-key — unknown status key → config error."""
         data = {
@@ -530,6 +571,7 @@ class TestDataValidation:
         with pytest.raises(ConfigError, match="unknown adapter"):
             _write_and_load(tmp_path, data)
 
+    @rule("CIR-DATA-VALIDATION")
     def test_empty_ring(self, tmp_path: Path) -> None:
         """CIR-DATA-VALIDATION#empty-ring — ring with items: [] → warning, bake proceeds."""
         data = {
@@ -548,6 +590,7 @@ class TestDataValidation:
 class TestDataFreshnessThresholds:
     """CIR-DATA-FRESHNESS-THRESHOLDS — threshold validation."""
 
+    @rule("CIR-DATA-FRESHNESS-THRESHOLDS")
     def test_thresholds_valid(self, tmp_path: Path) -> None:
         """CIR-DATA-FRESHNESS-THRESHOLDS#thresholds-valid — valid thresholds accepted."""
         data = {
@@ -564,6 +607,7 @@ class TestDataFreshnessThresholds:
         assert cfg.rings[0].items[0].adapter is not None
         assert cfg.rings[0].items[0].adapter.kind == "freshness"
 
+    @rule("CIR-DATA-FRESHNESS-THRESHOLDS")
     def test_thresholds_equal(self, tmp_path: Path) -> None:
         """CIR-DATA-FRESHNESS-THRESHOLDS#thresholds-equal — yellow == red → config error."""
         data = {
@@ -579,6 +623,7 @@ class TestDataFreshnessThresholds:
         with pytest.raises(ConfigError, match="strictly less"):
             _write_and_load(tmp_path, data)
 
+    @rule("CIR-DATA-FRESHNESS-THRESHOLDS")
     def test_thresholds_inverted(self, tmp_path: Path) -> None:
         """CIR-DATA-FRESHNESS-THRESHOLDS#thresholds-inverted — yellow > red → config error."""
         data = {
@@ -594,6 +639,7 @@ class TestDataFreshnessThresholds:
         with pytest.raises(ConfigError, match="strictly less"):
             _write_and_load(tmp_path, data)
 
+    @rule("CIR-DATA-FRESHNESS-THRESHOLDS")
     def test_threshold_zero(self, tmp_path: Path) -> None:
         """CIR-DATA-FRESHNESS-THRESHOLDS#threshold-zero — yellow_after: 0 → config error."""
         data = {
@@ -609,6 +655,7 @@ class TestDataFreshnessThresholds:
         with pytest.raises(ConfigError, match="≥ 1"):
             _write_and_load(tmp_path, data)
 
+    @rule("CIR-DATA-FRESHNESS-THRESHOLDS")
     def test_threshold_fractional(self, tmp_path: Path) -> None:
         """CIR-DATA-FRESHNESS-THRESHOLDS#threshold-fractional — yellow_after: 3.5 → config error."""
         data = {
@@ -624,6 +671,7 @@ class TestDataFreshnessThresholds:
         with pytest.raises(ConfigError, match="integer"):
             _write_and_load(tmp_path, data)
 
+    @rule("CIR-DATA-FRESHNESS-THRESHOLDS")
     def test_threshold_missing(self, tmp_path: Path) -> None:
         """CIR-DATA-FRESHNESS-THRESHOLDS#threshold-missing — freshness without yellow_after → config error."""
         data = {
@@ -647,6 +695,7 @@ class TestDataFreshnessThresholds:
 class TestDataConfigErrorFails:
     """CIR-DATA-CONFIG-ERROR-FAILS — config errors publish nothing."""
 
+    @rule("CIR-DATA-CONFIG-ERROR-FAILS")
     def test_config_error_aborts_whole_bake(self, tmp_path: Path) -> None:
         """CIR-DATA-CONFIG-ERROR-FAILS#config-error-aborts-whole-bake —
         one item with an unknown status: key, nine valid items → ConfigError raised."""
@@ -671,6 +720,7 @@ class TestDataConfigErrorFails:
         with pytest.raises(ConfigError):
             _write_and_load(tmp_path, data)
 
+    @rule("CIR-DATA-CONFIG-ERROR-FAILS")
     def test_message_names_the_item(self, tmp_path: Path) -> None:
         """CIR-DATA-CONFIG-ERROR-FAILS#message-names-the-item —
         error inside children/kit → message contains children/kit."""
@@ -701,6 +751,7 @@ class TestDataConfigErrorFails:
 class TestDataSourcePath:
     """CIR-DATA-SOURCE-PATH — config-error rows (validation only)."""
 
+    @rule("CIR-DATA-SOURCE-PATH")
     def test_source_parent_traversal(self, tmp_path: Path) -> None:
         """CIR-DATA-SOURCE-PATH#source-parent-traversal — parent traversal → config error."""
         data = {
@@ -716,6 +767,7 @@ class TestDataSourcePath:
         with pytest.raises(ConfigError, match="escape"):
             _write_and_load(tmp_path, data)
 
+    @rule("CIR-DATA-SOURCE-PATH")
     def test_source_absolute_path(self, tmp_path: Path) -> None:
         """CIR-DATA-SOURCE-PATH#source-absolute-path — absolute path → config error (⚖-R52)."""
         data = {
@@ -731,6 +783,7 @@ class TestDataSourcePath:
         with pytest.raises(ConfigError, match="absolute path"):
             _write_and_load(tmp_path, data)
 
+    @rule("CIR-DATA-SOURCE-PATH")
     def test_source_non_literal_parent_traversal(self, tmp_path: Path) -> None:
         """CIR-DATA-SOURCE-PATH#source-non-literal-parent-traversal —
         a source like 'sub/../../etc/hosts' does not start with '..' but
@@ -756,6 +809,7 @@ class TestDataSourcePath:
 class TestAdaptCommand:
     """CIR-ADAPT-COMMAND — config-error rows (validation only)."""
 
+    @rule("CIR-ADAPT-COMMAND")
     def test_command_argv_array_required(self, tmp_path: Path) -> None:
         """CIR-ADAPT-COMMAND#command-argv-array-required — string → config error."""
         data = {
@@ -786,6 +840,7 @@ class TestAdaptCommand:
         with pytest.raises(ConfigError, match="at least one"):
             _write_and_load(tmp_path, data)
 
+    @rule("CIR-ADAPT-COMMAND")
     def test_command_executable_not_found(self, tmp_path: Path) -> None:
         """CIR-ADAPT-COMMAND#command-executable-exists-at-validation —
         argv[0] missing → config error."""
@@ -802,6 +857,7 @@ class TestAdaptCommand:
         with pytest.raises(ConfigError, match="not found"):
             _write_and_load(tmp_path, data)
 
+    @rule("CIR-ADAPT-COMMAND")
     def test_command_executable_not_executable(self, tmp_path: Path) -> None:
         """CIR-ADAPT-COMMAND#command-executable-bit-at-validation —
         argv[0] without exec bit → config error."""
@@ -831,6 +887,7 @@ class TestAdaptCommand:
 class TestDataStatusManualValues:
     """CIR-DATA-STATUS-MANUAL-VALUES — the manual adapter's vocabulary."""
 
+    @rule("CIR-DATA-STATUS-MANUAL-VALUES")
     def test_manual_lowercase_only(self, tmp_path: Path) -> None:
         """CIR-DATA-STATUS-MANUAL-VALUES#manual-lowercase-only — 'Green' → config error."""
         data = {
@@ -843,6 +900,7 @@ class TestDataStatusManualValues:
         with pytest.raises(ConfigError, match="lowercase"):
             _write_and_load(tmp_path, data)
 
+    @rule("CIR-DATA-STATUS-MANUAL-VALUES")
     def test_manual_grey_rejected(self, tmp_path: Path) -> None:
         """CIR-DATA-STATUS-MANUAL-VALUES#manual-grey-rejected — 'grey' → config error."""
         data = {
@@ -863,6 +921,7 @@ class TestDataStatusManualValues:
 class TestFixtureAcceptance:
     """The fixture validates against the schema."""
 
+    @rule("CIR-PROC-TEST-FIXTURES")
     def test_fixture_alex_validates(self) -> None:
         """CIR-PROC-TEST-FIXTURES#fixture-validates-against-the-schema —
         load_config(fixtures/alex/circles.yaml) returns a Config with 4 rings / 8 items

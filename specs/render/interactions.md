@@ -8,7 +8,9 @@ P0/P1 page leaves the right seams.
 
 **World: alex** — every table on this page states behavior against the fixture person.
 
-## CIR-RENDER-HOVER — the detail line
+## CIR-RENDER-HOVER
+
+**— the detail line**
 
 Hovering, focusing or tapping a cell fills the detail strip ([`CIR-RENDER-CHROME`](layout.md))
 with the item's **detail line**, taken verbatim from the artifact
@@ -29,21 +31,15 @@ text, which is also what prints and what a screen reader announces.
 | hover-leave-resets | pointer leaves the chart | the strip returns to idle text, never stale content |
 | hover-focus-tap-agree | the same cell reached three ways | identical string in all three |
 
-<details class="evidence-block">
-<summary>Evidence: 2 test case(s) — alex</summary>
+<details markdown="1"><summary>Evidence — latest run</summary>
 
-**Requirement:** CIR-RENDER-HOVER — **World:** alex
-
-| Case ID | Status | Detail |
-|---------|--------|--------|
-| `hover-full-line` | PASS | — |
-| `hover-leave-resets` | PASS | — |
-
-[View full report](../../specs-site/evidence)
+--8<-- "CIR-RENDER-HOVER.md"
 
 </details>
 
-## CIR-RENDER-CLICK — where a cell leads
+## CIR-RENDER-CLICK
+
+**— where a cell leads**
 
 Click activates the cell's destination: its configured `link` if it has one, else its baked
 detail page (P2). A cell with neither is **not clickable** — no pointer cursor, no dead
@@ -70,22 +66,15 @@ cell would silently change where it goes the day P2 ships, breaking the muscle m
 person who uses this page every day. The loser staying reachable is what makes this cheap either
 way.
 
-<details class="evidence-block">
-<summary>Evidence: 3 test case(s) — alex</summary>
+<details markdown="1"><summary>Evidence — latest run</summary>
 
-**Requirement:** CIR-RENDER-CLICK — **World:** alex
-
-| Case ID | Status | Detail |
-|---------|--------|--------|
-| `click-follows-link` | PASS | — |
-| `click-no-destination` | PASS | — |
-| `click-root-relative` | PASS | — |
-
-[View full report](../../specs-site/evidence)
+--8<-- "CIR-RENDER-CLICK.md"
 
 </details>
 
-## CIR-RENDER-KEYBOARD — the whole page without a mouse
+## CIR-RENDER-KEYBOARD
+
+**— the whole page without a mouse**
 
 Every cell is focusable in a **documented order**: ring by ring, inside-out; within a ring,
 siblings in display order starting at 12 o'clock — the triage reading order, not the DOM
@@ -101,23 +90,15 @@ accident. Focus shows the detail line exactly as hover does, plus a visible focu
 | keyboard-accessible-name | a cell's computed name | `<label>, <status word>, ring <ring label>` |
 | keyboard-no-trap | tabbing past the last cell | focus leaves the chart normally |
 
-<details class="evidence-block">
-<summary>Evidence: 4 test case(s) — alex</summary>
+<details markdown="1"><summary>Evidence — latest run</summary>
 
-**Requirement:** CIR-RENDER-KEYBOARD — **World:** alex
-
-| Case ID | Status | Detail |
-|---------|--------|--------|
-| `keyboard-accessible-name` | PASS | — |
-| `keyboard-focus-shows-detail` | PASS | — |
-| `keyboard-focus-visible` | PASS | — |
-| `keyboard-tab-order` | PASS | — |
-
-[View full report](../../specs-site/evidence)
+--8<-- "CIR-RENDER-KEYBOARD.md"
 
 </details>
 
-## CIR-RENDER-TOUCH — no hover on glass
+## CIR-RENDER-TOUCH
+
+**— no hover on glass**
 
 | row id | inputs | expected |
 |---|---|---|
@@ -136,20 +117,15 @@ purpose. (b) hides navigation behind an undiscoverable gesture; (c) costs a seco
 read, which is the common case. Phone viewing is a later exposure path, but this ruling costs P0
 nothing and must not be retrofitted differently later.
 
-<details class="evidence-block">
-<summary>Evidence: 1 test case(s) — alex</summary>
+<details markdown="1"><summary>Evidence — latest run</summary>
 
-**Requirement:** CIR-RENDER-TOUCH — **World:** alex
-
-| Case ID | Status | Detail |
-|---------|--------|--------|
-| `touch-target-size` | PASS | — |
-
-[View full report](../../specs-site/evidence)
+--8<-- "CIR-RENDER-TOUCH.md"
 
 </details>
 
-## CIR-RENDER-NO-JS — the page still says something
+## CIR-RENDER-NO-JS
+
+**— the page still says something**
 
 With scripting disabled the chart may be absent, but the page must not be. The text alternative
 ([`CIR-RENDER-A11Y-TABLE`](colors.md)) renders from the same inlined payload and carries every
@@ -170,18 +146,8 @@ makes the no-JS page the *same* picture rather than a degraded one — but only 
 pass. (c) is rejected: a page whose entire purpose is being glanced at and printed must not
 depend on a script executing.
 
-<details class="evidence-block">
-<summary>Evidence: 4 test case(s) — alex</summary>
+<details markdown="1"><summary>Evidence — latest run</summary>
 
-**Requirement:** CIR-RENDER-NO-JS — **World:** alex
-
-| Case ID | Status | Detail |
-|---------|--------|--------|
-| `no-js-detail-lines-present` | PASS | — |
-| `no-js-is-not-blank` | PASS | — |
-| `no-js-links-work` | PASS | — |
-| `no-js-text-alternative-renders` | PASS | — |
-
-[View full report](../../specs-site/evidence)
+--8<-- "CIR-RENDER-NO-JS.md"
 
 </details>

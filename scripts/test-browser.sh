@@ -16,14 +16,15 @@
 #   REGISTRY_MIRROR_MCR     — mcr.microsoft.com mirror (default: http://192.168.40.31, the LAN VIP
 #                             per homelab SERVICES.md §Registry mirrors, ADR-091); the image ref is
 #                             rewritten to <mirror-host>/<path>. REGISTRY_MIRROR_NONE=1 pulls upstream.
-#   CIRCLES_BROWSER_EVIDENCE_ROOT — where per-run evidence lands (default: browser-evidence/, gitignored)
 #
 # The script bakes the fixture person at the fixture reference date (2026-08-03) into a temp
 # dir, writes a second page variant with exactly 2 warnings (the artifact's own warnings,
 # sliced — CIR-PROC-TEST-FIXTURES) and the stale-threshold variants (index-stale*.html, the
 # fixture with stale_after_hours: 36), serves them to the browser via tests/browser/conftest.py
 # (real HTTP, not file://) and runs pytest tests/browser with Allure raw results in
-# browser-evidence/<timestamp>/.
+# allure-results-browser/ (repo-local, gitignored, wiped per run). Results are uuid-named files:
+# copy this dir and the unit tier's allure-results/ into one dir and pass it to
+# `devbox run evidence -- <merged> <out>` for the whole-suite evidence (scripts/evidence.sh).
 #
 # Requirements evidenced (system tier):
 #   CIR-RENDER-ONE-SCREEN            (all 4 rows)
@@ -40,8 +41,7 @@ export UV_PROJECT_ENVIRONMENT=.venv
 REFERENCE_DATE="2026-08-03"
 RUNNER="${CIRCLES_BROWSER_RUNNER:-auto}"
 IMAGE="${PLAYWRIGHT_IMAGE:-mcr.microsoft.com/playwright/python:v1.62.0}"
-EVIDENCE_ROOT="${CIRCLES_BROWSER_EVIDENCE_ROOT:-browser-evidence}"
-EVIDENCE_DIR="${EVIDENCE_ROOT}/$(date -u +%Y%m%dT%H%M%SZ)-$$"
+EVIDENCE_DIR=allure-results-browser
 
 # ── skip guard / runner selection (graceful skip keeps the gate usable everywhere) ─────
 case "$RUNNER" in
@@ -82,8 +82,8 @@ uv run --frozen python -m bake \
   --out "$BAKE_OUT" \
   --reference-date "$REFERENCE_DATE" | sed 's/^/  /'
 
-# The 2-warnings variant: the same artifact with its own warnings sliced to exactly two —
-# the construction tests/test_render.py::test_one_screen_with_warnings_proxy uses.
+# The 2-warnings variant: the same artifact with its own warnings sliced to exactly two
+# (CIR-RENDER-ONE-SCREEN#one-screen-with-warnings, tests/browser/test_one_screen.py).
 uv run --frozen python - "$BAKE_OUT" "$REFERENCE_DATE" <<'PY'
 import dataclasses
 import sys
@@ -148,7 +148,7 @@ print(f"  Wrote {path} (manual items only, stale_after_hours: 36)")
 PY
 
 # ── step 2: run the browser tier ─────────────────────────────────────────────────────
-mkdir -p "$EVIDENCE_DIR"
+rm -rf "$EVIDENCE_DIR" && mkdir -p "$EVIDENCE_DIR"
 echo "==> step 2/3: pytest tests/browser ($RUNNER) — evidence: $EVIDENCE_DIR/"
 # `-o addopts=` overrides pyproject's `--ignore=tests/browser` (which keeps the unit run
 # in scripts/ci.sh from collecting this tier).
@@ -181,7 +181,9 @@ else
     -e PIP_ROOT_USER_ACTION=ignore \
     "$IMAGE_REF" \
     bash -c "pip install -q 'playwright==${PW_VERSION}' 'pytest==8.*' allure-pytest pypdf 'PyYAML>=6.0' tzdata \
-      && python -m pytest $(printf '%q ' "${PYTEST_ARGS[@]}")" || RC=$?
+      && { python -m pytest $(printf '%q ' "${PYTEST_ARGS[@]}"); rc=\$?; \
+           chown -R $(id -u):$(id -g) $(printf '%q' "$EVIDENCE_DIR"); exit \$rc; }" || RC=$?
+  # (the chown hands the results back to the invoking user: the next run wipes the dir)
 fi
 
 # ── step 3: verdict ──────────────────────────────────────────────────────────────────

@@ -123,26 +123,29 @@ unmonitored surface must be readable at a glance, never hidden or defaulted to g
 fixes tooling failure as ⚪ + warning rather than 🔴. Dangerous-green is that doctrine stated
 once, at the top, so the rest of the tree can appeal to it instead of re-deriving it per page.
 
-## Evidence — the contract, with the format deliberately unpinned
+## Evidence — the portable chain (homelab ADR-156)
 
-Every requirement section is born evidence-ready and honestly unverified:
+The format swapped under the stable joins, as this section anticipated: circles runs the
+platform's portable spec/evidence process, pinned as the `allure-behavior-snippets` wheel
+(`scripts/lib/snippets.sh`; the process docs ship inside it — `RULES.md`, `CONVENTIONS.md`).
 
-- Until a linked test exists, the section ends with the literal line
-  `_Evidence: none yet — unverified._` — the visible-grey doctrine applied to the spec itself.
-- When evidence lands it replaces that line with a collapsed block (`<details>`): a transcluded
-  per-rule fragment + a link into the archived report. **Links are relative** so each published
-  site (master, per-PR preview) shows *its own run's* evidence, never master's.
-- The join contract is fixed NOW; the fragment **format is deliberately not**: story/test id ==
-  rule id exactly, case id == row id, identity == (rule, world, case), report digest-stamped.
-  The SVG fragments oracle uses are a Confluence-era relic under active rethink
-  (allure-behavior-snippets#6) — the successor should be markdown-embedded and
-  machine-validatable (agents/reviewers parse it, not just view it), likely a generated table +
-  JSON sidecar. Circles specs must not bake any SVG assumption in; only the anchors and ids
-  above, so the format swaps under stable joins.
-- **Framework-neutral by construction**: circles evidence is pytest+Allure, the IdP's will be
-  Spock+Allure (tara-test lineage). Everything the spec relies on lives in spec text + the
-  Allure result JSON (`behaviors.json` post-processing — ids, categories, tags — is an accepted
-  lever), never in a framework-specific feature.
+- **Heading == ID.** A rule heading is the bare `## CIR-<AREA>-<NAME>` (the anchor every link
+  and fragment joins on); its one-line gloss sits in bold on the line below.
+- **Label == heading.** A test proves a rule with `@rule("CIR-…")` (`tests/rules.py`): Allure
+  story == rule ID, world label `alex`, a link to the spec anchor; collection fails on an ID that
+  heads nothing. The case is titled with the row id its citation names
+  (`CIR-<AREA>-<NAME>#<row-id>`, kept verbatim in the docstring or param id).
+- **Evidence is derived per run, never committed.** `devbox run evidence` turns raw Allure
+  results into the reviewer pack (`evidence.json`, `digest.md`, one `<RULE>.md` fragment per
+  rule — joined to the page's decision table where the row ids match) and copies the fragments
+  to `specs/evidence/` (gitignored). Each rule section ends in exactly one of:
+  `<details markdown="1"><summary>Evidence — latest run</summary>` + `--8<-- "<RULE>.md"` (a
+  test carries its label), or the literal `_Evidence: none yet — unverified._` (none does).
+  Each published site transcludes *its own run's* fragments; a missing one renders nothing —
+  visibly unverified, never a stale PASS.
+- `scripts/lint-specs.sh` holds the correspondence (pointer XOR marker, label ⇄ heading,
+  explicit intent ids on labelled parametrizations); review holds whether the evidence proves
+  the row.
 
 Circles is the cheap rehearsal of this exact chain before the IdP runs it for real
 (rule → intent row → named world → fragment → digest-stamped report — the auditor's

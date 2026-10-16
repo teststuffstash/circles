@@ -11,7 +11,9 @@ cost it is left as a ⚖ rather than guessed.
 
 **World: alex** — every table on this page states behavior against the fixture person.
 
-## CIR-DETAIL-PAGE-SHAPE — what a detail page is
+## CIR-DETAIL-PAGE-SHAPE
+
+**— what a detail page is**
 
 | row id | inputs | expected |
 |---|---|---|
@@ -32,7 +34,9 @@ no routing, no shared state and no client-side navigation, just static siblings.
 
 _Evidence: none yet — unverified._
 
-## CIR-DETAIL-SERIES — where the numbers come from
+## CIR-DETAIL-SERIES
+
+**— where the numbers come from**
 
 A metric series is *(date, value)* pairs. The status adapters answer a different question — a
 light — so the metric source is a **separate declaration** on the item, not a reinterpretation of
@@ -58,7 +62,9 @@ whose light means "your data says act" rather than "your notes are old".
 
 _Evidence: none yet — unverified._
 
-## CIR-DETAIL-EVENTS — the dated interventions
+## CIR-DETAIL-EVENTS
+
+**— the dated interventions**
 
 Events come from a **markdown table** the person maintains — the same doctrine as fixtures:
 human-readable rows, no hidden format.
@@ -83,7 +89,9 @@ says anticipate, not design.
 
 _Evidence: none yet — unverified._
 
-## CIR-DETAIL-LAYOUT — legibility rules carry over
+## CIR-DETAIL-LAYOUT
+
+**— legibility rules carry over**
 
 This chart exists to let a person *notice* that a change coincided with a shift. A page that
 draws the inference for them, from a handful of self-reported points, would be making a medical

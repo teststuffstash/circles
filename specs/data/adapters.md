@@ -6,7 +6,9 @@ now, while there are three adapters, rather than discovered later from three cal
 
 **World: alex** — every table on this page states behavior against the fixture person.
 
-## CIR-ADAPT-CONTRACT — one adapter, one answer
+## CIR-ADAPT-CONTRACT
+
+**— one adapter, one answer**
 
 An adapter is a named function from *(its config block, the resolution context)* to exactly one
 of: a status, or a failure. Nothing else about it reaches the rest of the system.
@@ -42,25 +44,15 @@ not take down the bake, because a failed bake means a stale page
 ([`CIR-BAKE-STALE-SELF`](data-json.md)) and a stale page is the thing this product exists to
 prevent.
 
-<details class="evidence-block">
-<summary>Evidence: 6 test case(s) — alex</summary>
+<details markdown="1"><summary>Evidence — latest run</summary>
 
-**Requirement:** CIR-ADAPT-CONTRACT — **World:** alex
-
-| Case ID | Status | Detail |
-|---------|--------|--------|
-| `adapter-cannot-return-grey` | PASS | — |
-| `adapter-failure-is-isolated` | PASS | — |
-| `adapter-never-reads-the-clock` | PASS | — |
-| `adapter-never-writes` | PASS | — |
-| `adapter-resolves-one-item` | PASS | — |
-| `adapter-unknown-name` | PASS | — |
-
-[View full report](../../specs-site/evidence)
+--8<-- "CIR-ADAPT-CONTRACT.md"
 
 </details>
 
-## CIR-ADAPT-REFERENCE-DATE — one clock per bake, injected
+## CIR-ADAPT-REFERENCE-DATE
+
+**— one clock per bake, injected**
 
 Every adapter resolves against a single reference date, injected by the bake, so one bake never
 mixes two clocks and a test can freeze it. An adapter that calls the system clock itself is a
@@ -78,24 +70,15 @@ and tests always inject the fixture reference date (`fixtures/README.md`, ⚖-R2
 | reference-date-default-is-config-timezone | bake invoked with no injected date | today derived from the current instant in the config's `timezone:` — the host's local zone must not leak ([`CIR-BAKE-DETERMINISM`](data-json.md)) |
 | reference-date-fixture-pinned | any bake or test over `fixtures/alex` | injected `2026-08-03`, never the running day's calendar (⚖-R24) |
 
-<details class="evidence-block">
-<summary>Evidence: 5 test case(s) — alex</summary>
+<details markdown="1"><summary>Evidence — latest run</summary>
 
-**Requirement:** CIR-ADAPT-REFERENCE-DATE — **World:** alex
-
-| Case ID | Status | Detail |
-|---------|--------|--------|
-| `reference-date-crosses-midnight` | PASS | — |
-| `reference-date-default-is-config-timezone` | PASS | — |
-| `reference-date-fixture-pinned` | PASS | — |
-| `reference-date-injectable` | PASS | — |
-| `reference-date-shared` | PASS | — |
-
-[View full report](../../specs-site/evidence)
+--8<-- "CIR-ADAPT-REFERENCE-DATE.md"
 
 </details>
 
-## CIR-ADAPT-MANUAL — hand-set light
+## CIR-ADAPT-MANUAL
+
+**— hand-set light**
 
 Manual is honest about being manual: it says what the person asserted, not when they asserted
 it. If a manual light should age, that is a freshness adapter over the config file itself — a
@@ -107,22 +90,15 @@ possible contributed built-in, never a hidden behavior of `manual:`.
 | manual-has-no-data-date | any manual item | detail line carries no "last data" segment |
 | manual-available-in-every-phase | any phase | implemented from P0 ([`CIR-PROC-PHASE-P0`](../process/phases.md)) |
 
-<details class="evidence-block">
-<summary>Evidence: 3 test case(s) — alex</summary>
+<details markdown="1"><summary>Evidence — latest run</summary>
 
-**Requirement:** CIR-ADAPT-MANUAL — **World:** alex
-
-| Case ID | Status | Detail |
-|---------|--------|--------|
-| `manual-available-in-every-phase` | PASS | — |
-| `manual-has-no-data-date` | PASS | — |
-| `manual-returns-declared-light` | PASS | — |
-
-[View full report](../../specs-site/evidence)
+--8<-- "CIR-ADAPT-MANUAL.md"
 
 </details>
 
-## CIR-ADAPT-FRESHNESS — dates in files
+## CIR-ADAPT-FRESHNESS
+
+**— dates in files**
 
 Behavior is [freshness.md](freshness.md); interface-level obligations only here.
 
@@ -132,22 +108,15 @@ Behavior is [freshness.md](freshness.md); interface-level obligations only here.
 | freshness-reports-its-data-date | newest date 2026-08-01 | `data_date: 2026-08-01` in the detail line |
 | freshness-sandboxed-to-config-dir | any `source:` | resolved per [`CIR-DATA-SOURCE-PATH`](freshness.md) |
 
-<details class="evidence-block">
-<summary>Evidence: 3 test case(s) — alex</summary>
+<details markdown="1"><summary>Evidence — latest run</summary>
 
-**Requirement:** CIR-ADAPT-FRESHNESS — **World:** alex
-
-| Case ID | Status | Detail |
-|---------|--------|--------|
-| `freshness-reads-never-executes` | PASS | — |
-| `freshness-reports-its-data-date` | PASS | — |
-| `freshness-sandboxed-to-config-dir` | PASS | — |
-
-[View full report](../../specs-site/evidence)
+--8<-- "CIR-ADAPT-FRESHNESS.md"
 
 </details>
 
-## CIR-ADAPT-COMMAND — the escape hatch
+## CIR-ADAPT-COMMAND
+
+**— the escape hatch**
 
 `command:` is an **argv array, never a shell string**: a shell string invites quoting bugs and
 makes every value in the config a potential injection point.
@@ -181,33 +150,15 @@ lines (`date=2026-08-01`, `note=…`); (c) full JSON on stdout. **Ruled: (a) now
 compatible extension** — (b) is a superset of (a) and needs no config change, whereas (c) makes
 the escape hatch stop being a one-line shell script.
 
-<details class="evidence-block">
-<summary>Evidence: 14 test case(s) — alex</summary>
+<details markdown="1"><summary>Evidence — latest run</summary>
 
-**Requirement:** CIR-ADAPT-COMMAND — **World:** alex
-
-| Case ID | Status | Detail |
-|---------|--------|--------|
-| `command-argv-array-required` | PASS | — |
-| `command-cannot-set-a-data-date` | PASS | — |
-| `command-cwd-is-config-dir` | PASS | — |
-| `command-empty-stdout` | PASS | — |
-| `command-executable-bit-at-validation` | PASS | — |
-| `command-executable-exists-at-validation` | PASS | — |
-| `command-extra-output-ignored` | PASS | — |
-| `command-first-non-empty-line-wins` | PASS | — |
-| `command-nonzero-exit-dominates` | PASS | — |
-| `command-not-shell-interpreted` | PASS | — |
-| `command-prints-yellow` | PASS | — |
-| `command-stderr-not-on-the-page` | PASS | — |
-| `command-stdout-trimmed-and-folded` | PASS | — |
-| `command-unknown-word` | PASS | — |
-
-[View full report](../../specs-site/evidence)
+--8<-- "CIR-ADAPT-COMMAND.md"
 
 </details>
 
-## CIR-ADAPT-BUDGET — time and blast radius
+## CIR-ADAPT-BUDGET
+
+**— time and blast radius**
 
 Whatever the bake job holds — a registry token, a kubeconfig — must not be handed to a person's
 arbitrary status script by default.
@@ -229,24 +180,15 @@ addition when something real needs it; adding the knob before anyone asks violat
 anticipate-don't-overreach. No timeout at all is rejected outright: one wedged script must not
 silence the whole page's nightly refresh.
 
-<details class="evidence-block">
-<summary>Evidence: 5 test case(s) — alex</summary>
+<details markdown="1"><summary>Evidence — latest run</summary>
 
-**Requirement:** CIR-ADAPT-BUDGET — **World:** alex
-
-| Case ID | Status | Detail |
-|---------|--------|--------|
-| `bake-exit-code-only-for-config-errors` | PASS | — |
-| `bake-total-budget` | PASS | — |
-| `command-children-killed` | PASS | — |
-| `command-per-item-timeout` | PASS | — |
-| `environment-not-inherited-wholesale` | PASS | — |
-
-[View full report](../../specs-site/evidence)
+--8<-- "CIR-ADAPT-BUDGET.md"
 
 </details>
 
-## CIR-ADAPT-NO-PAGE-LOGIC — the page is adapter-blind
+## CIR-ADAPT-NO-PAGE-LOGIC
+
+**— the page is adapter-blind**
 
 Statuses, dates and warnings reach the page only as baked fields
 (`CIR-DATA-RESOLUTION-TIME`). Adding the P2 sqlite metric adapter, or any contributed built-in,
@@ -267,16 +209,8 @@ absorbs every weird source, needs no plugin loader, and keeps arbitrary third-pa
 the bake process. Under (b) the adapter registry, its discovery order and its versioning all
 become spec surface that does not exist today.
 
-<details class="evidence-block">
-<summary>Evidence: 2 test case(s) — alex</summary>
+<details markdown="1"><summary>Evidence — latest run</summary>
 
-**Requirement:** CIR-ADAPT-NO-PAGE-LOGIC — **World:** alex
-
-| Case ID | Status | Detail |
-|---------|--------|--------|
-| `new-adapter-changes-no-page-code` | PASS | — |
-| `page-has-no-adapter-vocabulary` | PASS | — |
-
-[View full report](../../specs-site/evidence)
+--8<-- "CIR-ADAPT-NO-PAGE-LOGIC.md"
 
 </details>

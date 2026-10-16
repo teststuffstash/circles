@@ -7,8 +7,15 @@ cd "$(dirname "$0")/.."
 # Stage the documentation roots at their repo paths (mkdocs refuses docs_dir: ".") so
 # cross-tree links (specs/… ↔ docs/…) resolve as real pages. index.md is generated — this
 # repo has no root README by design (CLAUDE.md is agent-facing, not site content).
+#
+# Evidence: each rule's `--8<-- "<RULE>.md"` pointer is transcluded by pymdownx.snippets from
+# specs/evidence/ (mkdocs.yml) — the fragments scripts/evidence.sh copied there from the last
+# `devbox run evidence` (which `devbox run ci` ends with). A build with no fragments is valid: a
+# pointer whose fragment is missing renders nothing — visibly unverified, never a build failure.
+# The fragments are transclusion SOURCES, not pages: they stay out of the staged tree.
 rm -rf .site-src && mkdir .site-src
 cp -r specs .site-src/
+rm -rf .site-src/specs/evidence
 [ -d docs ] && cp -r docs .site-src/
 {
   echo "# circles — specs & docs"

@@ -10,6 +10,8 @@ from __future__ import annotations
 import pytest
 from playwright.sync_api import Page
 
+from rules import rule
+
 pytestmark = pytest.mark.browser
 
 # The page furniture CIR-RENDER-ONE-SCREEN#one-screen-reference names: "chart, ring key,
@@ -76,6 +78,7 @@ def _assert_visible_inside(page: Page, selector: str, viewport: tuple[int, int])
 class TestOneScreen:
     """CIR-RENDER-ONE-SCREEN — no scrolling, ever."""
 
+    @rule("CIR-RENDER-ONE-SCREEN")
     def test_one_screen_reference(
         self, page: Page, served: str, reference_viewport: tuple[int, int]
     ) -> None:
@@ -90,14 +93,15 @@ class TestOneScreen:
         for selector in FURNITURE:
             _assert_visible_inside(page, selector, reference_viewport)
 
+    @rule("CIR-RENDER-ONE-SCREEN")
     def test_one_screen_with_warnings(
         self, page: Page, served: str, reference_viewport: tuple[int, int]
     ) -> None:
         """CIR-RENDER-ONE-SCREEN#one-screen-with-warnings — artifact with 2 warnings:
         banner shown; still no scrolling (the chart yields the space).
 
-        index-2-warnings.html is the fixture artifact with `warnings[:2]` (the same
-        construction as the unit proxy). Expected: the same no-scroll and furniture
+        index-2-warnings.html is the fixture artifact with `warnings[:2]`
+        (scripts/test-browser.sh builds it). Expected: the same no-scroll and furniture
         assertions as the reference row, plus `#warnings` shown inside the viewport."""
         page.goto(f"{served}/index-2-warnings.html")
         assert "2 warnings" in page.inner_text("#warnings"), "banner must say how many"
@@ -105,6 +109,7 @@ class TestOneScreen:
         for selector in (*FURNITURE, "#warnings"):
             _assert_visible_inside(page, selector, reference_viewport)
 
+    @rule("CIR-RENDER-ONE-SCREEN")
     @pytest.mark.parametrize(
         "viewport",
         [
@@ -143,6 +148,7 @@ class TestOneScreen:
 class TestReferenceViewport:
     """CIR-RENDER-REFERENCE-VIEWPORT — the tested screen."""
 
+    @rule("CIR-RENDER-REFERENCE-VIEWPORT")
     def test_viewport_gate_is_fixed(
         self, page: Page, reference_viewport: tuple[int, int]
     ) -> None:
@@ -155,6 +161,7 @@ class TestReferenceViewport:
         assert reference_viewport == (1280, 800)
         assert page.viewport_size == {"width": 1280, "height": 800}
 
+    @rule("CIR-RENDER-REFERENCE-VIEWPORT")
     def test_viewport_larger_passes_trivially(self, page: Page, served: str) -> None:
         """CIR-RENDER-REFERENCE-VIEWPORT#viewport-larger-passes-trivially — at
         1920 × 1080 the composition scales up and the gate does not re-run.

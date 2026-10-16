@@ -6,11 +6,22 @@ doctrine slots and evidence lines apply to ~400 rows across 15 pages, and nothin
 hand-maintained survives that. Checks that can be mechanical are mechanical; the judgment
 layer (doctrine sentences, whether a row's ruling is right) stays with review.
 
+The evidence half is CORRESPONDENCE only (allure-behavior-snippets CONVENTIONS § The lint gate;
+homelab ADR-156): the evidence itself is derived per run (`devbox run evidence`), never
+committed, so the gate checks only that the page, the tests and the fragments can meet —
+- a rule heading is the bare ID (RULES.md rule 3);
+- every rule heading carries the evidence pointer (`--8<-- "<ID>.md"`, naming its OWN heading)
+  XOR the unverified marker — never both, never neither — and the pointer exactly when a test
+  carries `@rule("<ID>")` (tests/rules.py);
+- every `rule("…")` label in tests/ names an existing heading;
+- every parametrized test carrying a rule label has explicit intent ids.
+
 Run via `scripts/lint-specs.sh`, wired into `devbox run ci`.
 """
 
 from __future__ import annotations
 
+import ast
 import re
 import sys
 from pathlib import Path
@@ -23,6 +34,9 @@ REQ_HEADING = re.compile(r"^##\s+(CIR-[A-Z0-9-]+)\b")
 REQ_ID = re.compile(r"^CIR-([A-Z]+)-([A-Z0-9-]+)$")
 AMBIGUITY_REF = re.compile(r"⚖-R(\d+)")
 EVIDENCE_LINE = "_Evidence: none yet — unverified._"
+# The evidence pointer: pymdownx.snippets transcludes the run's fragment (specs/evidence/<ID>.md,
+# written by scripts/evidence.sh) inside a collapsed <details markdown="1"> block.
+EVIDENCE_POINTER = re.compile(r'^--8<-- "([^"]+)\.md"\s*$')
 WORLD_DECL = re.compile(r"^\s*(?:>\s*)?\*?\*?World:\*?\*?\s+(\w+)", re.MULTILINE)
 MD_LINK = re.compile(r"\[[^\]]*\]\(([^)#]+)(#[^)]*)?\)")
 TABLE_ROW = re.compile(r"^\|(.+)\|\s*$")
@@ -55,27 +69,6 @@ def split_sections(lines: list[str]) -> list[tuple[str, int, list[str]]]:
     return sections
 
 
-def _strip_details(body: list[str]) -> list[str]:
-    """Filter out lines inside <details>...</details> blocks.
-
-    This prevents evidence blocks from contaminating spec-row-id or
-    decision-table analysis. Lines inside <details> are the generated
-    evidence block, not the spec's own decision tables.
-    """
-    result: list[str] = []
-    in_details = False
-    for line in body:
-        if "<details" in line:
-            in_details = True
-            continue
-        if "</details>" in line:
-            in_details = False
-            continue
-        if not in_details:
-            result.append(line)
-    return result
-
-
 def tables_in(body: list[str]) -> list[list[str]]:
     """Group consecutive markdown table lines into tables."""
     tables: list[list[str]] = []
@@ -101,7 +94,10 @@ def row_ids(table: list[str]) -> list[str]:
     return ids
 
 
-def check_page(path: Path, repo: Path, f: Findings, seen_ids: dict[str, Path]) -> set[int]:
+def check_page(
+    path: Path, repo: Path, f: Findings, seen_ids: dict[str, Path],
+    labelled: set[str] | None = None,
+) -> set[int]:
     text = path.read_text(encoding="utf-8")
     lines = text.splitlines()
     refs: set[int] = {int(n) for n in AMBIGUITY_REF.findall(text)}
@@ -111,19 +107,14 @@ def check_page(path: Path, repo: Path, f: Findings, seen_ids: dict[str, Path]) -
         if target.startswith(("http://", "https://", "mailto:")):
             continue
         resolved = (path.parent / target).resolve()
-        # Skip links into the generated site output directory (specs-site/).
-        # These are build artifacts created by the CI pipeline, not source
-        # documents, and may not exist at lint time (the report is generated
-        # after pytest + evidence generation). The evidence join check
-        # validates that the evidence block's content is correct; the
-        # report link's target is a CI artifact, not a source reference.
-        try:
-            resolved.relative_to(repo / "specs-site")
-            continue
-        except ValueError:
-            pass
         if not resolved.exists():
             f.error(path, f"dead relative link: {target}")
+
+    for n, line in enumerate(lines, start=1):
+        m = REQ_HEADING.match(line)
+        if m and line.rstrip() != f"## {m.group(1)}":
+            f.error(path, f"line {n}: rule heading is decorated ({line.strip()!r}) — the heading "
+                          f"is the bare ID, the anchor every link and evidence fragment joins on")
 
     sections = split_sections(lines)
 
@@ -153,11 +144,8 @@ def check_page(path: Path, repo: Path, f: Findings, seen_ids: dict[str, Path]) -
         else:
             seen_ids[req_id] = path
 
-        # --- evidence line: verified-ness is derived, never declared ------------
-        joined = "\n".join(body)
-        if EVIDENCE_LINE not in joined and "<details" not in joined:
-            f.error(path, f"{req_id}: missing evidence line ({EVIDENCE_LINE!r}) "
-                          f"or an evidence <details> block")
+        # --- evidence: pointer XOR marker; verified-ness is derived, never declared
+        check_evidence_slot(path, req_id, body, f, labelled)
         # A coverage claim is a cell that *leads* with the marker (the ✓ column pattern).
         # Prose mentioning the marker — process/testing.md states the prohibition, and
         # open-questions.md discusses it — is not itself a violation.
@@ -206,115 +194,126 @@ def check_ambiguity_index(repo: Path, refs: set[int], f: Findings) -> None:
         f.error(index, f"⚖-R{ref} is referenced in the tree but not indexed here")
 
 
-def check_evidence_join(repo: Path, f: Findings) -> None:
-    """Check the evidence join: every evidence fragment cites valid row ids,
-    and every requirement with evidence has a corresponding report entry.
+def check_evidence_slot(
+    path: Path, req_id: str, body: list[str], f: Findings, labelled: set[str] | None,
+) -> None:
+    """One rule section's evidence slot: the pointer to its own fragment XOR the marker.
 
-    Reads the evidence-manifest.json written by generate-evidence.py and
-    cross-references it against the spec pages' decision tables.
-
-    CIR-PROC-GATE#gate-no-dangling-spec-reference
+    ``labelled`` (the rule IDs some test labels, ``rule_labels``) adds the correspondence: the
+    pointer exactly when a labelled test exists. None skips that half (a page linted alone).
     """
-    manifest_path = repo / "specs" / "evidence-manifest.json"
-    if not manifest_path.exists():
-        # No evidence manifest yet — early in the pipeline, skip the check
+    pointers = [m.group(1) for m in map(EVIDENCE_POINTER.match, body) if m]
+    marker = any(line.strip() == EVIDENCE_LINE for line in body)
+    if pointers and marker:
+        f.error(path, f"{req_id}: both an evidence pointer and the unverified marker — "
+                      f"exactly one of them")
         return
+    if not pointers and not marker:
+        f.error(path, f"{req_id}: no evidence slot — add the pointer "
+                      f'(--8<-- "{req_id}.md") or the marker ({EVIDENCE_LINE!r})')
+        return
+    for target in pointers:
+        if target != req_id:
+            f.error(path, f'{req_id}: evidence pointer names "{target}.md" — a rule transcludes '
+                          f"only its own fragment")
+    if len(pointers) > 1:
+        f.error(path, f"{req_id}: {len(pointers)} evidence pointers — exactly one")
+    if labelled is None:
+        return
+    if pointers and req_id not in labelled:
+        f.error(path, f"{req_id}: evidence pointer but no test carries @rule({req_id!r}) — "
+                      f"the fragment can never exist; use the marker")
+    if marker and req_id in labelled:
+        f.error(path, f"{req_id}: a test carries @rule({req_id!r}) but the page says "
+                      f"{EVIDENCE_LINE!r} — use the evidence pointer")
 
-    import json
-    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
-    requirements = manifest.get("requirements", {})
 
-    # Build a map of requirement id → set of row ids from the spec pages
-    # Crucially: exclude <details> evidence block content so the join check
-    # can actually fail — the evidence block's own table would always satisfy
-    # the check against itself (the self-referencing problem).
-    spec_row_ids: dict[str, set[str]] = {}
-    for page in sorted((repo / "specs").rglob("*.md")):
-        text = page.read_text(encoding="utf-8")
-        sections = split_sections(text.splitlines())
-        for req_id, _line_no, body in sections:
-            if req_id not in spec_row_ids:
-                spec_row_ids[req_id] = set()
-            # Strip <details> blocks before collecting row ids
-            clean_body = _strip_details(body)
-            for table in tables_in(clean_body):
-                if len(table) < 3:
-                    continue
-                for rid in row_ids(table):
-                    spec_row_ids[req_id].add(rid)
+def _test_files(repo: Path) -> list[Path]:
+    return sorted((repo / "tests").rglob("test_*.py"))
 
-    # Check 1: every evidence-cited case id exists as a row id in the spec
-    for req_id, case_ids in requirements.items():
-        if req_id not in spec_row_ids:
-            f.error(manifest_path, f"evidence cites {req_id} but no such requirement exists in specs")
+
+def _labels_in(tree: ast.Module) -> list[str]:
+    """IDs a module labels: ``@rule("ID")`` on a function/class, ``pytestmark = rule("ID")``
+    (the touched-rules shapes — by ast walk, so a string or a plain call never counts)."""
+    exprs: list[ast.expr] = []
+    for node in ast.walk(tree):
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+            exprs += node.decorator_list
+    for node in tree.body:
+        if isinstance(node, ast.Assign) and any(
+                isinstance(t, ast.Name) and t.id == "pytestmark" for t in node.targets):
+            exprs += node.value.elts if isinstance(node.value, (ast.List, ast.Tuple)) else [node.value]
+    return [e.args[0].value for e in exprs
+            if _is_rule_decorator(e) and e.args and isinstance(e.args[0], ast.Constant)
+            and isinstance(e.args[0].value, str)]
+
+
+def rule_labels(repo: Path) -> dict[str, list[Path]]:
+    """rule ID → the test files labelling it with ``rule("…")``."""
+    out: dict[str, list[Path]] = {}
+    for path in _test_files(repo):
+        tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+        for rule_id in _labels_in(tree):
+            out.setdefault(rule_id, []).append(path)
+    return out
+
+
+def check_labels(labels: dict[str, list[Path]], seen_ids: dict[str, Path], f: Findings) -> None:
+    """Every rule label names an existing heading (label → heading; tests/rules.py fails the
+    same mislabel at collection — this catches it without running pytest)."""
+    for rule_id, paths in sorted(labels.items()):
+        if rule_id not in seen_ids:
+            for path in sorted(set(paths)):
+                f.error(path, f"rule({rule_id!r}) names no `## {rule_id}` heading under specs/")
+
+
+def _is_rule_decorator(node: ast.expr) -> bool:
+    return (isinstance(node, ast.Call) and isinstance(node.func, ast.Name)
+            and node.func.id == "rule")
+
+
+def _parametrize(node: ast.expr) -> ast.Call | None:
+    if (isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute)
+            and node.func.attr == "parametrize"):
+        return node
+    return None
+
+
+def _explicit_ids(call: ast.Call) -> bool:
+    """``ids=`` given, or every argvalue a literal ``pytest.param(..., id=...)``."""
+    if any(kw.arg == "ids" for kw in call.keywords):
+        return True
+    values = call.args[1] if len(call.args) > 1 else next(
+        (kw.value for kw in call.keywords if kw.arg == "argvalues"), None)
+    if not isinstance(values, (ast.List, ast.Tuple)) or not values.elts:
+        return False
+    for elt in values.elts:
+        if not (isinstance(elt, ast.Call) and isinstance(elt.func, ast.Attribute)
+                and elt.func.attr == "param" and any(kw.arg == "id" for kw in elt.keywords)):
+            return False
+    return True
+
+
+def check_param_ids(path: Path, f: Findings) -> int:
+    """Every rule-labelled parametrized test carries explicit intent ids (CONVENTIONS § The
+    intent column: an auto-generated id restates the input). Returns how many were checked."""
+    tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+    checked = 0
+    for node in ast.walk(tree):
+        if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
             continue
-        for case_id in case_ids:
-            if case_id not in spec_row_ids[req_id]:
-                f.error(
-                    manifest_path,
-                    f"evidence for {req_id} cites case id {case_id!r} "
-                    f"but no such row id exists in the spec table "
-                    f"(known row ids: {sorted(spec_row_ids[req_id])})",
-                )
-
-    # Check 2: every requirement with a <details> evidence block has a manifest entry
-    for page in sorted((repo / "specs").rglob("*.md")):
-        text = page.read_text(encoding="utf-8")
-        sections = split_sections(text.splitlines())
-        for req_id, _line_no, body in sections:
-            joined = "\n".join(body)
-            if "<details" in joined:
-                if req_id not in requirements:
-                    f.error(
-                        page,
-                        f"{req_id}: has an evidence <details> block but no entry "
-                        f"in evidence-manifest.json — the block may be stale",
-                    )
-
-    # Check 3: diff the evidence block's own case-id rows against the manifest entry
-    # This catches hand-edited/stale blocks where the cited case ids don't match
-    # what the generator actually produced (CIR-PROC-GATE#gate-no-dangling-spec-reference).
-    for page in sorted((repo / "specs").rglob("*.md")):
-        text = page.read_text(encoding="utf-8")
-        sections = split_sections(text.splitlines())
-        for req_id, _line_no, body in sections:
-            joined = "\n".join(body)
-            if "<details" not in joined:
+        if not any(_is_rule_decorator(d) for d in node.decorator_list):
+            continue
+        for deco in node.decorator_list:
+            call = _parametrize(deco)
+            if call is None:
                 continue
-            if req_id not in requirements:
-                continue  # Check 2 already reported this
-
-            # Extract case ids from the <details> evidence table
-            in_details = False
-            ev_case_ids: set[str] = set()
-            for line in body:
-                if "<details" in line:
-                    in_details = True
-                    continue
-                if "</details>" in line:
-                    in_details = False
-                    continue
-                if in_details and TABLE_ROW.match(line):
-                    cells = [c.strip() for c in line.strip().strip("|").split("|")]
-                    if len(cells) >= 1 and cells[0].startswith("`"):
-                        # Extract case id from backtick-quoted cell (e.g., `grey-reason-distinguishable`)
-                        case_id = cells[0].strip("`")
-                        if case_id:
-                            ev_case_ids.add(case_id)
-
-            manifest_case_ids = set(requirements[req_id])
-            if ev_case_ids and ev_case_ids != manifest_case_ids:
-                extra = ev_case_ids - manifest_case_ids
-                missing = manifest_case_ids - ev_case_ids
-                parts = []
-                if extra:
-                    parts.append(f"extra case ids in block: {sorted(extra)}")
-                if missing:
-                    parts.append(f"missing case ids from block: {sorted(missing)}")
-                f.error(
-                    page,
-                    f"{req_id}: evidence block case ids don't match manifest — {'; '.join(parts)}",
-                )
+            checked += 1
+            if not _explicit_ids(call):
+                f.error(path, f"line {deco.lineno}: {node.name} carries a rule label but its "
+                              f"parametrize has no explicit ids — add ids= or "
+                              f"pytest.param(..., id=<intent>)")
+    return checked
 
 
 def check_fixture(repo: Path, f: Findings) -> None:
@@ -366,16 +365,20 @@ def main() -> int:
     seen_ids: dict[str, Path] = {}
     all_refs: set[int] = set()
 
-    pages = sorted(specs.rglob("*.md"))
+    # specs/evidence/ holds the GENERATED fragments (scripts/evidence.sh) — never a spec page.
+    pages = sorted(p for p in specs.rglob("*.md") if (specs / "evidence") not in p.parents)
     if not pages:
         print("lint-specs: no spec pages found", file=sys.stderr)
         return 1
 
+    labels = rule_labels(repo)
+    labelled = set(labels)
     for page in pages:
-        all_refs |= check_page(page, repo, f, seen_ids)
+        all_refs |= check_page(page, repo, f, seen_ids, labelled)
 
     check_ambiguity_index(repo, all_refs, f)
-    check_evidence_join(repo, f)
+    check_labels(labels, seen_ids, f)
+    params = sum(check_param_ids(path, f) for path in _test_files(repo))
     check_fixture(repo, f)
 
     if f.errors:
@@ -384,8 +387,9 @@ def main() -> int:
             print(f"  {e}", file=sys.stderr)
         return 1
 
-    print(f"lint-specs: OK — {len(pages)} pages, {len(seen_ids)} requirement ids, "
-          f"{len(all_refs)} ⚖ entries indexed")
+    print(f"lint-specs: OK — {len(pages)} pages, {len(seen_ids)} requirement ids "
+          f"({len(labelled & set(seen_ids))} labelled by tests), {params} labelled "
+          f"parametrizations with explicit ids, {len(all_refs)} ⚖ entries indexed")
     return 0
 
 

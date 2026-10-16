@@ -2,9 +2,10 @@
 # ci.sh — CI entry point for the circles project
 cd "$(dirname "$0")/.."
 
-# Run-scoped Allure results dir (kind-ci.md rule 1 applied to the unit tier): a fixed
-# /tmp/allure-raw races when two CI runs share a host. Override with ALLURE_RAW to keep it.
-ALLURE_RAW="${ALLURE_RAW:-$(mktemp -d /tmp/allure-raw.XXXXXX)}"
+# Repo-local Allure results (gitignored, wiped here): the evidence run at the end of this script
+# reads them, and the CI job uploads them. Repo-local, so two checkouts never share a dir.
+ALLURE_RESULTS=allure-results
+rm -rf "$ALLURE_RESULTS"
 
 echo "=== validate-chart ==="
 ./scripts/validate-chart.sh
@@ -16,8 +17,7 @@ echo "=== specs-build ==="
 ./scripts/specs-build.sh
 
 echo "=== bake unit tests (with Allure evidence) ==="
-rm -rf "${ALLURE_RAW:?}"/*
-uv run --frozen pytest tests/ -v --tb=short --alluredir="$ALLURE_RAW"
+uv run --frozen pytest tests/ -v --tb=short --alluredir="$ALLURE_RESULTS"
 
 echo "=== bake artifact-schema check ==="
 # Build the artifact from the fixture and validate its structure
@@ -47,17 +47,6 @@ if errors:
     sys.exit(1)
 print('  artifact schema check: PASS')
 "
-
-echo "=== generate evidence fragments ==="
-# Generate the Allure HTML report and inject evidence blocks into spec pages
-mkdir -p specs-site/evidence
-python3 scripts/generate-allure-report.py "$ALLURE_RAW" specs-site/evidence
-python3 scripts/generate-evidence.py \
-  --allure-dir "$ALLURE_RAW" \
-  --report-dir ../specs-site/evidence \
-  --specs-dir specs/ \
-  --inject
-echo "  evidence generation: PASS"
 
 echo "=== lint-specs ==="
 ./scripts/lint-specs.sh
@@ -166,8 +155,13 @@ print('  page-content-check: PASS')
 
 # Clean up
 rm -rf /tmp/circles-bake-test
-rm -rf "$ALLURE_RAW"
 
 echo ""
 echo "=== test-system (skippable: set CIRCLES_SYSTEM_TEST_SKIP=1) ==="
 ./scripts/test-system.sh
+
+echo ""
+echo "=== evidence (devbox run evidence over the unit results) ==="
+# allure-results/ → allure-evidence/ (the reviewer pack) + specs/evidence/ (the fragments the
+# specs site transcludes). The browser tier's results join in CI's evidence job (#103 PR 2).
+./scripts/evidence.sh "$ALLURE_RESULTS"

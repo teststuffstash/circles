@@ -14,6 +14,8 @@ import pytest
 from playwright.sync_api import Page
 from pypdf import PdfReader
 
+from rules import rule
+
 pytestmark = pytest.mark.browser
 
 # CIR-RENDER-A4#print-chrome-complete: "ring key, legend, generated-at stamp and text
@@ -44,6 +46,7 @@ _COMPUTED = """(sel) => {
 class TestPrintA4:
     """CIR-RENDER-A4 — one sheet from the browser's print dialog."""
 
+    @rule("CIR-RENDER-A4")
     def test_print_single_a4_portrait(self, page: Page, served: str) -> None:
         """CIR-RENDER-A4#print-single-a4-portrait — fixture config printed to A4
         portrait: exactly 1 page.
@@ -58,6 +61,7 @@ class TestPrintA4:
         pages = len(PdfReader(io.BytesIO(pdf)).pages)
         assert pages == 1, f"print produced {pages} A4 pages, expected exactly 1"
 
+    @rule("CIR-RENDER-A4")
     def test_print_margins_are_declared(self, page: Page, served: str) -> None:
         """CIR-RENDER-A4#print-margins-are-declared — printed page has a 10 mm page
         margin, not the browser default.
@@ -70,6 +74,7 @@ class TestPrintA4:
         assert margins, "no @page rule in any stylesheet — the browser default margin applies"
         assert all(m == "10mm" for m in margins), f"@page margins declared: {margins}"
 
+    @rule("CIR-RENDER-A4")
     def test_print_chrome_complete(self, page: Page, served: str) -> None:
         """CIR-RENDER-A4#print-chrome-complete — printed output: ring key, legend,
         generated-at stamp and text alternative all present.

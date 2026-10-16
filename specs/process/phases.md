@@ -8,7 +8,9 @@ right seams.
 
 **World: alex** — every table on this page states behavior against the fixture person.
 
-## CIR-PROC-PHASE-P0 — hand-set statuses on the existing pipeline
+## CIR-PROC-PHASE-P0
+
+**— hand-set statuses on the existing pipeline**
 
 **Ships:** the real page (sunburst + chrome per [../render/sunburst.md](../render/sunburst.md))
 replacing the vanilla placeholder in the nginx image; the bake as a build-time step turning
@@ -37,22 +39,15 @@ not a failure), makes P1 a pure implementation step with no config migration, an
 goal's own phasing — under (c) P0 is no longer "hand-set" in any meaningful sense. (a) throws
 away the fixture, which is also the spec's key example.
 
-<details class="evidence-block">
-<summary>Evidence: 3 test case(s) — alex</summary>
+<details markdown="1"><summary>Evidence — latest run</summary>
 
-**Requirement:** CIR-PROC-PHASE-P0 — **World:** alex
-
-| Case ID | Status | Detail |
-|---------|--------|--------|
-| `p0-config-stays-valid` | PASS | — |
-| `p0-manual-end-to-end` | PASS | — |
-| `p0-unevaluated-adapters-are-grey` | PASS | — |
-
-[View full report](../../specs-site/evidence)
+--8<-- "CIR-PROC-PHASE-P0.md"
 
 </details>
 
-## CIR-PROC-PHASE-P1 — the nightly bake
+## CIR-PROC-PHASE-P1
+
+**— the nightly bake**
 
 **Ships:** a scheduled nightly run of the **same** bake, evaluating `freshness:` and `command:`
 adapters against live sources and publishing the artifact **atomically without an image
@@ -72,7 +67,9 @@ any page change at all.
 
 _Evidence: none yet — unverified._
 
-## CIR-PROC-PHASE-P2 — the first detail page
+## CIR-PROC-PHASE-P2
+
+**— the first detail page**
 
 **Ships:** the sqlite metric adapter (the first contributed built-in, through the adapter seam),
 per-item detail payloads, and the annotated-timeseries detail page
@@ -89,7 +86,9 @@ stay markdown in git); drill-downs beyond one detail page per item.
 
 _Evidence: none yet — unverified._
 
-## CIR-PROC-BAKE-ONE-PATH — one bake, several triggers
+## CIR-PROC-BAKE-ONE-PATH
+
+**— one bake, several triggers**
 
 The bake is **one code path**, invoked identically at image-build time (P0) and by the nightly
 scheduler (P1): same inputs, same outputs, same validation. The phase difference is which
@@ -109,20 +108,15 @@ without naming the language that interface is *in* leaves the first implementati
 it by accident. Recorded here rather than assumed, because it is a real decision that the
 toolchain made implicitly.
 
-<details class="evidence-block">
-<summary>Evidence: 1 test case(s) — alex</summary>
+<details markdown="1"><summary>Evidence — latest run</summary>
 
-**Requirement:** CIR-PROC-BAKE-ONE-PATH — **World:** alex
-
-| Case ID | Status | Detail |
-|---------|--------|--------|
-| `bake-same-code-both-triggers` | PASS | — |
-
-[View full report](../../specs-site/evidence)
+--8<-- "CIR-PROC-BAKE-ONE-PATH.md"
 
 </details>
 
-## CIR-PROC-DEPLOY-SEAM — how a real person's data reaches a deployed page
+## CIR-PROC-DEPLOY-SEAM
+
+**— how a real person's data reaches a deployed page**
 
 This repo is public and may contain **only synthetic data** (`CLAUDE.md`), while the deployable
 unit is a multi-stage nginx image whose content is baked at build time (`COPY dist/` from a bake
@@ -159,7 +153,9 @@ deploy route here would be asserting infrastructure that does not exist.
 
 _Evidence: none yet — unverified._
 
-## CIR-PROC-NOT-YET — what these specs deliberately do not decide
+## CIR-PROC-NOT-YET
+
+**— what these specs deliberately do not decide**
 
 Named so a later pass does not mistake silence for oversight.
 

@@ -28,6 +28,8 @@ from bake.adapters import AdapterResult, calendar_age, scan_dates
 from bake.config import load_config
 from bake.resolve import resolve
 
+from rules import rule
+
 AlexCopy = Callable[..., Path]  # the `alex_copy` factory fixture (tests/conftest.py)
 ALEX_DIR = Path(__file__).resolve().parent.parent / "fixtures" / "alex"
 ALEX_YAML = ALEX_DIR / "circles.yaml"
@@ -87,6 +89,7 @@ def _assert_grey_by_failure(artifact: dict, ref: str = "self/sleep") -> list[str
 class TestAdaptFreshness:
     """CIR-ADAPT-FRESHNESS — dates in files."""
 
+    @rule("CIR-ADAPT-FRESHNESS")
     def test_freshness_reads_never_executes(self, alex_copy: AlexCopy, tmp_path: Path) -> None:
         """CIR-ADAPT-FRESHNESS#freshness-reads-never-executes —
         a source: that is an executable script is read as text, not run."""
@@ -112,6 +115,7 @@ class TestAdaptFreshness:
         messages = _assert_grey_by_failure(artifact)
         assert "no dates found" in messages[0]
 
+    @rule("CIR-ADAPT-FRESHNESS")
     def test_freshness_reports_its_data_date(self) -> None:
         """CIR-ADAPT-FRESHNESS#freshness-reports-its-data-date —
         newest date 2026-08-01 → last_data_date 2026-08-01, 'last data 2026-08-01' in the
@@ -120,6 +124,7 @@ class TestAdaptFreshness:
         assert item["last_data_date"] == SLEEP_NEWEST.isoformat()
         assert f"last data {SLEEP_NEWEST.isoformat()}" in item["detail_line"]
 
+    @rule("CIR-ADAPT-FRESHNESS")
     def test_freshness_sandboxed_to_config_dir(self, alex_copy: AlexCopy, tmp_path: Path) -> None:
         """CIR-ADAPT-FRESHNESS#freshness-sandboxed-to-config-dir —
         a glob hit that resolves outside the config directory (a symlink out) is never
@@ -144,6 +149,7 @@ class TestAdaptFreshness:
 class TestDataSourcePathEvaluation:
     """CIR-DATA-SOURCE-PATH — where sources are read from (evaluation rows)."""
 
+    @rule("CIR-DATA-SOURCE-PATH")
     def test_source_single_file(self) -> None:
         """CIR-DATA-SOURCE-PATH#source-single-file —
         source: notes/sleep-log.md exists → its dates are read (newest 2026-08-01)."""
@@ -152,6 +158,7 @@ class TestDataSourcePathEvaluation:
         # age 2 ≤ yellow_after 7 → 🟢
         assert item["status"] == "green"
 
+    @rule("CIR-DATA-SOURCE-PATH")
     def test_source_glob_union(self, alex_copy: AlexCopy) -> None:
         """CIR-DATA-SOURCE-PATH#source-glob-union —
         notes/lab-*.md matching 3 files → the newest date across the union wins."""
@@ -167,6 +174,7 @@ class TestDataSourcePathEvaluation:
         assert item["last_data_date"] == SLEEP_NEWEST.isoformat()
         assert item["status"] == "green"  # age 2 ≤ 7
 
+    @rule("CIR-DATA-SOURCE-PATH")
     def test_source_glob_no_match(self, alex_copy: AlexCopy) -> None:
         """CIR-DATA-SOURCE-PATH#source-glob-no-match — glob matches zero files → ⚪ +
         build warning (missing source)."""
@@ -175,6 +183,7 @@ class TestDataSourcePathEvaluation:
         assert "missing source" in messages[0]
         assert "notes/lab-*.md" in messages[0]
 
+    @rule("CIR-DATA-SOURCE-PATH")
     def test_source_path_missing(self, alex_copy: AlexCopy) -> None:
         """CIR-DATA-SOURCE-PATH#source-path-missing — path does not exist → ⚪ + build
         warning (missing source)."""
@@ -183,6 +192,7 @@ class TestDataSourcePathEvaluation:
         assert "missing source" in messages[0]
         assert "notes/absent.md" in messages[0]
 
+    @rule("CIR-DATA-SOURCE-PATH")
     @pytest.mark.skipif(os.geteuid() == 0, reason="root reads mode-000 files")
     def test_source_unreadable(self, alex_copy: AlexCopy) -> None:
         """CIR-DATA-SOURCE-PATH#source-unreadable — file exists, permission denied → ⚪ +
@@ -206,6 +216,7 @@ class TestDataSourcePathEvaluation:
 class TestDataDateParse:
     """CIR-DATA-DATE-PARSE — ISO-8601 only (⚖-R27)."""
 
+    @rule("CIR-DATA-DATE-PARSE")
     @pytest.mark.parametrize("text,tz_name,expected", [
         pytest.param("2026-08-01", "UTC", [date(2026, 8, 1)],
                      id="CIR-DATA-DATE-PARSE#date-iso-calendar"),
@@ -229,6 +240,7 @@ class TestDataDateParse:
         assert found == expected
         assert rejected == []
 
+    @rule("CIR-DATA-DATE-PARSE")
     def test_date_impossible_calendar(self, alex_copy: AlexCopy) -> None:
         """CIR-DATA-DATE-PARSE#date-impossible-calendar — 2026-02-30 is ignored, with a
         warning naming the (config-relative) file."""
@@ -246,12 +258,14 @@ class TestDataDateParse:
         assert "notes/impossible.md" in messages[0]
         assert str(config_path.parent) not in messages[0]
 
+    @rule("CIR-DATA-DATE-PARSE")
     def test_date_newest_wins(self) -> None:
         """CIR-DATA-DATE-PARSE#date-newest-wins — the fixture's sleep-log holds 2026-07-30,
         2026-08-01, 2026-07-31 (in that file order) → last-data date 2026-08-01."""
         item = _item(_evaluate(ALEX_YAML), "self", "sleep")
         assert item["last_data_date"] == "2026-08-01"
 
+    @rule("CIR-DATA-DATE-PARSE")
     def test_date_none_parseable(self, alex_copy: AlexCopy) -> None:
         """CIR-DATA-DATE-PARSE#date-none-parseable — prose with no ISO dates
         (notes/empty-log.md) → ⚪ + warning, never 🟢."""
@@ -278,16 +292,19 @@ def _elapsed_hours(start: datetime, end: datetime) -> float:
 class TestDataAgeCalendar:
     """CIR-DATA-AGE-CALENDAR — calendar-day boundaries, never (now − then) ÷ 86400."""
 
+    @rule("CIR-DATA-AGE-CALENDAR")
     def test_age_same_day_is_zero(self) -> None:
         """CIR-DATA-AGE-CALENDAR#age-same-day-is-zero — source 2026-08-03, reference
         2026-08-03 → 0."""
         assert calendar_age(date(2026, 8, 3), date(2026, 8, 3)) == 0
 
+    @rule("CIR-DATA-AGE-CALENDAR")
     def test_age_yesterday_is_one(self) -> None:
         """CIR-DATA-AGE-CALENDAR#age-yesterday-is-one — source 2026-08-02, reference
         2026-08-03 → 1."""
         assert calendar_age(date(2026, 8, 2), date(2026, 8, 3)) == 1
 
+    @rule("CIR-DATA-AGE-CALENDAR")
     def test_age_ignores_time_of_day(self) -> None:
         """CIR-DATA-AGE-CALENDAR#age-ignores-time-of-day — a date-only source baked at 00:05
         or 23:55 local ages the same both times."""
@@ -308,6 +325,7 @@ class TestDataAgeCalendar:
         assert rings[0] == rings[1]
         assert _item({"rings": rings[0]}, "self", "sleep")["status"] == "green"
 
+    @rule("CIR-DATA-AGE-CALENDAR")
     def test_age_dst_spring_forward(self) -> None:
         """CIR-DATA-AGE-CALENDAR#age-dst-spring-forward — a 23-hour local day increments the
         age by 1, not 0."""
@@ -322,6 +340,7 @@ class TestDataAgeCalendar:
         assert calendar_age(date(2026, 3, 29), date(2026, 3, 30)) == 1
         assert calendar_age(date(2026, 3, 28), date(2026, 3, 30)) == 2
 
+    @rule("CIR-DATA-AGE-CALENDAR")
     def test_age_dst_fall_back(self) -> None:
         """CIR-DATA-AGE-CALENDAR#age-dst-fall-back — a 25-hour local day increments the age
         by 1, not 2."""
@@ -332,6 +351,7 @@ class TestDataAgeCalendar:
         # Calendar days: 1 (a 25 h ÷ 24 ceiling would say 2).
         assert calendar_age(date(2026, 10, 25), date(2026, 10, 26)) == 1
 
+    @rule("CIR-DATA-AGE-CALENDAR")
     def test_age_host_zone_irrelevant(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """CIR-DATA-AGE-CALENDAR#age-host-zone-irrelevant — the same config baked under
         TZ=UTC and TZ=Pacific/Auckland yields identical ages."""
@@ -356,6 +376,7 @@ class TestDataAgeCalendar:
             assert _item({"rings": rings}, "self", "sleep")["last_data_date"] == "2026-08-01"
             assert _item({"rings": rings}, "self", "labs")["status"] == "red"
 
+    @rule("CIR-DATA-AGE-CALENDAR")
     def test_age_datetime_reduced_to_local_date(self) -> None:
         """CIR-DATA-AGE-CALENDAR#age-datetime-reduced-to-local-date — source
         2026-08-02T23:30:00Z with timezone Pacific/Auckland → local date 2026-08-03 → age 0
@@ -367,6 +388,7 @@ class TestDataAgeCalendar:
         # The same token read in UTC stays on 08-02 → age 1: the config's zone decides.
         assert scan_dates("2026-08-02T23:30:00Z", "UTC")[0] == [date(2026, 8, 2)]
 
+    @rule("CIR-DATA-AGE-CALENDAR")
     def test_age_year_boundary(self) -> None:
         """CIR-DATA-AGE-CALENDAR#age-year-boundary — reference 2026-01-02, source
         2025-12-29 → 4."""
@@ -381,6 +403,7 @@ class TestDataAgeCalendar:
 class TestDataFreshnessWindowWired:
     """CIR-DATA-FRESHNESS-WINDOW — the fixture's labs case through resolve()."""
 
+    @rule("CIR-DATA-FRESHNESS-WINDOW")
     def test_window_far_past_red(self) -> None:
         """CIR-DATA-FRESHNESS-WINDOW#window-far-past-red — the fixture's labs item:
         2026-01-15 against 2026-08-03 is 200 days (16+28+31+30+31+30+31+3) > red_after 190
@@ -396,6 +419,7 @@ class TestDataFreshnessWindowWired:
 class TestFixtureDatesRelativeToReference:
     """CIR-PROC-TEST-FIXTURES — boundary rows move the reference date, not the notes."""
 
+    @rule("CIR-PROC-TEST-FIXTURES")
     def test_dates_relative_to_injected_reference(self) -> None:
         """CIR-PROC-TEST-FIXTURES#dates-relative-to-injected-reference — the sleep item
         (newest 2026-08-01, yellow_after 7) at reference 2026-08-08 is age 7 → still 🟢
@@ -419,6 +443,7 @@ class TestFixtureDatesRelativeToReference:
 class TestDataFreshnessEmpty:
     """CIR-DATA-FRESHNESS-EMPTY — ⚪ + warning, never a guessed 🔴."""
 
+    @rule("CIR-DATA-FRESHNESS-EMPTY")
     def test_source_file_empty(self, alex_copy: AlexCopy) -> None:
         """CIR-DATA-FRESHNESS-EMPTY#source-file-empty — file exists, zero bytes → ⚪ +
         build warning."""
@@ -429,6 +454,7 @@ class TestDataFreshnessEmpty:
         assert "no dates found" in messages[0]
         assert _item(artifact, "self", "sleep")["status"] != "red"
 
+    @rule("CIR-DATA-FRESHNESS-EMPTY")
     def test_source_no_parseable_dates(self, alex_copy: AlexCopy) -> None:
         """CIR-DATA-FRESHNESS-EMPTY#source-no-parseable-dates — notes/empty-log.md (a
         heading, no dated lines) → ⚪ + build warning."""
@@ -445,6 +471,7 @@ class TestDataFreshnessEmpty:
 class TestDataFreshnessFuture:
     """CIR-DATA-FRESHNESS-FUTURE — future dates are excluded, never clamped to 🟢."""
 
+    @rule("CIR-DATA-FRESHNESS-FUTURE")
     def test_future_date_mixed(self, alex_copy: AlexCopy) -> None:
         """CIR-DATA-FRESHNESS-FUTURE#future-date-mixed — notes/future-date.md holds
         2099-01-01 and 2026-08-01; at reference 2026-08-03 the future one is excluded with a
@@ -459,6 +486,7 @@ class TestDataFreshnessFuture:
         assert "2099-01-01" in messages[0]
         assert "notes/future-date.md" in messages[0]
 
+    @rule("CIR-DATA-FRESHNESS-FUTURE")
     def test_future_date_tomorrow(self) -> None:
         """CIR-DATA-FRESHNESS-FUTURE#future-date-tomorrow — a source dated one day ahead of
         the reference date is excluded with a warning, not treated as age 0."""
@@ -472,6 +500,7 @@ class TestDataFreshnessFuture:
         assert len(messages) == 1
         assert "2026-08-01" in messages[0]
 
+    @rule("CIR-DATA-FRESHNESS-FUTURE")
     def test_future_dates_only(self) -> None:
         """CIR-DATA-FRESHNESS-FUTURE#future-dates-only — every parseable date in the future
         → ⚪ + build warning."""
@@ -489,7 +518,13 @@ class TestDataFreshnessFuture:
 class TestAdapterResultShape:
     """CIR-ADAPT-CONTRACT — an adapter answers a light with a date, or fails. Never ⚪."""
 
-    @pytest.mark.parametrize("status", ["grey", "unmonitored", "", None])
+    @rule("CIR-ADAPT-CONTRACT")
+    @pytest.mark.parametrize("status", [
+        pytest.param("grey", id="grey as a wire value"),
+        pytest.param("unmonitored", id="grey as its display word"),
+        pytest.param("", id="empty string"),
+        pytest.param(None, id="no status at all"),
+    ])
     def test_adapter_cannot_return_grey(self, status: str | None) -> None:
         """CIR-ADAPT-CONTRACT#adapter-cannot-return-grey — grey (or any non-light) is not
         constructible as an adapter answer."""
@@ -553,6 +588,7 @@ def _plants_failure(artifact: dict) -> str:
 class TestAdaptCommand:
     """CIR-ADAPT-COMMAND — argv, config dir, first-line status word, exit code dominates."""
 
+    @rule("CIR-ADAPT-COMMAND")
     def test_command_prints_yellow(self) -> None:
         """CIR-ADAPT-COMMAND#command-prints-yellow — the fixture's plants script prints
         `yellow` → 🟡 under --evaluate at the fixture reference date."""
@@ -562,6 +598,7 @@ class TestAdaptCommand:
         assert plants["grey_reason"] is None
         assert _warnings_for(artifact, "wider/plants") == []
 
+    @rule("CIR-ADAPT-COMMAND")
     def test_command_not_shell_interpreted(self, alex_copy: AlexCopy,
                                            monkeypatch: pytest.MonkeyPatch) -> None:
         """CIR-ADAPT-COMMAND#command-not-shell-interpreted — `["./x.sh", "a b", "*", "$HOME"]`
@@ -576,6 +613,7 @@ class TestAdaptCommand:
         # Verbatim argv → the script's own check passes → it prints green → 🟢.
         assert _plants(_evaluate(config_path))["status"] == "green"
 
+    @rule("CIR-ADAPT-COMMAND")
     def test_command_cwd_is_config_dir(self, alex_copy: AlexCopy, tmp_path: Path,
                                        monkeypatch: pytest.MonkeyPatch) -> None:
         """CIR-ADAPT-COMMAND#command-cwd-is-config-dir — `./notes/…` resolves, and the
@@ -589,6 +627,7 @@ class TestAdaptCommand:
         # cwd == the config dir → both files found → green.
         assert _plants(_evaluate(config_path))["status"] == "green"
 
+    @rule("CIR-ADAPT-COMMAND")
     @pytest.mark.parametrize(
         "body,expected",
         [
@@ -608,22 +647,26 @@ class TestAdaptCommand:
         assert _plants(artifact)["status"] == expected
         assert _warnings_for(artifact, "wider/plants") == []
 
+    @rule("CIR-ADAPT-COMMAND")
     def test_command_unknown_word(self, alex_copy: AlexCopy) -> None:
         """CIR-ADAPT-COMMAND#command-unknown-word — prints `amber` → ⚪ + warning naming
         the word."""
         message = _plants_failure(_evaluate(_plants_command(alex_copy, "echo amber\n")))
         assert "amber" in message
 
+    @rule("CIR-ADAPT-COMMAND")
     def test_command_empty_stdout(self, alex_copy: AlexCopy) -> None:
         """CIR-ADAPT-COMMAND#command-empty-stdout — `""`, exit 0 → ⚪ + warning."""
         _plants_failure(_evaluate(_plants_command(alex_copy, "exit 0\n")))
 
+    @rule("CIR-ADAPT-COMMAND")
     def test_command_nonzero_exit_dominates(self, alex_copy: AlexCopy) -> None:
         """CIR-ADAPT-COMMAND#command-nonzero-exit-dominates — prints `red`, exits 1 →
         ⚪ + warning: the exit code wins over stdout (and a failure is never 🔴)."""
         message = _plants_failure(_evaluate(_plants_command(alex_copy, "echo red\nexit 1\n")))
         assert "1" in message
 
+    @rule("CIR-ADAPT-COMMAND")
     def test_command_stderr_not_on_the_page(self, alex_copy: AlexCopy) -> None:
         """CIR-ADAPT-COMMAND#command-stderr-not-on-the-page — a stack trace on stderr
         never reaches the warning, which stays a bounded summary."""
@@ -636,6 +679,7 @@ class TestAdaptCommand:
             assert leaked not in serialised
         assert len(message) <= adapters_module.WARNING_MAX_CHARS
 
+    @rule("CIR-ADAPT-COMMAND")
     def test_command_cannot_set_a_data_date(self, alex_copy: AlexCopy) -> None:
         """CIR-ADAPT-COMMAND#command-cannot-set-a-data-date — even a script that prints a
         date after its word gets no "last data" segment (⚖-R32 rules the first word only)."""
@@ -676,12 +720,14 @@ def _wait_dead(pid: int, within: float = 3.0) -> bool:
 class TestAdaptBudget:
     """CIR-ADAPT-BUDGET — per-item timeout, process group, total budget, environment."""
 
+    @rule("CIR-ADAPT-BUDGET")
     def test_budget_constants_are_the_ruling(self) -> None:
         """CIR-ADAPT-BUDGET#command-per-item-timeout — ⚖-R21: 30 s per item, 5 min per
         bake, fixed (the other tests shrink these, so pin the production values here)."""
         assert adapters_module.COMMAND_TIMEOUT_SECONDS == 30
         assert adapters_module.BAKE_BUDGET_SECONDS == 5 * 60
 
+    @rule("CIR-ADAPT-BUDGET")
     def test_command_per_item_timeout(self, alex_copy: AlexCopy,
                                       monkeypatch: pytest.MonkeyPatch) -> None:
         """CIR-ADAPT-BUDGET#command-per-item-timeout — a command sleeping past the per-item
@@ -694,7 +740,11 @@ class TestAdaptBudget:
         assert time.monotonic() - started < 10
         assert "timed out" in message
 
-    @pytest.mark.parametrize("ends", ["exits", "times-out"])
+    @rule("CIR-ADAPT-BUDGET")
+    @pytest.mark.parametrize("ends", [
+        pytest.param("exits", id="command exits, child lingers"),
+        pytest.param("times-out", id="command times out"),
+    ])
     def test_command_children_killed(self, alex_copy: AlexCopy, tmp_path: Path,
                                      monkeypatch: pytest.MonkeyPatch, ends: str) -> None:
         """CIR-ADAPT-BUDGET#command-children-killed — a child that would outlive its
@@ -710,6 +760,7 @@ class TestAdaptBudget:
         expected = "green" if ends == "exits" else "grey"
         assert _plants(artifact)["status"] == expected
 
+    @rule("CIR-ADAPT-BUDGET")
     def test_bake_total_budget(self, alex_copy: AlexCopy,
                                monkeypatch: pytest.MonkeyPatch) -> None:
         """CIR-ADAPT-BUDGET#bake-total-budget — many slow adapters: the bake ends within the
@@ -734,6 +785,7 @@ class TestAdaptBudget:
         # Adapter-free cells still resolve: manual lights are not budgeted work.
         assert _item(artifact, "wider", "friends")["status"] == "red"
 
+    @rule("CIR-ADAPT-BUDGET")
     def test_environment_not_inherited_wholesale(self, alex_copy: AlexCopy, tmp_path: Path,
                                                  monkeypatch: pytest.MonkeyPatch) -> None:
         """CIR-ADAPT-BUDGET#environment-not-inherited-wholesale — the bake's env holds a

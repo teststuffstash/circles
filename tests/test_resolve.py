@@ -32,6 +32,8 @@ from bake.resolve import (
     window_status,
 )
 
+from rules import rule
+
 FIXTURES = Path(__file__).resolve().parent.parent / "fixtures"
 ALEX_YAML = FIXTURES / "alex" / "circles.yaml"
 FIXTURE_REFERENCE_DATE = date(2026, 8, 3)
@@ -104,6 +106,7 @@ def _item_by_id(artifact: dict, ring_id: str, item_id: str) -> dict:
 class TestDataStatusResolution:
     """CIR-DATA-STATUS-RESOLUTION — the canonical table."""
 
+    @rule("CIR-DATA-STATUS-RESOLUTION")
     def test_no_adapter_declared(self) -> None:
         """CIR-DATA-STATUS-RESOLUTION#no-adapter-declared —
         self/exercise has no status: → ⚪ unmonitored, reason by-choice."""
@@ -112,6 +115,7 @@ class TestDataStatusResolution:
         assert item["status"] == "grey"
         assert item["grey_reason"] == "by-choice"
 
+    @rule("CIR-DATA-STATUS-RESOLUTION")
     def test_manual_green(self) -> None:
         """CIR-DATA-STATUS-RESOLUTION#manual-green — children/nova manual: green → 🟢."""
         artifact = _resolve_fixture()
@@ -119,6 +123,7 @@ class TestDataStatusResolution:
         assert item["status"] == "green"
         assert item["grey_reason"] is None
 
+    @rule("CIR-DATA-STATUS-RESOLUTION")
     def test_manual_yellow(self) -> None:
         """CIR-DATA-STATUS-RESOLUTION#manual-yellow — partner/date-night manual: yellow → 🟡."""
         artifact = _resolve_fixture()
@@ -126,6 +131,7 @@ class TestDataStatusResolution:
         assert item["status"] == "yellow"
         assert item["grey_reason"] is None
 
+    @rule("CIR-DATA-STATUS-RESOLUTION")
     def test_manual_red(self) -> None:
         """CIR-DATA-STATUS-RESOLUTION#manual-red — wider/friends manual: red → 🔴."""
         artifact = _resolve_fixture()
@@ -138,6 +144,7 @@ class TestDataStatusResolution:
     # newest entry lands at the row's age (CIR-PROC-TEST-FIXTURES): the committed note is
     # never rewritten.
 
+    @rule("CIR-DATA-STATUS-RESOLUTION")
     def test_freshness_inside_window(self) -> None:
         """CIR-DATA-STATUS-RESOLUTION#freshness-inside-window — newest date 3d old,
         yellow_after 7, red_after 30 → 🟢 (reference 2026-08-04 vs 2026-08-01)."""
@@ -147,6 +154,7 @@ class TestDataStatusResolution:
         assert sleep["grey_reason"] is None
         assert sleep["last_data_date"] == "2026-08-01"
 
+    @rule("CIR-DATA-STATUS-RESOLUTION")
     def test_freshness_stale(self) -> None:
         """CIR-DATA-STATUS-RESOLUTION#freshness-stale — newest date 10d old, yellow_after 7,
         red_after 30 → 🟡 (reference 2026-08-11 vs 2026-08-01)."""
@@ -156,6 +164,7 @@ class TestDataStatusResolution:
         assert sleep["grey_reason"] is None
         assert "attention · last data 2026-08-01" in sleep["detail_line"]
 
+    @rule("CIR-DATA-STATUS-RESOLUTION")
     def test_freshness_very_stale(self) -> None:
         """CIR-DATA-STATUS-RESOLUTION#freshness-very-stale — newest date 45d old,
         yellow_after 7, red_after 30 → 🔴 (reference 2026-09-15 vs 2026-08-01: 30 + 15)."""
@@ -165,6 +174,7 @@ class TestDataStatusResolution:
         assert sleep["grey_reason"] is None
         assert "act · last data 2026-08-01" in sleep["detail_line"]
 
+    @rule("CIR-DATA-STATUS-RESOLUTION")
     def test_freshness_source_missing(self, alex_copy: AlexCopy) -> None:
         """CIR-DATA-STATUS-RESOLUTION#freshness-source-missing — source: matches no file
         → ⚪ + build warning, reason by-failure."""
@@ -173,6 +183,7 @@ class TestDataStatusResolution:
         )
         assert "missing source" in _sleep_failure(artifact)
 
+    @rule("CIR-DATA-STATUS-RESOLUTION")
     def test_freshness_source_no_dates(self, alex_copy: AlexCopy) -> None:
         """CIR-DATA-STATUS-RESOLUTION#freshness-source-no-dates — source file exists
         (notes/empty-log.md), zero parseable dates → ⚪ + build warning."""
@@ -181,6 +192,7 @@ class TestDataStatusResolution:
         )
         assert "no dates found" in _sleep_failure(artifact)
 
+    @rule("CIR-DATA-STATUS-RESOLUTION")
     def test_freshness_all_dates_future(self) -> None:
         """CIR-DATA-STATUS-RESOLUTION#freshness-all-dates-future — every parseable date is
         after the reference date → ⚪ + build warning (⚖-R8). Reference 2026-07-29: the
@@ -188,6 +200,7 @@ class TestDataStatusResolution:
         artifact = _resolve_fixture(reference_date=date(2026, 7, 29), evaluate=True)
         assert "after the reference date" in _sleep_failure(artifact)
 
+    @rule("CIR-DATA-STATUS-RESOLUTION")
     def test_adapter_not_evaluated_this_phase(self) -> None:
         """CIR-DATA-STATUS-RESOLUTION#adapter-not-evaluated-this-phase —
         freshness/command items under P0 → ⚪ + warning, reason not-evaluated (⚖-R50)."""
@@ -223,6 +236,7 @@ class TestDataStatusResolution:
     #
     # The shared claim is the asymmetry the spec calls out: a bad *config* fails
     # the bake outright, rather than degrading to ⚪ the way a bad *command* does.
+    @rule("CIR-DATA-STATUS-RESOLUTION")
     @pytest.mark.parametrize(
         ("status_block", "message"),
         [
@@ -287,6 +301,7 @@ class TestDataStatusResolution:
 class TestDataGreyReason:
     """CIR-DATA-GREY-REASON — one grey light, three reasons."""
 
+    @rule("CIR-DATA-GREY-REASON")
     def test_unmonitored_by_choice(self) -> None:
         """CIR-DATA-GREY-REASON#unmonitored-by-choice —
         no status: block → reason by-choice."""
@@ -295,6 +310,7 @@ class TestDataGreyReason:
         assert item["status"] == "grey"
         assert item["grey_reason"] == "by-choice"
 
+    @rule("CIR-DATA-GREY-REASON")
     def test_unmonitored_not_evaluated(self) -> None:
         """CIR-DATA-GREY-REASON#unmonitored-not-evaluated —
         freshness: or command: under P0 → reason not-evaluated."""
@@ -315,6 +331,7 @@ class TestDataGreyReason:
 class TestDataFailureIsGrey:
     """CIR-DATA-FAILURE-IS-GREY — the failure algebra."""
 
+    @rule("CIR-DATA-FAILURE-IS-GREY")
     def test_failure_never_red(self) -> None:
         """CIR-DATA-FAILURE-IS-GREY#failure-never-red —
         adapter failure → ⚪, never 🔴."""
@@ -327,6 +344,7 @@ class TestDataFailureIsGrey:
                 else:
                     assert item["status"] in ("green", "yellow", "red")
 
+    @rule("CIR-DATA-FAILURE-IS-GREY")
     def test_failure_never_green(self) -> None:
         """CIR-DATA-FAILURE-IS-GREY#failure-never-green —
         adapter failure → ⚪, never 🟢."""
@@ -335,6 +353,7 @@ class TestDataFailureIsGrey:
         assert sleep["status"] == "grey"  # not green
 
 
+    @rule("CIR-DATA-FAILURE-IS-GREY")
     @pytest.mark.skipif(os.geteuid() == 0, reason="root reads mode-000 files")
     def test_unreadable_source_is_grey(self, alex_copy: AlexCopy) -> None:
         """CIR-DATA-FAILURE-IS-GREY#unreadable-source-is-grey — source exists, permission
@@ -350,6 +369,7 @@ class TestDataFailureIsGrey:
         assert "unreadable source" in message
         assert "notes/sleep-log.md" in message
 
+    @rule("CIR-DATA-FAILURE-IS-GREY")
     def test_warning_names_item(self, alex_copy: AlexCopy) -> None:
         """CIR-DATA-FAILURE-IS-GREY#warning-names-item — the `plants` command exits 3 →
         the warning identifies cell `wider/plants` and the exit code; the light is ⚪."""
@@ -370,6 +390,7 @@ class TestDataFailureIsGrey:
 class TestDataNoAggregation:
     """CIR-DATA-NO-AGGREGATION — no roll-up, ever."""
 
+    @rule("CIR-DATA-NO-AGGREGATION")
     def test_inner_red_outer_untouched(self) -> None:
         """CIR-DATA-NO-AGGREGATION#inner-red-outer-untouched —
         wider/friends is 🔴, other items keep their own resolved colours."""
@@ -381,6 +402,7 @@ class TestDataNoAggregation:
         nova = _item_by_id(artifact, "children", "nova")
         assert nova["status"] == "green"
 
+    @rule("CIR-DATA-NO-AGGREGATION")
     def test_centre_carries_no_status(self) -> None:
         """CIR-DATA-NO-AGGREGATION#centre-carries-no-status —
         the artifact has no centre/aggregate field."""
@@ -399,6 +421,7 @@ class TestDataNoAggregation:
 class TestDataResolutionTime:
     """CIR-DATA-RESOLUTION-TIME — statuses resolve at bake time only."""
 
+    @rule("CIR-DATA-RESOLUTION-TIME")
     def test_page_never_reevaluates(self) -> None:
         """CIR-DATA-RESOLUTION-TIME#page-never-reevaluates —
         statuses are frozen in the artifact."""
@@ -406,6 +429,7 @@ class TestDataResolutionTime:
         # Statuses are just data — no adapter code, no date math
         assert artifact["rings"][0]["items"][0]["status"] is not None
 
+    @rule("CIR-DATA-RESOLUTION-TIME")
     def test_p0_manual_roundtrip(self) -> None:
         """CIR-DATA-RESOLUTION-TIME#p0-manual-roundtrip —
         manual statuses pass through unchanged."""
@@ -415,6 +439,7 @@ class TestDataResolutionTime:
         assert _item_by_id(artifact, "partner", "date-night")["status"] == "yellow"
         assert _item_by_id(artifact, "wider", "friends")["status"] == "red"
 
+    @rule("CIR-DATA-RESOLUTION-TIME")
     def test_one_reference_date_per_bake(self) -> None:
         """CIR-DATA-RESOLUTION-TIME#one-reference-date-per-bake —
         all items age against the same reference date."""
@@ -429,6 +454,7 @@ class TestDataResolutionTime:
 class TestDataDetailLine:
     """CIR-DATA-DETAIL-LINE — what hover shows."""
 
+    @rule("CIR-DATA-DETAIL-LINE")
     def test_full_detail_line(self) -> None:
         """CIR-DATA-DETAIL-LINE#full-detail-line —
         guardrail + status word for a manual item."""
@@ -438,6 +464,7 @@ class TestDataDetailLine:
         assert "Protected evening, twice a month" in item["detail_line"]
         assert "attention" in item["detail_line"]  # display word for yellow
 
+    @rule("CIR-DATA-DETAIL-LINE")
     def test_no_guardrail(self) -> None:
         """CIR-DATA-DETAIL-LINE#no-guardrail —
         item without guardrail starts at the status."""
@@ -447,6 +474,7 @@ class TestDataDetailLine:
         assert item["guardrail"] is None
         assert item["detail_line"] == "ok"  # just the status word
 
+    @rule("CIR-DATA-DETAIL-LINE")
     def test_manual_item_has_no_data_date(self) -> None:
         """CIR-DATA-DETAIL-LINE#manual-item-has-no-data-date —
         manual items have no 'last data' segment."""
@@ -455,6 +483,7 @@ class TestDataDetailLine:
         assert item["last_data_date"] is None
         assert "last data" not in item["detail_line"]
 
+    @rule("CIR-DATA-DETAIL-LINE")
     def test_detail_line_is_plain_text(self) -> None:
         """CIR-DATA-DETAIL-LINE#detail-line-is-plain-text —
         detail lines contain no markup."""
@@ -472,6 +501,7 @@ class TestDataDetailLine:
 class TestBakeArtifact:
     """CIR-BAKE-ARTIFACT — what a bake produces."""
 
+    @rule("CIR-BAKE-ARTIFACT")
     def test_artifact_fixture_roundtrip(self) -> None:
         """CIR-BAKE-ARTIFACT#artifact-fixture-roundtrip —
         bake over fixtures/alex/circles.yaml produces correct structure."""
@@ -503,6 +533,7 @@ class TestBakeArtifact:
         assert exercise["note"] is None
         assert exercise["link"] is None
 
+    @rule("CIR-BAKE-ARTIFACT")
     def test_warnings_empty_array(self) -> None:
         """CIR-BAKE-ARTIFACT#warnings-empty-array —
         a fully healthy bake carries `warnings: []` — present, never omitted."""
@@ -525,6 +556,7 @@ class TestBakeArtifact:
 class TestBakeStatusValues:
     """CIR-BAKE-STATUS-VALUES — wire values are not display words."""
 
+    @rule("CIR-BAKE-STATUS-VALUES")
     def test_status_wire_vocabulary(self) -> None:
         """CIR-BAKE-STATUS-VALUES#status-wire-vocabulary —
         status is one of green|yellow|red|grey."""
@@ -534,6 +566,7 @@ class TestBakeStatusValues:
             for item in ring["items"]:
                 assert item["status"] in valid_statuses
 
+    @rule("CIR-BAKE-STATUS-VALUES")
     def test_status_never_emoji(self) -> None:
         """CIR-BAKE-STATUS-VALUES#status-never-emoji —
         no emoji in the artifact."""
@@ -544,6 +577,7 @@ class TestBakeStatusValues:
         assert "🔴" not in raw
         assert "⚪" not in raw
 
+    @rule("CIR-BAKE-STATUS-VALUES")
     def test_status_never_display_words(self) -> None:
         """CIR-BAKE-STATUS-VALUES#status-never-display-words —
         never 'ok'/'attention'/'act'/'unmonitored' in status field."""
@@ -560,6 +594,7 @@ class TestBakeStatusValues:
 class TestBakeVersion:
     """CIR-BAKE-VERSION — artifact versioning."""
 
+    @rule("CIR-BAKE-VERSION")
     def test_version_recognized(self) -> None:
         """CIR-BAKE-VERSION#version-recognized — version: 1."""
         artifact = _resolve_fixture()
@@ -588,12 +623,14 @@ class TestBakeGeneratedAt:
 class TestBakeStaleSelf:
     """CIR-BAKE-STALE-SELF — the page's own freshness."""
 
+    @rule("CIR-BAKE-STALE-SELF")
     def test_no_threshold_no_banner(self) -> None:
         """CIR-BAKE-STALE-SELF#no-threshold-no-banner —
         stale_after_hours is null at P0."""
         artifact = _resolve_fixture()
         assert artifact["stale_after_hours"] is None
 
+    @rule("CIR-BAKE-STALE-SELF")
     def test_stale_after_hours_flag(self, tmp_path: Path) -> None:
         """CIR-BAKE-STALE-SELF#no-threshold-no-banner — the bake writes `null` unless the
         nightly bake declares its cadence with --stale-after-hours N (P1), which lands as
@@ -623,6 +660,7 @@ class TestBakeStaleSelf:
 class TestBakeWarnings:
     """CIR-BAKE-WARNINGS — where build warnings surface."""
 
+    @rule("CIR-BAKE-WARNINGS")
     def test_warning_carries_cell_ref(self) -> None:
         """CIR-BAKE-WARNINGS#warning-carries-cell-ref —
         warning for plants carries wider/plants."""
@@ -631,6 +669,7 @@ class TestBakeWarnings:
         plant_warnings = [w for w in warnings if w["item"] == "wider/plants"]
         assert len(plant_warnings) >= 1
 
+    @rule("CIR-BAKE-WARNINGS")
     def test_config_level_warning_has_null_item(self) -> None:
         """CIR-BAKE-WARNINGS#config-level-warning-has-null-item —
         config-level warnings have null item."""
@@ -648,6 +687,7 @@ class TestBakeWarnings:
 class TestBakeDetailFields:
     """CIR-BAKE-DETAIL-FIELDS — structured fields and one composed line."""
 
+    @rule("CIR-BAKE-DETAIL-FIELDS")
     def test_detail_line_is_baked(self) -> None:
         """CIR-BAKE-DETAIL-FIELDS#detail-line-is-baked —
         detail_line is present on every item."""
@@ -658,6 +698,7 @@ class TestBakeDetailFields:
                 assert isinstance(item["detail_line"], str)
                 assert len(item["detail_line"]) > 0
 
+    @rule("CIR-BAKE-DETAIL-FIELDS")
     def test_structured_fields_also_present(self) -> None:
         """CIR-BAKE-DETAIL-FIELDS#structured-fields-also-present —
         guardrail, status, last_data_date, note, grey_reason are all present."""
@@ -678,6 +719,7 @@ class TestBakeDetailFields:
 class TestAdaptContract:
     """CIR-ADAPT-CONTRACT — one adapter, one answer."""
 
+    @rule("CIR-ADAPT-CONTRACT")
     def test_adapter_resolves_one_item(self) -> None:
         """CIR-ADAPT-CONTRACT#adapter-resolves-one-item —
         one `status:` block produces exactly one status."""
@@ -688,6 +730,7 @@ class TestAdaptContract:
                 if item.get("grey_reason") != "not-evaluated":
                     assert item["status"] in ("green", "yellow", "red", "grey")
 
+    @rule("CIR-ADAPT-CONTRACT")
     def test_adapter_never_reads_the_clock(self) -> None:
         """CIR-ADAPT-CONTRACT#adapter-never-reads-the-clock —
         adapter uses injected reference date, not the system clock."""
@@ -701,6 +744,7 @@ class TestAdaptContract:
         assert art1["reference_date"] == "2026-08-03"
         assert art2["reference_date"] == "2026-08-10"
 
+    @rule("CIR-ADAPT-CONTRACT")
     def test_adapter_never_writes(self, tmp_path: Path) -> None:
         """CIR-ADAPT-CONTRACT#adapter-never-writes —
         adapters do not write to the config dir; the bake owns all output."""
@@ -739,6 +783,7 @@ class TestAdaptContract:
         assert item["status"] == "grey"
         assert item["grey_reason"] == "not-evaluated"
 
+    @rule("CIR-ADAPT-CONTRACT")
     def test_adapter_unknown_name_is_config_error(self, tmp_path: Path) -> None:
         """CIR-ADAPT-CONTRACT#adapter-unknown-name —
         status: {prometheus: …} on a build without it → config error."""
@@ -755,6 +800,7 @@ class TestAdaptContract:
         with pytest.raises(ConfigError, match="unknown adapter"):
             load_config(path)
 
+    @rule("CIR-ADAPT-CONTRACT")
     def test_adapter_cannot_return_grey(self, tmp_path: Path) -> None:
         """CIR-ADAPT-CONTRACT#adapter-cannot-return-grey —
         ⚪ is not in an adapter's return vocabulary; it comes only from absence
@@ -808,6 +854,7 @@ class TestAdaptContract:
                         f"the absence or failure it came from"
                     )
 
+    @rule("CIR-ADAPT-CONTRACT")
     def test_adapter_failure_is_isolated(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """CIR-ADAPT-CONTRACT#adapter-failure-is-isolated —
         one failing adapter does not affect other items (at P0, adapters are
@@ -849,6 +896,7 @@ class TestAdaptContract:
 class TestAdaptReferenceDate:
     """CIR-ADAPT-REFERENCE-DATE — one clock per bake, injected."""
 
+    @rule("CIR-ADAPT-REFERENCE-DATE")
     def test_reference_date_shared(self) -> None:
         """CIR-ADAPT-REFERENCE-DATE#reference-date-shared —
         all items in one bake share the same reference date."""
@@ -860,6 +908,7 @@ class TestAdaptReferenceDate:
             for item in ring["items"]:
                 assert "reference_date" not in item
 
+    @rule("CIR-ADAPT-REFERENCE-DATE")
     def test_reference_date_injectable(self) -> None:
         """CIR-ADAPT-REFERENCE-DATE#reference-date-injectable —
         test supplies a fixed reference date, ages are deterministic."""
@@ -871,6 +920,7 @@ class TestAdaptReferenceDate:
         import json
         assert json.dumps(art1, sort_keys=True) == json.dumps(art2, sort_keys=True)
 
+    @rule("CIR-ADAPT-REFERENCE-DATE")
     def test_reference_date_crosses_midnight(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """CIR-ADAPT-REFERENCE-DATE#reference-date-crosses-midnight —
         a bake that starts at 23:59:59 and runs past midnight dates every item
@@ -932,6 +982,7 @@ class TestAdaptReferenceDate:
         assert later["rings"] == artifact["rings"]
         assert later["reference_date"] == artifact["reference_date"]
 
+    @rule("CIR-ADAPT-REFERENCE-DATE")
     def test_reference_date_fixture_pinned(self) -> None:
         """CIR-ADAPT-REFERENCE-DATE#reference-date-fixture-pinned —
         fixture bakes use injected 2026-08-03, never today."""
@@ -939,6 +990,7 @@ class TestAdaptReferenceDate:
         assert artifact["reference_date"] == "2026-08-03"
         assert artifact["generated_at"] == "2026-08-03T02:00:00Z"
 
+    @rule("CIR-ADAPT-REFERENCE-DATE")
     def test_reference_date_default_is_config_timezone(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """CIR-ADAPT-REFERENCE-DATE#reference-date-default-is-config-timezone —
         the config provides a timezone; the host's local zone must not leak."""
@@ -971,6 +1023,7 @@ class TestAdaptReferenceDate:
 class TestAdaptNoPageLogic:
     """CIR-ADAPT-NO-PAGE-LOGIC — the page is adapter-blind."""
 
+    @rule("CIR-ADAPT-NO-PAGE-LOGIC")
     def test_page_has_no_adapter_vocabulary(self) -> None:
         """CIR-ADAPT-NO-PAGE-LOGIC#page-has-no-adapter-vocabulary —
         the artifact never branches on which adapter produced a status."""
@@ -982,6 +1035,7 @@ class TestAdaptNoPageLogic:
                 assert "adapter_kind" not in item
                 assert "adapter_name" not in item
 
+    @rule("CIR-ADAPT-NO-PAGE-LOGIC")
     def test_new_adapter_changes_no_page_code(self) -> None:
         """CIR-ADAPT-NO-PAGE-LOGIC#new-adapter-changes-no-page-code —
         the artifact shape is fixed regardless of adapter kind."""
@@ -1021,6 +1075,7 @@ class TestBakeAtomicWrite:
         assert parsed["version"] == 1
         assert parsed["person"] == "Alex Example"
 
+    @rule("CIR-BAKE-ATOMIC-WRITE")
     def test_write_artifact_is_world_readable(self, tmp_path: Path) -> None:
         """CIR-BAKE-ATOMIC-WRITE#permissions-world-readable —
         data.json must be world-readable (mode 0o644) so non-root
@@ -1046,6 +1101,7 @@ class TestBakeAtomicWrite:
 class TestBakeDeterminism:
     """CIR-BAKE-DETERMINISM — same inputs, same output."""
 
+    @rule("CIR-BAKE-DETERMINISM")
     def test_two_bakes_agree(self, tmp_path: Path) -> None:
         """CIR-BAKE-DETERMINISM#two-bakes-agree —
         same config, same reference date → byte-identical except generated_at."""
@@ -1064,6 +1120,7 @@ class TestBakeDeterminism:
         # Byte-identical (same generated_at since we inject it)
         assert raw1 == raw2
 
+    @rule("CIR-BAKE-DETERMINISM")
     def test_ordering_is_stable(self) -> None:
         """CIR-BAKE-DETERMINISM#ordering-is-stable —
         rings and items in file order; warnings in item order."""
@@ -1074,6 +1131,7 @@ class TestBakeDeterminism:
         assert [i["id"] for i in artifact["rings"][0]["items"]] == ["sleep", "labs", "exercise"]
 
 
+    @rule("CIR-BAKE-DETERMINISM")
     def test_host_timezone_does_not_leak(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         """CIR-BAKE-DETERMINISM#host-timezone-does-not-leak — the evaluated bake under a
         non-UTC TZ is byte-identical to the UTC one; the config's timezone: governs."""
@@ -1102,6 +1160,7 @@ class TestBakeDeterminism:
 class TestBakeExposure:
     """CIR-BAKE-EXPOSURE — everything in the artifact is public."""
 
+    @rule("CIR-BAKE-EXPOSURE")
     def test_no_absolute_host_paths(self, alex_copy: AlexCopy) -> None:
         """CIR-BAKE-EXPOSURE#no-absolute-host-paths —
         warnings use config-relative paths only."""
@@ -1120,6 +1179,7 @@ class TestBakeExposure:
         assert str(config_path.parent) not in json.dumps(evaluated)
         assert "/home/" not in json.dumps(evaluated)
 
+    @rule("CIR-BAKE-EXPOSURE")
     def test_no_source_content_in_the_artifact(self) -> None:
         """CIR-BAKE-EXPOSURE#no-source-content-in-the-artifact — only the date is
         carried from a freshness source, never the surrounding text."""
@@ -1133,6 +1193,7 @@ class TestBakeExposure:
                 remainder = line.split("—", 1)[1].strip()
                 assert remainder not in serialised, f"{note}: {remainder!r} leaked"
 
+    @rule("CIR-BAKE-EXPOSURE")
     def test_command_stderr_not_passed_through(self, alex_copy: AlexCopy,
                                                monkeypatch: pytest.MonkeyPatch) -> None:
         """CIR-BAKE-EXPOSURE#command-stderr-not-passed-through — a command prints a stack
@@ -1149,7 +1210,11 @@ class TestBakeExposure:
         message = next(w["message"] for w in artifact["warnings"] if w["item"] == "wider/plants")
         assert len(message) <= adapters_module.WARNING_MAX_CHARS
 
-    @pytest.mark.parametrize("stream", ["stderr", "stdout-first-line"])
+    @rule("CIR-BAKE-EXPOSURE")
+    @pytest.mark.parametrize("stream", [
+        pytest.param("stderr", id="10 MB on stderr, command fails"),
+        pytest.param("stdout-first-line", id="10 MB as the status word"),
+    ])
     def test_warning_text_is_bounded(self, alex_copy: AlexCopy, stream: str) -> None:
         """CIR-BAKE-EXPOSURE#warning-text-is-bounded — a command prints 10 MB (to stderr,
         or as its unknown status word) → the warning is truncated at a fixed cap."""
@@ -1171,6 +1236,7 @@ class TestBakeExposure:
 class TestBakePageDoesNotResolve:
     """CIR-BAKE-PAGE-DOES-NOT-RESOLVE — the page renders, it never decides."""
 
+    @rule("CIR-BAKE-PAGE-DOES-NOT-RESOLVE")
     def test_page_contains_no_adapter_code(self) -> None:
         """CIR-BAKE-PAGE-DOES-NOT-RESOLVE#page-contains-no-adapter-code —
         the artifact is pure data, no code."""
@@ -1190,6 +1256,7 @@ class TestBakePageDoesNotResolve:
 class TestDataFreshnessWindow:
     """CIR-DATA-FRESHNESS-WINDOW — thresholds and boundaries (pure predicate only)."""
 
+    @rule("CIR-DATA-FRESHNESS-WINDOW")
     @pytest.mark.parametrize("age,yellow,red,expected", [
         pytest.param(6, 7, 30, "green", id="CIR-DATA-FRESHNESS-WINDOW#window-inside"),
         pytest.param(7, 7, 30, "green", id="CIR-DATA-FRESHNESS-WINDOW#window-at-yellow-boundary"),
@@ -1212,12 +1279,14 @@ class TestDataFreshnessWindow:
 class TestAdaptManual:
     """CIR-ADAPT-MANUAL — hand-set light."""
 
+    @rule("CIR-ADAPT-MANUAL")
     def test_manual_returns_declared_light(self) -> None:
         """CIR-ADAPT-MANUAL#manual-returns-declared-light —
         manual: green → 🟢."""
         artifact = _resolve_fixture()
         assert _item_by_id(artifact, "children", "nova")["status"] == "green"
 
+    @rule("CIR-ADAPT-MANUAL")
     def test_manual_has_no_data_date(self) -> None:
         """CIR-ADAPT-MANUAL#manual-has-no-data-date —
         manual items have no last_data_date."""
@@ -1225,6 +1294,7 @@ class TestAdaptManual:
         item = _item_by_id(artifact, "children", "nova")
         assert item["last_data_date"] is None
 
+    @rule("CIR-ADAPT-MANUAL")
     def test_manual_available_in_every_phase(self) -> None:
         """CIR-ADAPT-MANUAL#manual-available-in-every-phase —
         manual works at P0."""
@@ -1239,6 +1309,7 @@ class TestAdaptManual:
 class TestProcPhaseP0:
     """CIR-PROC-PHASE-P0 — hand-set statuses on the existing pipeline."""
 
+    @rule("CIR-PROC-PHASE-P0")
     def test_p0_manual_end_to_end(self) -> None:
         """CIR-PROC-PHASE-P0#p0-manual-end-to-end —
         fixture-style config with manual items resolves correctly."""
@@ -1248,6 +1319,7 @@ class TestProcPhaseP0:
         assert _item_by_id(artifact, "partner", "date-night")["status"] == "yellow"
         assert _item_by_id(artifact, "wider", "friends")["status"] == "red"
 
+    @rule("CIR-PROC-PHASE-P0")
     def test_p0_unevaluated_adapters_are_grey(self) -> None:
         """CIR-PROC-PHASE-P0#p0-unevaluated-adapters-are-grey —
         freshness and command items → ⚪ + warning, grey_reason: not-evaluated."""
@@ -1270,6 +1342,7 @@ class TestProcPhaseP0:
         warning_msgs = [w["message"] for w in warnings if w["item"] in ("self/sleep", "self/labs", "wider/plants")]
         assert all("not evaluated" in m for m in warning_msgs)
 
+    @rule("CIR-PROC-PHASE-P0")
     def test_p0_config_stays_valid(self) -> None:
         """CIR-PROC-PHASE-P0#p0-config-stays-valid —
         the fixture config validates at P0."""
@@ -1285,6 +1358,7 @@ class TestProcPhaseP0:
 class TestProcBakeOnePath:
     """CIR-PROC-BAKE-ONE-PATH — one bake, several triggers."""
 
+    @rule("CIR-PROC-BAKE-ONE-PATH")
     def test_bake_same_code_both_triggers(self) -> None:
         """CIR-PROC-BAKE-ONE-PATH#bake-same-code-both-triggers —
         resolve() is the single resolution path."""
@@ -1364,6 +1438,7 @@ class TestBakeDeterminismExact:
 class TestBakeStaleAfterHours:
     """stale_after_hours is null at P0."""
 
+    @rule("CIR-BAKE-STALE-SELF")
     def test_stale_after_hours_null(self) -> None:
         """CIR-BAKE-STALE-SELF#no-threshold-no-banner — stale_after_hours ships null at P0."""
         artifact = _resolve_fixture()
@@ -1419,6 +1494,7 @@ class TestBakeArtifactSchema:
 class TestAdaptBudgetExitCode:
     """CIR-ADAPT-BUDGET — failed adapters publish with warnings; only config errors fail."""
 
+    @rule("CIR-ADAPT-BUDGET")
     def test_bake_exit_code_only_for_config_errors(self, alex_copy: AlexCopy,
                                                    tmp_path: Path) -> None:
         """CIR-ADAPT-BUDGET#bake-exit-code-only-for-config-errors — some adapters failed,

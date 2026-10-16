@@ -28,6 +28,7 @@
       "validate-chart": ["./scripts/validate-chart.sh"],
       "build-image":    ["./scripts/build-image.sh"],
       "package-chart":  ["./scripts/package-chart.sh"],
+      "evidence":       ["./scripts/evidence.sh \"$@\""],
       "specs-build":    ["./scripts/specs-build.sh"],
       "specs-publish":  ["./scripts/specs-publish.sh"]
     }
