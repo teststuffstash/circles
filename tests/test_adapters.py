@@ -245,6 +245,22 @@ class TestDataSourcePathEvaluation:
         verdict("self/sleep warning", message, "unreadable source: notes/sleep-log.md", op="contains")
 
 
+    @rule("CIR-DATA-SOURCE-PATH")
+    def test_source_glob_symlink_loop(self, alex_copy: AlexCopy) -> None:
+        """CIR-DATA-SOURCE-PATH#source-glob-symlink-loop — notes/l* matching notes/labs.md and a
+        self-looping symlink notes/loop → the loop is skipped; labs is judged on its own dates."""
+        def labs_glob(c):
+            item(c, "self/labs")["status"]["freshness"].update(source="notes/l*")
+        config = given_alex(alex_copy, "self/labs source: notes/l* (+ notes/loop → notes/loop)",
+                            labs_glob, world=lambda d: (d / "notes" / "loop").symlink_to("loop"))
+        run = when_bake(config, "--evaluate")
+        labs = item_of(run.data, "self/labs")
+        # notes/labs.md newest 2026-01-15, age 200 at 2026-08-03 > red_after 190 → 🔴.
+        verdict("self/labs last_data_date", labs["last_data_date"], LABS_NEWEST)
+        verdict("self/labs status", labs["status"], "red")
+        verdict("warnings naming self/labs", warnings_for(run, "self/labs"), [])
+
+
 # ===========================================================================
 # CIR-DATA-DATE-PARSE — which date tokens count
 # ===========================================================================

@@ -581,6 +581,20 @@ class TestDataSourcePath:
                             lambda c: item(c, "self/sleep")["status"]["freshness"].update(source="sub/../../etc/hosts"))
         then_config_error(when_bake(config), "escape")
 
+    @rule("CIR-DATA-SOURCE-PATH")
+    def test_source_symlink_loop(self, alex_copy, tmp_path) -> None:
+        """CIR-DATA-SOURCE-PATH#source-symlink-loop — source: notes/loop where notes/loop is a
+        symlink to itself → config error naming the item, no host path in the message."""
+        config = given_alex(alex_copy, "self/sleep source: notes/loop (notes/loop → notes/loop)",
+                            lambda c: item(c, "self/sleep")["status"]["freshness"].update(source="notes/loop"),
+                            world=lambda d: (d / "notes" / "loop").symlink_to("loop"))
+        run = when_bake(config)
+        then_config_error(run, "self/sleep")
+        verdict("stderr", run.stderr, "notes/loop", op="contains")
+        # CIR-BAKE-EXPOSURE#no-absolute-host-paths: the world copy lives under tmp_path.
+        verdict("stderr names the tmp root (a host path)", str(tmp_path) in run.stderr, False)
+        verdict("stderr carries a traceback", "Traceback" in run.stderr, False)
+
 
 # ===========================================================================
 # CIR-ADAPT-COMMAND — config-error rows only (on alex's wider/plants command)

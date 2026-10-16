@@ -52,7 +52,7 @@ annotated there (`x-requirements`) or named in its `x-not-schema-shaped` map.
     }
   ],
   "warnings": [
-    { "item": "wider/plants", "message": "command exited 1" }
+    { "item": "wider/plants", "message": "command exited with code 1" }
   ]
 }
 ```

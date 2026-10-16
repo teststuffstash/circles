@@ -27,6 +27,8 @@ adapter reads all matched files and takes the newest date across the union.
 | source-non-literal-parent-traversal | `source: sub/../../etc/hosts` | config error, bake fails — does not start with `..` but normalizes to an escape |
 | source-absolute-path | `source: /etc/hosts` | config error, bake fails — the absolute-path message, decided syntactically before any resolution (⚖-R52) |
 | source-unreadable | file exists, permission denied | ⚪ + build warning |
+| source-symlink-loop | `source: notes/loop` where `notes/loop` is a symlink to itself | config error, bake fails — the message names the item and the config-relative `source:`, never a host path ([`CIR-BAKE-EXPOSURE`](data-json.md)) |
+| source-glob-symlink-loop | `source: notes/l*` matches `notes/labs.md` and a self-looping symlink `notes/loop` | the loop is no file and is skipped; the remaining matches are judged as the union (🔴 for alex's labs dates) |
 
 The two escape rows overlap — an absolute path is also outside the config directory. Per
 ⚖-R52 ([`CIR-DATA-IDENTITY`](circles-yaml.md)) the more specific check runs first:

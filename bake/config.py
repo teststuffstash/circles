@@ -164,7 +164,15 @@ def _validate_freshness(raw: dict, path: str, config_dir: Path) -> None:
     # Normalize and check containment — catches non-literal escapes like
     # 'sub/../../etc/hosts' that don't start with '..' but resolve outside
     # the config directory (CIR-DATA-SOURCE-PATH).
-    resolved = (config_dir / source).resolve()
+    # A symlink loop cannot be resolved at all: RuntimeError on Python ≤ 3.12, OSError (ELOOP)
+    # on newer ones. It is a config error naming the item and the config-relative source only —
+    # the exception text carries host paths (CIR-DATA-SOURCE-PATH#source-symlink-loop,
+    # CIR-BAKE-EXPOSURE#no-absolute-host-paths).
+    try:
+        resolved = (config_dir / source).resolve()
+    except (RuntimeError, OSError):
+        raise ConfigError(f"{path}.status.freshness.source: '{source}' is a symlink loop — "
+                          f"it resolves to no file") from None
     try:
         resolved.relative_to(config_dir)
     except ValueError:
