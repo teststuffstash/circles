@@ -3,8 +3,8 @@
 # This module owns the resolution logic: every item's status, grey_reason, detail_line,
 # and the artifact envelope. It does NOT read files, run commands, or touch the clock —
 # those are adapter concerns (bake/adapters.py), called from here only under
-# `evaluate=True` (the P1 nightly bake, issue #33). Command execution lands in issue #33
-# slice B; until then `command:` resolves not-evaluated in every build.
+# `evaluate=True` (the P1 nightly bake, issue #33): freshness: and command: adapters run,
+# all of them inside one total time budget (CIR-ADAPT-BUDGET#bake-total-budget, owned here).
 #
 # Requirements owned:
 #   CIR-ADAPT-CONTRACT, CIR-ADAPT-REFERENCE-DATE, CIR-ADAPT-MANUAL, CIR-ADAPT-NO-PAGE-LOGIC
@@ -13,17 +13,20 @@
 #   CIR-DATA-DETAIL-LINE (⚖-R51), CIR-DATA-FRESHNESS-WINDOW (predicate + wiring)
 #   CIR-BAKE-ARTIFACT, -STATUS-VALUES, -VERSION, -GENERATED-AT, -WARNINGS,
 #   -DETAIL-FIELDS, -DETERMINISM, -EXPOSURE, -PAGE-DOES-NOT-RESOLVE
-#   CIR-BAKE-STALE-SELF (stale_after_hours: null at P0)
+#   CIR-BAKE-STALE-SELF (stale_after_hours: null at P0, the bake's cadence at P1),
+#   CIR-ADAPT-BUDGET#bake-total-budget
 #   CIR-PROC-BAKE-ONE-PATH, CIR-PROC-PHASE-P0
 
 from __future__ import annotations
 
+import time
 from dataclasses import dataclass
 from datetime import date, datetime, timezone
 from pathlib import Path
 from typing import Literal
 
-from bake.adapters import AdapterResult, evaluate_freshness
+import bake.adapters as adapters
+from bake.adapters import AdapterResult, evaluate_command, evaluate_freshness
 from bake.config import Config, Item, Ring
 
 # ---------------------------------------------------------------------------
@@ -110,8 +113,7 @@ def _resolve_not_evaluated() -> tuple[Status, GreyReason, str]:
 
     Per CIR-PROC-PHASE-P0#p0-unevaluated-adapters-are-grey and ⚖-R50:
     the adapter is not evaluated in this build → ⚪ with grey_reason: not-evaluated.
-    Reached for freshness: and command: without `evaluate`, and for command: even
-    with it — command execution lands in issue #33 slice B.
+    Reached for freshness: and command: without `evaluate`.
     """
     return "grey", "not-evaluated", "adapter not evaluated in this build"
 
@@ -123,16 +125,34 @@ def _run_adapter(
     config_dir: Path,
     reference_date: date,
     tz_name: str,
+    deadline: float | None = None,
 ) -> AdapterResult:
     """Call the adapter for *kind*, fencing any unexpected exception into a failure.
 
     CIR-ADAPT-CONTRACT#adapter-failure-is-isolated: one adapter raising must not take
     the bake down. The exception's text is NOT forwarded — it may carry host paths
     (CIR-BAKE-EXPOSURE#no-absolute-host-paths); only its class name is.
+
+    *deadline* (a time.monotonic() instant) is the total bake budget
+    (CIR-ADAPT-BUDGET#bake-total-budget): past it no adapter starts, and a command's
+    per-item timeout is cut to whatever budget remains.
     """
+    budget_note = (
+        f"bake time budget ({adapters.BAKE_BUDGET_SECONDS:g} s) exhausted before this "
+        f"item resolved"
+    )
     try:
+        remaining = None if deadline is None else deadline - time.monotonic()
+        if remaining is not None and remaining <= 0:
+            return AdapterResult.failed(budget_note)
         if kind == "freshness":
             return evaluate_freshness(raw, config_dir, reference_date, tz_name)
+        if kind == "command":
+            timeout = adapters.COMMAND_TIMEOUT_SECONDS
+            if remaining is not None and remaining < timeout:
+                return evaluate_command(raw, config_dir, tz_name,
+                                        timeout=remaining, timeout_reason=budget_note)
+            return evaluate_command(raw, config_dir, tz_name, timeout=timeout)
         raise ValueError(f"no evaluator for adapter kind {kind!r}")
     except Exception as e:  # noqa: BLE001 — the isolation boundary
         return AdapterResult.failed(f"adapter raised {type(e).__name__}")
@@ -205,6 +225,7 @@ def _resolve_item(
     reference_date: date,
     tz_name: str,
     evaluate: bool,
+    deadline: float | None = None,
 ) -> tuple[ResolvedItem, ArtifactWarning | None]:
     """Resolve a single item to its artifact entry.
 
@@ -214,7 +235,8 @@ def _resolve_item(
         config_dir: The root every adapter source resolves under.
         reference_date: The one injected date every adapter ages against.
         tz_name: The config's timezone (IANA name).
-        evaluate: Run the freshness adapter (P1). False keeps the P0 behaviour.
+        evaluate: Run the freshness and command adapters (P1). False keeps the P0 behaviour.
+        deadline: The total bake budget's end (time.monotonic()), under `evaluate`.
 
     Returns (resolved_item, optional_warning).
     """
@@ -231,19 +253,22 @@ def _resolve_item(
     elif item.adapter.kind == "manual":
         # Manual adapter → declared status (CIR-ADAPT-MANUAL)
         status = _resolve_manual(item.adapter.raw)
-    elif item.adapter.kind == "freshness" and evaluate:
-        # P1: the freshness adapter answers, or fails into ⚪ by-failure
-        # (CIR-ADAPT-FRESHNESS, CIR-DATA-FAILURE-IS-GREY)
+    elif item.adapter.kind in ("freshness", "command") and evaluate:
+        # P1: the adapter answers, or fails into ⚪ by-failure
+        # (CIR-ADAPT-FRESHNESS, CIR-ADAPT-COMMAND, CIR-DATA-FAILURE-IS-GREY)
         result = _run_adapter(
-            "freshness", item.adapter.raw,
+            item.adapter.kind, item.adapter.raw,
             config_dir=config_dir, reference_date=reference_date, tz_name=tz_name,
+            deadline=deadline,
         )
         if result.failure is not None:
             status, grey_reason, failure_message = "grey", "by-failure", result.failure
             warning = ArtifactWarning(item=ref, message=result.failure)
         else:
             status = result.status  # type: ignore[assignment]  # never grey (AdapterResult)
-            last_data_date = result.data_date.isoformat()  # type: ignore[union-attr]
+            # A command states no data date (⚖-R32) — no "last data" segment.
+            if result.data_date is not None:
+                last_data_date = result.data_date.isoformat()  # type: ignore[union-attr]
             if result.note:
                 warning = ArtifactWarning(item=ref, message=result.note)
     elif item.adapter.kind in ("freshness", "command"):
@@ -300,6 +325,7 @@ def resolve(
     reference_date: date,
     generated_at: datetime,
     evaluate: bool = False,
+    stale_after_hours: int | None = None,
 ) -> dict:
     """Return the CIR-BAKE-ARTIFACT dict, exactly as serialised to data.json.
 
@@ -310,14 +336,17 @@ def resolve(
         generated_at: The UTC timestamp of the bake run.
         evaluate: False (the default, the image-build bake) leaves freshness: and
             command: items ⚪ not-evaluated. True (the nightly bake, issue #33)
-            evaluates freshness: adapters; command execution lands in issue #33 slice B,
-            so command: items stay not-evaluated either way.
+            evaluates both, inside one total time budget (CIR-ADAPT-BUDGET).
+        stale_after_hours: The cadence the page banners past (CIR-BAKE-STALE-SELF);
+            None (the default, P0) ships `null` — no cadence, no banner.
 
     Returns:
         A dict matching the CIR-BAKE-ARTIFACT schema, ready for JSON serialisation.
     """
     resolved_rings: list[dict] = []
     all_warnings: list[dict] = []
+    # One budget for the whole bake, started when evaluation starts (⚖-R21).
+    deadline = time.monotonic() + adapters.BAKE_BUDGET_SECONDS if evaluate else None
 
     for ring in config.rings:
         resolved_items: list[dict] = []
@@ -328,6 +357,7 @@ def resolve(
                 reference_date=reference_date,
                 tz_name=config.timezone,
                 evaluate=evaluate,
+                deadline=deadline,
             )
             if warning is not None:
                 all_warnings.append({"item": warning.item, "message": warning.message})
@@ -366,7 +396,8 @@ def resolve(
         "generated_at": generated_at.strftime("%Y-%m-%dT%H:%M:%SZ"),
         "reference_date": reference_date.isoformat(),
         "timezone": config.timezone,
-        "stale_after_hours": None,  # P0: no cadence exists (CIR-BAKE-STALE-SELF)
+        # null at P0: no cadence exists; the nightly bake states its own (CIR-BAKE-STALE-SELF)
+        "stale_after_hours": stale_after_hours,
         "rings": resolved_rings,
         "warnings": all_warnings,
     }

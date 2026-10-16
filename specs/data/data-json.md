@@ -361,14 +361,16 @@ anything the UI merely does not display**.
 | no-source-content-in-the-artifact | freshness source with private notes | only the date is carried, never the surrounding text |
 
 <details class="evidence-block">
-<summary>Evidence: 2 test case(s) — alex</summary>
+<summary>Evidence: 4 test case(s) — alex</summary>
 
 **Requirement:** CIR-BAKE-EXPOSURE — **World:** alex
 
 | Case ID | Status | Detail |
 |---------|--------|--------|
+| `command-stderr-not-passed-through` | PASS | — |
 | `no-absolute-host-paths` | PASS | — |
 | `no-source-content-in-the-artifact` | PASS | — |
+| `warning-text-is-bounded` | PASS | — |
 
 [View full report](../../specs-site/evidence)
 

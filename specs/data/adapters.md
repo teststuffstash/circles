@@ -182,15 +182,26 @@ compatible extension** — (b) is a superset of (a) and needs no config change, 
 the escape hatch stop being a one-line shell script.
 
 <details class="evidence-block">
-<summary>Evidence: 3 test case(s) — alex</summary>
+<summary>Evidence: 14 test case(s) — alex</summary>
 
 **Requirement:** CIR-ADAPT-COMMAND — **World:** alex
 
 | Case ID | Status | Detail |
 |---------|--------|--------|
 | `command-argv-array-required` | PASS | — |
+| `command-cannot-set-a-data-date` | PASS | — |
+| `command-cwd-is-config-dir` | PASS | — |
+| `command-empty-stdout` | PASS | — |
 | `command-executable-bit-at-validation` | PASS | — |
 | `command-executable-exists-at-validation` | PASS | — |
+| `command-extra-output-ignored` | PASS | — |
+| `command-first-non-empty-line-wins` | PASS | — |
+| `command-nonzero-exit-dominates` | PASS | — |
+| `command-not-shell-interpreted` | PASS | — |
+| `command-prints-yellow` | PASS | — |
+| `command-stderr-not-on-the-page` | PASS | — |
+| `command-stdout-trimmed-and-folded` | PASS | — |
+| `command-unknown-word` | PASS | — |
 
 [View full report](../../specs-site/evidence)
 
@@ -218,7 +229,22 @@ addition when something real needs it; adding the knob before anyone asks violat
 anticipate-don't-overreach. No timeout at all is rejected outright: one wedged script must not
 silence the whole page's nightly refresh.
 
-_Evidence: none yet — unverified._
+<details class="evidence-block">
+<summary>Evidence: 5 test case(s) — alex</summary>
+
+**Requirement:** CIR-ADAPT-BUDGET — **World:** alex
+
+| Case ID | Status | Detail |
+|---------|--------|--------|
+| `bake-exit-code-only-for-config-errors` | PASS | — |
+| `bake-total-budget` | PASS | — |
+| `command-children-killed` | PASS | — |
+| `command-per-item-timeout` | PASS | — |
+| `environment-not-inherited-wholesale` | PASS | — |
+
+[View full report](../../specs-site/evidence)
+
+</details>
 
 ## CIR-ADAPT-NO-PAGE-LOGIC — the page is adapter-blind
 

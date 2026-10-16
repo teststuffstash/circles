@@ -127,7 +127,7 @@ most attractive dangerous-green there is: the page looks healthy for weeks while
 rots. Yesterday's answer is available in yesterday's artifact; it is not a status today.
 
 <details class="evidence-block">
-<summary>Evidence: 3 test case(s) — alex</summary>
+<summary>Evidence: 4 test case(s) — alex</summary>
 
 **Requirement:** CIR-DATA-FAILURE-IS-GREY — **World:** alex
 
@@ -136,6 +136,7 @@ rots. Yesterday's answer is available in yesterday's artifact; it is not a statu
 | `failure-never-green` | PASS | — |
 | `failure-never-red` | PASS | — |
 | `unreadable-source-is-grey` | PASS | — |
+| `warning-names-item` | PASS | — |
 
 [View full report](../../specs-site/evidence)
 
