@@ -7,18 +7,19 @@
 #     EVIDENCE#render-requirements-state-their-path) — the in-process tests below that used to
 #     claim those rows are unlabelled unit guards now, or were deleted where the browser case
 #     carries the same assertion;
-#   - the CIR-RENDER-* tests still labelled here (capacity, min-arc, arc-share, partition,
-#     thickness, renderer, boot-failure, touch, budget growth) are UNIT_ONLY pending their
-#     browser case — the next round of circles#103 step 2.
+#   - CIR-RENDER-ASSET-BUDGET#budget-growth-is-linear is proven HERE too: page size is the
+#     bake's artifact, measured at its CLI boundary across item counts;
+#   - CIR-RENDER-TOUCH#touch-target-size stays labelled here, UNIT_ONLY: the spec states no
+#     minimum target size, so there is no browser measurement to compare against yet.
 
 from __future__ import annotations
 
 import json
-import math
 import re
 from datetime import date, datetime, timezone
 from pathlib import Path
 
+import allure
 import pytest
 import yaml
 
@@ -26,7 +27,7 @@ from bake.config import load_config
 from bake.render import add_capacity_warnings, render_page
 from bake.resolve import resolve
 
-from evidence_helpers import given_alex, verdict, when_bake
+from evidence_helpers import given_alex, given_prior_bake, verdict, when_bake
 from rules import rule
 
 FIXTURES = Path(__file__).resolve().parent.parent / "fixtures"
@@ -39,38 +40,6 @@ FIXTURE_GENERATED_AT = datetime(2026, 8, 3, 2, 0, 0, tzinfo=timezone.utc)
 # ===========================================================================
 # Helpers
 # ===========================================================================
-
-def _point_to_angle(x: float, y: float, cx: float = 400.0, cy: float = 400.0) -> float:
-    """Convert SVG (x, y) coordinates to a clockwise-from-12-o'clock angle in degrees.
-
-    In SVG coordinates (y-down), the angle from centre is atan2(dx, -dy)
-    where dx, dy are from centre.  The centre of the sunburst viewBox is
-    (cx, cy) = (400, 400) by default.
-    """
-    dx = x - cx
-    dy = cy - y  # flip y (SVG y-down → Cartesian y-up)
-    return math.degrees(math.atan2(dx, dy)) % 360
-
-
-def _arc_sweep_degrees(path_d: str, cx: float = 400.0, cy: float = 400.0) -> float:
-    """Compute the angular sweep of a non-full-circle SVG arc path.
-
-    Each cell arc is a single sub-path: M start → A outer → L → A inner → Z.
-    The sweep is the clockwise angle from the M point to the first A endpoint.
-    """
-    m_match = re.match(r'M\s+([\d.-]+)\s+([\d.-]+)', path_d)
-    assert m_match is not None, f"Could not parse M command in: {path_d}"
-    x0, y0 = float(m_match.group(1)), float(m_match.group(2))
-    a_endpoints = re.findall(
-        r'A\s+[\d.]+\s+[\d.]+\s+\d+\s+\d+\s+\d+\s+([\d.-]+)\s+([\d.-]+)',
-        path_d,
-    )
-    assert len(a_endpoints) >= 1, f"Could not find A command in: {path_d}"
-    outer_end_x, outer_end_y = map(float, a_endpoints[0])
-    start_angle = _point_to_angle(x0, y0, cx, cy)
-    end_angle = _point_to_angle(outer_end_x, outer_end_y, cx, cy)
-    return (end_angle - start_angle) % 360
-
 
 def _resolve_fixture() -> dict:
     """Load the fixture config and resolve it."""
@@ -269,18 +238,59 @@ class TestRenderNoEgressGuard:
 # CIR-RENDER-ASSET-BUDGET — small enough to be one file
 # ===========================================================================
 
+def _grow(config: dict, total: int) -> None:
+    """Add `manual: green` items "Extra <n>" round the rings (inside-out, skipping a ring at the
+    envelope's 8) until the page holds ``total`` items — no ring past CIR-RENDER-CAPACITY's
+    envelope, so no capacity warning joins the page; an extra in a ring that declares shares
+    (children: 0.5) declares 0.5 too, so no mixed-shares warning joins either."""
+    rings = config["rings"]
+    n, k = sum(len(r["items"]) for r in rings), 0
+    while n < total:
+        ring = rings[k % len(rings)]
+        k += 1
+        if len(ring["items"]) >= 8:
+            continue
+        extra = {"id": f"extra-{n + 1}", "label": f"Extra {n + 1}", "status": {"manual": "green"}}
+        if any("share" in i for i in ring["items"]):
+            extra["share"] = 0.5
+        ring["items"].append(extra)
+        n += 1
+
+
 class TestRenderAssetBudget:
     """CIR-RENDER-ASSET-BUDGET — #budget-built-page-is-small is the browser's
-    (tests/browser/test_render_rows.py); #budget-growth-is-linear is UNIT_ONLY pending."""
+    (tests/browser/test_render_rows.py); #budget-growth-is-linear is measured here, on the page
+    the bake writes."""
 
     @rule("CIR-RENDER-ASSET-BUDGET")
-    def test_budget_growth_is_linear(self) -> None:
-        """CIR-RENDER-ASSET-BUDGET#budget-growth-is-linear —
-        growth is linear in items, not in libraries."""
-        html = _render_fixture()
-        size = len(html.encode("utf-8"))
-        # For the fixture (8 items), should be well under 100 KB
-        assert size < 100_000, f"index.html is {size} bytes for 8 items"
+    def test_budget_growth_is_linear(self, alex_copy, tmp_path: Path) -> None:
+        """CIR-RENDER-ASSET-BUDGET#budget-growth-is-linear — 9 → 18 items: growth is linear in
+        items, not in libraries.
+
+        Linear in items = every item costs the page the same bytes, whatever the count: pages at
+        9, 18 and 27 items (equal steps of 9) grow by equal amounts. The criterion: the 18 → 27
+        step is within 10% of the 9 → 18 step — the only per-item variation is the digits of
+        coordinates and ids ("extra-9" vs "extra-10"); a per-page cost that grew with the item
+        count (anything not linear) breaks it. Rings stay inside the envelope, so no warning
+        text joins one page and not the other."""
+        config = given_alex(alex_copy, "items added round the rings to 18 in total (Extra <n>, manual: green)",
+                            lambda c: _grow(c, 18))
+        sizes = {}
+        for total in (9, 27):
+            data = yaml.safe_load((FIXTURES / "alex" / "circles.yaml").read_text(encoding="utf-8"))
+            _grow(data, total)
+            other = config.parent / f"circles-{total}.yaml"
+            # (the derived config is not attached: the prior bake's data.json, attached, shows it)
+            with allure.step(f"Given: alex/circles-{total}.yaml — items added round the rings to {total} in total"):
+                other.write_text(yaml.dump(data, allow_unicode=True, sort_keys=False), encoding="utf-8")
+            given_prior_bake(tmp_path, other, why=f"the {total}-item page")
+            sizes[total] = (tmp_path / "out" / "index.html").stat().st_size
+        run = when_bake(config)
+        sizes[18] = (run.out_dir / "index.html").stat().st_size
+        step_1, step_2 = sizes[18] - sizes[9], sizes[27] - sizes[18]
+        verdict("exit code", run.exit_code, 0)
+        verdict(f"index.html bytes at 9 / 18 / 27 items: {sizes[9]} / {sizes[18]} / {sizes[27]} — "
+                f"|step 18→27 − step 9→18| (step 9→18 = {step_1})", abs(step_2 - step_1), round(0.1 * step_1), op="<=")
 
 
 # ===========================================================================
@@ -363,334 +373,6 @@ class TestRenderClick:
 
 
 # ===========================================================================
-# CIR-RENDER-CAPACITY — how much the page holds
-# ===========================================================================
-
-class TestRenderCapacity:
-    """CIR-RENDER-CAPACITY — how much the page holds."""
-
-    @rule("CIR-RENDER-CAPACITY")
-    def test_capacity_inside_envelope(self) -> None:
-        """CIR-RENDER-CAPACITY#capacity-inside-envelope —
-        the fixture (4 rings, ≤3 items/ring) renders without density warning."""
-        html = _render_fixture()
-        # No density warning in the output
-        assert "density" not in html.lower()
-        assert "capacity" not in html.lower()
-
-    @rule("CIR-RENDER-CAPACITY")
-    def test_capacity_minimum_page(self) -> None:
-        """CIR-RENDER-CAPACITY#capacity-minimum-page —
-        1 ring, 1 item renders as a full-circle band."""
-        import yaml
-        import tempfile
-
-        minimal = {
-            "person": "Test",
-            "rings": [{
-                "id": "a", "label": "A",
-                "items": [{"id": "x", "label": "X", "status": {"manual": "green"}}],
-            }],
-        }
-        with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False) as f:
-            yaml.dump(minimal, f)
-            tmp_path = Path(f.name)
-
-        try:
-            config = load_config(tmp_path)
-            artifact = resolve(config, reference_date=FIXTURE_REFERENCE_DATE, generated_at=FIXTURE_GENERATED_AT)
-            artifact = add_capacity_warnings(artifact)
-            html = render_page(artifact)
-            assert "<svg" in html
-            assert "<path" in html
-        finally:
-            tmp_path.unlink()
-
-    @rule("CIR-RENDER-CAPACITY")
-    def test_capacity_at_limit(self) -> None:
-        """CIR-RENDER-CAPACITY#capacity-at-limit —
-        6 rings, 8 items in one ring renders legibly; no warning."""
-        import yaml
-        import tempfile
-
-        rings = []
-        for i in range(6):
-            items = []
-            for j in range(8 if i == 0 else 1):
-                items.append({
-                    "id": f"item-{i}-{j}",
-                    "label": f"Item {i}.{j}",
-                    "status": {"manual": "green"},
-                })
-            rings.append({"id": f"ring-{i}", "label": f"Ring {i}", "items": items})
-
-        config_data = {"person": "Test", "rings": rings}
-        with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False) as f:
-            yaml.dump(config_data, f)
-            tmp_path = Path(f.name)
-
-        try:
-            config = load_config(tmp_path)
-            artifact = resolve(config, reference_date=FIXTURE_REFERENCE_DATE, generated_at=FIXTURE_GENERATED_AT)
-            artifact = add_capacity_warnings(artifact)
-            html = render_page(artifact)
-            assert "<svg" in html
-            # No capacity warnings for 6 rings, 8 items (at limit)
-            warnings = artifact.get("warnings", [])
-            capacity_warnings = [w for w in warnings if "exceeds legibility envelope" in w.get("message", "")]
-            assert len(capacity_warnings) == 0, f"Unexpected capacity warnings at limit: {capacity_warnings}"
-        finally:
-            tmp_path.unlink()
-
-    @rule("CIR-RENDER-CAPACITY")
-    def test_capacity_exceeded_ring_count(self) -> None:
-        """CIR-RENDER-CAPACITY#capacity-exceeded-ring-count —
-        7 rings triggers a build warning."""
-        import yaml
-        import tempfile
-
-        rings = []
-        for i in range(7):
-            items = [{"id": f"item-{i}", "label": f"Item {i}", "status": {"manual": "green"}}]
-            rings.append({"id": f"ring-{i}", "label": f"Ring {i}", "items": items})
-
-        config_data = {"person": "Test", "rings": rings}
-        with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False) as f:
-            yaml.dump(config_data, f)
-            tmp_path = Path(f.name)
-
-        try:
-            config = load_config(tmp_path)
-            artifact = resolve(config, reference_date=FIXTURE_REFERENCE_DATE, generated_at=FIXTURE_GENERATED_AT)
-            artifact = add_capacity_warnings(artifact)
-            html = render_page(artifact)
-            assert "<svg" in html
-            # Should have a warning about ring count
-            warnings = artifact.get("warnings", [])
-            ring_warnings = [w for w in warnings if "rings" in w.get("message", "").lower() and "exceeds" in w.get("message", "").lower()]
-            assert len(ring_warnings) >= 1, f"Expected ring-count warning, got: {warnings}"
-        finally:
-            tmp_path.unlink()
-
-    @rule("CIR-RENDER-CAPACITY")
-    def test_capacity_exceeded_item_count(self) -> None:
-        """CIR-RENDER-CAPACITY#capacity-exceeded-item-count —
-        9 items in one ring triggers a build warning naming the ring."""
-        import yaml
-        import tempfile
-
-        items = []
-        for j in range(9):
-            items.append({
-                "id": f"item-{j}",
-                "label": f"Item {j}",
-                "status": {"manual": "green"},
-            })
-        config_data = {
-            "person": "Test",
-            "rings": [{"id": "over", "label": "Overflow", "items": items}],
-        }
-        with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False) as f:
-            yaml.dump(config_data, f)
-            tmp_path = Path(f.name)
-
-        try:
-            config = load_config(tmp_path)
-            artifact = resolve(config, reference_date=FIXTURE_REFERENCE_DATE, generated_at=FIXTURE_GENERATED_AT)
-            artifact = add_capacity_warnings(artifact)
-            html = render_page(artifact)
-            assert "<svg" in html
-            # Should have a warning about item count naming the ring
-            warnings = artifact.get("warnings", [])
-            item_warnings = [w for w in warnings if "9 items" in w.get("message", "")]
-            assert len(item_warnings) >= 1, f"Expected item-count warning, got: {warnings}"
-        finally:
-            tmp_path.unlink()
-
-    @rule("CIR-RENDER-MIN-ARC")
-    def test_min_arc_exceeded_by_ring(self) -> None:
-        """CIR-RENDER-MIN-ARC#min-arc-exceeded-by-ring —
-        many items in one ring triggers a min-arc build warning AND every
-        rendered arc angle respects MIN_ARC_DEG AND the total consumed
-        angle does not exceed 360° (CIR-RENDER-MIN-ARC
-        #overflow-capped-at-total-deg)."""
-        import re as _re
-        import yaml
-        import tempfile
-
-        # 120 items in one ring — far exceeds what MIN_ARC_DEG can fit
-        items = []
-        for j in range(120):
-            items.append({
-                "id": f"item-{j}",
-                "label": f"Item {j}",
-                "status": {"manual": "green"},
-            })
-        config_data = {
-            "person": "Test",
-            "rings": [{"id": "crowded", "label": "Crowded", "items": items}],
-        }
-        with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False) as f:
-            yaml.dump(config_data, f)
-            tmp_path = Path(f.name)
-
-        try:
-            config = load_config(tmp_path)
-            artifact = resolve(config, reference_date=FIXTURE_REFERENCE_DATE, generated_at=FIXTURE_GENERATED_AT)
-            artifact = add_capacity_warnings(artifact)
-            html = render_page(artifact)
-            assert "<svg" in html
-            # Should have a min-arc warning
-            warnings = artifact.get("warnings", [])
-            min_arc_warnings = [w for w in warnings if "minimum arc" in w.get("message", "").lower()]
-            assert len(min_arc_warnings) >= 1, f"Expected min-arc warning, got: {warnings}"
-
-            # Verify every rendered arc angle >= MIN_ARC_DEG by parsing the
-            # SVG path elements' outer-arc endpoints back into angles.
-            #
-            # Each arc path looks like:
-            #   M x1o y1o A r r 0 l 1 x2o y2o L x2i y2i A r r 0 l 0 x1i y1i Z
-            # The outer arc endpoint (x2o, y2o) encodes end_angle.
-            # The inner arc start point (x1i, y1i) encodes start_angle.
-            # We use the OUTER arc endpoint since it has larger resolution.
-            #
-            # Extract all paths that belong to cells (not the centre circle)
-            # by finding path elements that follow a 'data-item=' attribute
-            cell_paths = _re.findall(
-                r'data-item="[^"]*"[^>]*>\s*<path d="([^"]+)"',
-                html,
-            )
-
-            # The centre circle path is also a <path> but has no data-item; that's fine.
-            # We have exactly 120 cell paths
-            assert len(cell_paths) == 120, \
-                f"Expected 120 cell paths, got {len(cell_paths)}"
-
-            # Parse each path to extract start and end angles
-            prev_end_angle = -90.0  # First arc starts at 12 o'clock
-            for path_d in cell_paths:
-                # Extract the two outer arc points from the path
-                # Pattern: M x1 y1 A r r ... 1 x2 y2 L ...
-                m = _re.match(
-                    r'M\s+([\d.-]+)\s+([\d.-]+)\s+A\s+[\d.]+\s+[\d.]+\s+\d\s+\d\s+1\s+([\d.-]+)\s+([\d.-]+)',
-                    path_d,
-                )
-                assert m is not None, f"Could not parse path: {path_d}"
-                x1o, y1o, x2o, y2o = map(float, m.groups())
-
-                start_angle = _point_to_angle(x1o, y1o) % 360
-                end_angle = _point_to_angle(x2o, y2o) % 360
-
-                # Handle crossing the 0°/360° boundary
-                arc_deg = (end_angle - start_angle) % 360
-
-                # With 120 items, CELL_GAP_DEG=2°, MIN_ARC_DEG=3°:
-                #   total_deg = 360 - 120*2 = 120°
-                #   floored_sum = 120*3 = 360° > 120°
-                # So the overflow branch fires and arcs are scaled to
-                # 120/360 * 3 = 1° each — below MIN_ARC_DEG but that's
-                # expected (the warning covers it).  The key assertion is
-                # the total-consumed check below.
-                # For non-overflow cases, every arc must be >= MIN_ARC_DEG.
-                NUM_ITEMS = 120
-                CELL_GAP_DEG = 2.0
-                MIN_ARC_DEG = 3.0
-                total_deg = 360.0 - CELL_GAP_DEG * NUM_ITEMS
-                floored_sum = NUM_ITEMS * MIN_ARC_DEG
-                overflow_branch = floored_sum > total_deg
-                if not overflow_branch:
-                    assert arc_deg >= 2.95, \
-                        f"Arc angle {arc_deg:.3f}° is below MIN_ARC_DEG (3.0°) for path: {path_d[:80]}..."
-
-                # The arc should start where previous ended (plus cell gap)
-                # Allow for floating point
-                if prev_end_angle != -90.0:
-                    expected_start = (prev_end_angle + 2.0) % 360  # CELL_GAP_DEG = 2.0
-                    actual_start = start_angle % 360
-                    # Allow small tolerance
-                    assert abs(actual_start - expected_start) < 1.0 or \
-                           abs(actual_start - expected_start - 360) < 1.0 or \
-                           abs(actual_start - expected_start + 360) < 1.0, \
-                        f"Arc gap mismatch: expected start {expected_start:.1f}°, got {actual_start:.1f}°"
-
-                prev_end_angle = end_angle
-
-            # Verify the total consumed angle (arcs + gaps) does not exceed
-            # 360°, even under extreme over-capacity (CIR-RENDER-MIN-ARC
-            # #overflow-capped-at-total-deg).  Without the cap, 120 × 3° = 360°
-            # of arcs plus 120 × 2° = 240° of gaps would total 600°, wrapping
-            # around visually.
-            first_arc = cell_paths[0]
-            m_first = _re.match(
-                r'M\s+([\d.-]+)\s+([\d.-]+)\s+A\s+[\d.]+\s+[\d.]+\s+\d\s+\d\s+1\s+([\d.-]+)\s+([\d.-]+)',
-                first_arc,
-            )
-            x1o_first, y1o_first, _, _ = map(float, m_first.groups())
-            first_start = _point_to_angle(x1o_first, y1o_first) % 360
-
-            last_arc = cell_paths[-1]
-            m_last = _re.match(
-                r'M\s+([\d.-]+)\s+([\d.-]+)\s+A\s+[\d.]+\s+[\d.]+\s+\d\s+\d\s+1\s+([\d.-]+)\s+([\d.-]+)',
-                last_arc,
-            )
-            _, _, x2o_last, y2o_last = map(float, m_last.groups())
-            last_end = _point_to_angle(x2o_last, y2o_last) % 360
-
-            # Total consumed = (last_end - first_start) mod 360 + last gap
-            total_consumed = (last_end - first_start) % 360 + 2.0  # + CELL_GAP_DEG
-            # Should be <= 360° (allow 0.5° fp tolerance)
-            assert total_consumed <= 360.5, \
-                f"Total consumed angle {total_consumed:.2f}° exceeds 360° — arcs overflow"
-
-        finally:
-            tmp_path.unlink()
-
-
-# ===========================================================================
-# CIR-RENDER-BOOT-FAILURE — failure is visible, never blank
-# ===========================================================================
-
-class TestRenderBootFailure:
-    """CIR-RENDER-BOOT-FAILURE — failure is visible, never blank."""
-
-    @rule("CIR-RENDER-BOOT-FAILURE")
-    def test_boot_failure_payload_absent(self) -> None:
-        """CIR-RENDER-BOOT-FAILURE#boot-failure-payload-absent —
-        the page handles missing payload gracefully (structural: the page always has a payload
-        since it's baked in, but we verify the script tag is present)."""
-        html = _render_fixture()
-        assert '<script id="artifact-data"' in html
-
-    @rule("CIR-RENDER-BOOT-FAILURE")
-    def test_boot_failure_empty_rings(self) -> None:
-        """CIR-RENDER-BOOT-FAILURE#boot-failure-empty-rings —
-        empty rings render as grey bands, not a blank page."""
-        import yaml
-        import tempfile
-
-        minimal = {
-            "person": "Test",
-            "rings": [{
-                "id": "a", "label": "A",
-                "items": [],
-            }],
-        }
-        with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False) as f:
-            yaml.dump(minimal, f)
-            tmp_path = Path(f.name)
-
-        try:
-            config = load_config(tmp_path)
-            artifact = resolve(config, reference_date=FIXTURE_REFERENCE_DATE, generated_at=FIXTURE_GENERATED_AT)
-            artifact = add_capacity_warnings(artifact)
-            html = render_page(artifact)
-            assert "<svg" in html
-            assert "#9E9E9E" in html  # grey fill for empty ring
-        finally:
-            tmp_path.unlink()
-
-
-# ===========================================================================
 # Fixture acceptance — the eight lights render correctly
 # ===========================================================================
 
@@ -743,494 +425,3 @@ class TestRenderTouch:
         html = _render_fixture()
         assert 'role="button"' in html
         assert 'tabindex="0"' in html
-
-
-# ===========================================================================
-# CIR-RENDER-RENDERER — what draws the rings
-# ===========================================================================
-
-class TestRenderRenderer:
-    """CIR-RENDER-RENDERER — what draws the rings."""
-
-    @rule("CIR-RENDER-RENDERER")
-    def test_renderer_draws_independent_rings(self) -> None:
-        """CIR-RENDER-RENDERER#renderer-draws-independent-rings —
-        the SVG has multiple ring paths."""
-        html = _render_fixture()
-        # Count path elements (each arc is a path)
-        path_count = html.count("<path")
-        # Should have at least 8 paths (one per item)
-        assert path_count >= 8, f"Expected at least 8 paths, got {path_count}"
-
-    @rule("CIR-RENDER-RENDERER")
-    def test_renderer_adds_no_runtime_egress(self) -> None:
-        """CIR-RENDER-RENDERER#renderer-adds-no-runtime-egress —
-        no library fetched at run time."""
-        html = _render_fixture()
-        assert '<script src=' not in html
-        assert '<link rel="stylesheet"' not in html
-
-
-# ===========================================================================
-# CIR-RENDER-RING-PARTITION — rings are independent
-# ===========================================================================
-
-class TestRenderRingPartition:
-    """CIR-RENDER-RING-PARTITION — rings are independent."""
-
-    @rule("CIR-RENDER-RING-PARTITION")
-    def test_partition_full_circle_per_ring(self) -> None:
-        """CIR-RENDER-RING-PARTITION#partition-full-circle-per-ring —
-        each ring spans the full 360°."""
-        html = _render_fixture()
-        # The SVG has paths for all items
-        assert "<path" in html
-        # Multiple rings are rendered
-        assert 'data-item="self/' in html
-        assert 'data-item="wider/' in html
-
-    @rule("CIR-RENDER-RING-PARTITION")
-    def test_partition_ring_boundaries_visible(self) -> None:
-        """CIR-RENDER-RING-PARTITION#partition-ring-boundaries-visible —
-        rings are separated by gaps (stroke)."""
-        html = _render_fixture()
-        # Rings have stroke="#fff" for separation
-        assert 'stroke="#fff"' in html
-
-
-# ===========================================================================
-# CIR-RENDER-ARC-SHARE — arc angles from shares
-# ===========================================================================
-
-class TestRenderArcShare:
-    """CIR-RENDER-ARC-SHARE — arc angles from shares."""
-
-    @rule("CIR-RENDER-ARC-SHARE")
-    def test_arc_share_half_arcs(self) -> None:
-        """CIR-RENDER-ARC-SHARE#arc-share-half-arcs —
-        two siblings with share:0.5 each get equal arcs."""
-        html = _render_fixture()
-        # Both children items appear
-        assert 'data-item="children/nova"' in html
-        assert 'data-item="children/kit"' in html
-
-    @rule("CIR-RENDER-ARC-SHARE")
-    def test_arc_share_single_item_ring(self) -> None:
-        """CIR-RENDER-ARC-SHARE#arc-share-single-item-ring —
-        a ring with exactly one item renders as a full 360° band
-        with no visible gap (CELL_GAP_DEG is not subtracted).
-
-        The SVG path must use two half-circle arcs (not a single 360° arc)
-        because SVG elliptical-arc commands with coincident start/end points
-        are omitted by conforming renderers.
-        """
-        import yaml
-        import tempfile
-
-        config_data = {
-            "person": "Test",
-            "rings": [{
-                "id": "a", "label": "A",
-                "items": [{"id": "x", "label": "X", "status": {"manual": "green"}}],
-            }],
-        }
-        with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False) as f:
-            yaml.dump(config_data, f)
-            tmp_path = Path(f.name)
-
-        try:
-            config = load_config(tmp_path)
-            artifact = resolve(config, reference_date=FIXTURE_REFERENCE_DATE, generated_at=FIXTURE_GENERATED_AT)
-            artifact = add_capacity_warnings(artifact)
-            html = render_page(artifact)
-
-            # Extract all cell paths from the SVG.
-            import re as _re
-            cell_paths = _re.findall(
-                r'data-item="[^"]*"[^>]*>\s*<path d="([^"]+)"',
-                html,
-            )
-            assert len(cell_paths) == 1, \
-                f"Expected 1 cell path, got {len(cell_paths)}"
-
-            path_d = cell_paths[0]
-
-            # The path must contain TWO sub-paths (two M commands) —
-            # a single 360° arc would be degenerate (coincident endpoints
-            # are omitted by SVG renderers).
-            sub_paths = [s.strip() for s in path_d.split("Z") if s.strip()]
-            assert len(sub_paths) == 2, \
-                f"Expected 2 sub-paths (half-circle arcs), got {len(sub_paths)}: {path_d}"
-
-            # Verify each sub-path has non-degenerate arcs (start != end)
-            # and that together they cover the full 360°.
-            total_sweep = 0.0
-            for sp in sub_paths:
-                # Parse the sub-path using regex to find all A commands
-                # Structure: M x0 y0 A rx ry xrot large sweep x1 y1 L x2 y2 A rx ry xrot large sweep x3 y3
-                sp = sp.strip()
-                assert sp.startswith("M"), f"Sub-path must start with M: {sp}"
-
-                # Extract all A command endpoints
-                a_endpoints = _re.findall(
-                    r'A\s+[\d.]+\s+[\d.]+\s+\d+\s+\d+\s+\d+\s+([\d.-]+)\s+([\d.-]+)',
-                    sp,
-                )
-                assert len(a_endpoints) == 2, \
-                    f"Expected 2 A commands per sub-path, got {len(a_endpoints)}: {sp}"
-
-                # Outer arc: start = M target, end = first A endpoint
-                m_match = _re.match(r'M\s+([\d.-]+)\s+([\d.-]+)', sp)
-                assert m_match is not None, f"Could not parse M command: {sp}"
-                x0, y0 = float(m_match.group(1)), float(m_match.group(2))
-                outer_end_x, outer_end_y = map(float, a_endpoints[0])
-
-                # Inner arc: start = L target, end = second A endpoint
-                l_match = _re.search(r'L\s+([\d.-]+)\s+([\d.-]+)', sp)
-                assert l_match is not None, f"Could not parse L command: {sp}"
-                inner_start_x, inner_start_y = float(l_match.group(1)), float(l_match.group(2))
-                inner_end_x, inner_end_y = map(float, a_endpoints[1])
-
-                # Verify arcs are non-degenerate (start != end)
-                assert abs(x0 - outer_end_x) > 0.01 or abs(y0 - outer_end_y) > 0.01, \
-                    f"Outer arc has coincident endpoints ({x0:.2f},{y0:.2f}) → ({outer_end_x:.2f},{outer_end_y:.2f})"
-                assert abs(inner_start_x - inner_end_x) > 0.01 or abs(inner_start_y - inner_end_y) > 0.01, \
-                    f"Inner arc has coincident endpoints ({inner_start_x:.2f},{inner_start_y:.2f}) → ({inner_end_x:.2f},{inner_end_y:.2f})"
-
-                # Compute the angular span of this sub-path using the outer arc
-                # (M → first A endpoint), which sweeps 180° for each half-circle.
-                start_angle = _point_to_angle(x0, y0)
-                end_angle = _point_to_angle(outer_end_x, outer_end_y)
-                sweep = (end_angle - start_angle) % 360
-                total_sweep += sweep
-
-            # The two half-circles together should cover 360°
-            assert abs(total_sweep - 360.0) < 2.0, \
-                f"Total sweep of both sub-paths is {total_sweep:.2f}°, expected ~360°"
-        finally:
-            tmp_path.unlink()
-
-    @rule("CIR-RENDER-ARC-SHARE")
-    def test_arc_share_mixed_weights(self) -> None:
-        """CIR-RENDER-ARC-SHARE#arc-share-mixed-weights —
-        siblings with shares 2, 1, 1 → arcs ≈ 180° / 90° / 90°."""
-        import yaml
-        import tempfile
-        from bake.config import load_config
-        from bake.resolve import resolve
-        from bake.render import render_page, add_capacity_warnings
-
-        data = {
-            "person": "Test",
-            "rings": [{
-                "id": "a", "label": "A",
-                "items": [
-                    {"id": "big", "label": "Big", "share": 2},
-                    {"id": "med", "label": "Medium", "share": 1},
-                    {"id": "sml", "label": "Small", "share": 1},
-                ],
-            }],
-        }
-        with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False) as f:
-            yaml.dump(data, f)
-            tmp_path = Path(f.name)
-
-        try:
-            config = load_config(tmp_path)
-            artifact = resolve(config, reference_date=FIXTURE_REFERENCE_DATE, generated_at=FIXTURE_GENERATED_AT)
-            artifact = add_capacity_warnings(artifact)
-            html = render_page(artifact)
-
-            # All three items appear in the SVG
-            assert 'data-item="a/big"' in html
-            assert 'data-item="a/med"' in html
-            assert 'data-item="a/sml"' in html
-
-            # Mixed shares should produce a warning
-            warnings = artifact.get("warnings", [])
-            mixed_warnings = [w for w in warnings if "mixes declared and undeclared" in w.get("message", "")]
-            assert len(mixed_warnings) >= 1, f"Expected mixed-share warning, got: {warnings}"
-
-            # Verify arc proportions via SVG path geometry.
-            # Shares 2:1:1 → arcs ≈ 180° / 90° / 90° (minus inter-cell gaps).
-            import re as _re
-            # Extract path d for each item by data-item attribute
-            big_match = _re.search(
-                r'data-item="a/big"[^>]*>\s*<path d="([^"]+)"', html,
-            )
-            med_match = _re.search(
-                r'data-item="a/med"[^>]*>\s*<path d="([^"]+)"', html,
-            )
-            sml_match = _re.search(
-                r'data-item="a/sml"[^>]*>\s*<path d="([^"]+)"', html,
-            )
-
-            assert big_match is not None, "Could not find SVG path for a/big"
-            assert med_match is not None, "Could not find SVG path for a/med"
-            assert sml_match is not None, "Could not find SVG path for a/sml"
-
-            big_sweep = _arc_sweep_degrees(big_match.group(1))
-            med_sweep = _arc_sweep_degrees(med_match.group(1))
-            sml_sweep = _arc_sweep_degrees(sml_match.group(1))
-
-            # With CELL_GAP_DEG=2.0 and 3 items, total arc space is 354°.
-            # Shares 2:1:1 → ≈177° / 88.5° / 88.5°.
-            assert abs(big_sweep - 180.0) < 5.0, \
-                f"Big item sweep {big_sweep:.2f}°, expected ≈180°"
-            assert abs(med_sweep - 90.0) < 5.0, \
-                f"Medium item sweep {med_sweep:.2f}°, expected ≈90°"
-            assert abs(sml_sweep - 90.0) < 5.0, \
-                f"Small item sweep {sml_sweep:.2f}°, expected ≈90°"
-
-            # Total arcs sum to 360° minus 3 × CELL_GAP_DEG (2.0°) ≈ 354°
-            total_sweep = big_sweep + med_sweep + sml_sweep
-            assert abs(total_sweep - 354.0) < 3.0, \
-                f"Total sweep {total_sweep:.2f}°, expected ≈354° (360° minus 3 × 2° gaps)"
-        finally:
-            tmp_path.unlink()
-
-
-# ===========================================================================
-# CIR-RENDER-RING-THICKNESS — the most important ring is the smallest
-# ===========================================================================
-
-class TestRenderRingThickness:
-    """CIR-RENDER-RING-THICKNESS — the most important ring is the smallest."""
-
-    @rule("CIR-RENDER-RING-THICKNESS")
-    def test_thickness_non_increasing_outward(self) -> None:
-        """CIR-RENDER-RING-THICKNESS#thickness-non-increasing-outward —
-        inner rings are thicker than outer rings."""
-        html = _render_fixture()
-        # The centre hole exists (float formatting)
-        assert 'cx="400.0" cy="400.0" r="60.0"' in html
-        # The SVG has the right viewBox
-        assert 'viewBox="0 0 800 800"' in html
-
-    @rule("CIR-RENDER-RING-THICKNESS")
-    def test_centre_hole_is_not_zero(self) -> None:
-        """CIR-RENDER-RING-THICKNESS#centre-hole-is-not-zero —
-        a hole remains; the innermost ring is a band, not a pie."""
-        html = _render_fixture()
-        assert '<circle' in html
-        assert 'cx="400.0"' in html
-
-    @rule("CIR-RENDER-RING-THICKNESS")
-    def test_centre_disc_holds_identity(self) -> None:
-        """CIR-RENDER-RING-THICKNESS#centre-disc-holds-identity —
-        the disc carries the person's name and summary."""
-        html = _render_fixture()
-        assert "Alex Example" in html
-
-
-# ===========================================================================
-# CIR-RENDER-MIN-ARC — no unreadable slivers
-# ===========================================================================
-
-class TestRenderMinArc:
-    """CIR-RENDER-MIN-ARC — no unreadable slivers."""
-
-    @rule("CIR-RENDER-MIN-ARC")
-    def test_min_arc_tiny_share_still_drawn(self) -> None:
-        """CIR-RENDER-MIN-ARC#min-arc-tiny-share-still-drawn —
-        all items are drawn as paths."""
-        html = _render_fixture()
-        # All 8 items have paths
-        path_count = html.count("<path")
-        assert path_count >= 8  # at least 8 arc paths + centre circle
-
-    @rule("CIR-RENDER-MIN-ARC")
-    def test_mixed_floored_natural_overflow_capped(self) -> None:
-        """CIR-RENDER-MIN-ARC#mixed-floored-natural-overflow-capped —
-        mixed floored and natural items where floored arcs alone
-        overflow total_deg; verify total consumed angle does not
-        exceed 360°."""
-        import re as _re
-        import yaml
-        import tempfile
-
-        # Ring with 120 items: 20 disproportionately large items (natural)
-        # and 100 tiny items (floored).  With total_deg = 120° and 100
-        # floored items needing 300°, the overflow branch fires.
-        # The old (round-3) code derived scale from floored count only
-        # and applied it to all items, making the total consumed exceed
-        # total_deg.  The current code distributes evenly.
-        items = []
-        for j in range(20):
-            items.append({
-                "id": f"big-{j}",
-                "label": f"Big {j}",
-                "status": {"manual": "green"},
-                "share": 50,
-            })
-        for j in range(100):
-            items.append({
-                "id": f"tiny-{j}",
-                "label": f"Tiny {j}",
-                "status": {"manual": "green"},
-                "share": 1,
-            })
-        config_data = {
-            "person": "Test",
-            "rings": [{"id": "mixed", "label": "Mixed", "items": items}],
-        }
-        with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False) as f:
-            yaml.dump(config_data, f)
-            tmp_path = Path(f.name)
-
-        try:
-            config = load_config(tmp_path)
-            artifact = resolve(config, reference_date=FIXTURE_REFERENCE_DATE, generated_at=FIXTURE_GENERATED_AT)
-            artifact = add_capacity_warnings(artifact)
-            html = render_page(artifact)
-            assert "<svg" in html
-
-            # Verify total consumed angle (arcs + gaps) does not exceed 360°
-            cell_paths = _re.findall(
-                r'data-item="[^"]*"[^>]*>\s*<path d="([^"]+)"',
-                html,
-            )
-            assert len(cell_paths) == 120, \
-                f"Expected 120 cell paths, got {len(cell_paths)}"
-
-            first_arc = cell_paths[0]
-            m_first = _re.match(
-                r'M\s+([\d.-]+)\s+([\d.-]+)\s+A\s+[\d.]+\s+[\d.]+\s+\d\s+\d\s+1\s+([\d.-]+)\s+([\d.-]+)',
-                first_arc,
-            )
-            x1o_first, y1o_first, _, _ = map(float, m_first.groups())
-            first_start = _point_to_angle(x1o_first, y1o_first) % 360
-
-            last_arc = cell_paths[-1]
-            m_last = _re.match(
-                r'M\s+([\d.-]+)\s+([\d.-]+)\s+A\s+[\d.]+\s+[\d.]+\s+\d\s+\d\s+1\s+([\d.-]+)\s+([\d.-]+)',
-                last_arc,
-            )
-            _, _, x2o_last, y2o_last = map(float, m_last.groups())
-            last_end = _point_to_angle(x2o_last, y2o_last) % 360
-
-            # Total consumed = (last_end - first_start) mod 360 + last gap
-            total_consumed = (last_end - first_start) % 360 + 2.0  # + CELL_GAP_DEG
-            assert total_consumed <= 360.5, \
-                f"Total consumed angle {total_consumed:.2f}° exceeds 360° — arcs overflow"
-        finally:
-            tmp_path.unlink()
-
-    @rule("CIR-RENDER-MIN-ARC")
-    def test_overflow_no_negative_arcs(self) -> None:
-        """CIR-RENDER-MIN-ARC#overflow-no-negative-arcs —
-        ring with >180 items where total_deg would go negative
-        pre-fix; verify no negative/degenerate arc angles and
-        the capacity warning has a non-negative count."""
-        import re as _re
-        import yaml
-        import tempfile
-
-        # 200 items in one ring — total_deg = max(360 - 2*200, 0) = 0
-        items = []
-        for j in range(200):
-            items.append({
-                "id": f"item-{j}",
-                "label": f"Item {j}",
-                "status": {"manual": "green"},
-            })
-        config_data = {
-            "person": "Test",
-            "rings": [{"id": "overflow", "label": "Overflow", "items": items}],
-        }
-        with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False) as f:
-            yaml.dump(config_data, f)
-            tmp_path = Path(f.name)
-
-        try:
-            config = load_config(tmp_path)
-            artifact = resolve(config, reference_date=FIXTURE_REFERENCE_DATE, generated_at=FIXTURE_GENERATED_AT)
-            artifact = add_capacity_warnings(artifact)
-            html = render_page(artifact)
-            assert "<svg" in html
-
-            # Verify no negative/degenerate arc angles
-            cell_paths = _re.findall(
-                r'data-item="[^"]*"[^>]*>\s*<path d="([^"]+)"',
-                html,
-            )
-            assert len(cell_paths) == 200, \
-                f"Expected 200 cell paths, got {len(cell_paths)}"
-
-            prev_end_angle = -90.0
-            for path_d in cell_paths:
-                m = _re.match(
-                    r'M\s+([\d.-]+)\s+([\d.-]+)\s+A\s+[\d.]+\s+[\d.]+\s+\d\s+\d\s+1\s+([\d.-]+)\s+([\d.-]+)',
-                    path_d,
-                )
-                assert m is not None, f"Could not parse path: {path_d}"
-                x1o, y1o, x2o, y2o = map(float, m.groups())
-
-                start_angle = _point_to_angle(x1o, y1o) % 360
-                end_angle = _point_to_angle(x2o, y2o) % 360
-                arc_deg = (end_angle - start_angle) % 360
-
-                # Arc angle must be non-negative (no degenerate arcs)
-                assert arc_deg >= 0, \
-                    f"Negative arc angle {arc_deg:.3f}° for path: {path_d[:80]}..."
-
-                # With equal distribution of 0°, all arcs are 0°, which is
-                # zero-length (degenerate) but non-negative — that's expected
-                # when total_deg = 0.
-
-            # Verify the capacity warning has a non-negative count
-            warnings = artifact.get("warnings", [])
-            overflow_warnings = [w for w in warnings
-                                 if "minimum arc" in w.get("message", "").lower()]
-            assert len(overflow_warnings) >= 1, \
-                f"Expected min-arc warning, got: {warnings}"
-            for w in overflow_warnings:
-                msg = w["message"]
-                # Extract the max_items_at_min value from the message
-                m = _re.search(r'exceeds (\d+) items at', msg)
-                assert m is not None, f"Could not parse max_items_at_min from: {msg}"
-                max_at_min = int(m.group(1))
-                assert max_at_min >= 0, \
-                    f"max_items_at_min ({max_at_min}) is negative in warning: {msg}"
-        finally:
-            tmp_path.unlink()
-
-
-# ===========================================================================
-# CIR-RENDER-CAPACITY — empty ring band
-# ===========================================================================
-
-class TestRenderEmptyRing:
-    """CIR-RENDER-CAPACITY — empty ring band."""
-
-    @rule("CIR-RENDER-CAPACITY")
-    def test_capacity_empty_ring_band(self) -> None:
-        """CIR-RENDER-CAPACITY#capacity-empty-ring-band —
-        ring with zero items is drawn as grey band with an empty-ring warning."""
-        import yaml
-        import tempfile
-
-        config_data = {
-            "person": "Test",
-            "rings": [
-                {"id": "a", "label": "A", "items": [{"id": "x", "label": "X", "status": {"manual": "green"}}]},
-                {"id": "b", "label": "B", "items": []},
-            ],
-        }
-        with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False) as f:
-            yaml.dump(config_data, f)
-            tmp_path = Path(f.name)
-
-        try:
-            config = load_config(tmp_path)
-            artifact = resolve(config, reference_date=FIXTURE_REFERENCE_DATE, generated_at=FIXTURE_GENERATED_AT)
-            artifact = add_capacity_warnings(artifact)
-            html = render_page(artifact)
-            # The empty ring renders as grey
-            assert "#9E9E9E" in html
-            # Empty ring should produce a warning
-            warnings = artifact.get("warnings", [])
-            empty_warnings = [w for w in warnings if "no items" in w.get("message", "").lower()]
-            assert len(empty_warnings) >= 1, f"Expected empty-ring warning, got: {warnings}"
-        finally:
-            tmp_path.unlink()

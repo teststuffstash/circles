@@ -201,6 +201,131 @@ for row in table["rows"]:
     path = out / f"index-click-{row['row_id']}.html"
     path.write_text(render_page(art), encoding="utf-8")
     print(f"  Wrote {path} (click row {row['row_id']})")
+
+# The geometry/capacity variants (CIR-RENDER-CAPACITY, -MIN-ARC, -ARC-SHARE, -RING-PARTITION;
+# tests/browser/test_render_rows.py TestCapacity/TestMinArc/TestArcShare/TestPartition): the
+# fixture's circles.yaml mutated as a dict, baked from a copy of the world dir (so its notes
+# resolve) at the fixed generated_at. Extra items are `manual: green`, labelled "Extra <n>";
+# extras in a ring that declares shares (children) declare share 0.5, so no variant gains a
+# mixed-shares warning it did not ask for.
+import copy
+import re
+import shutil
+
+ALEX = yaml.safe_load(Path("fixtures/alex/circles.yaml").read_text(encoding="utf-8"))
+GENERATED_AT = datetime(2026, 8, 3, 2, 0, 0, tzinfo=timezone.utc)
+
+
+def ring_of(data, ring_id):
+    return next(r for r in data["rings"] if r["id"] == ring_id)
+
+
+def extras(n, start=1, share=None):
+    out_items = []
+    for k in range(start, start + n):
+        extra = {"id": f"extra-{k}", "label": f"Extra {k}", "status": {"manual": "green"}}
+        if share is not None:
+            extra["share"] = share
+        out_items.append(extra)
+    return out_items
+
+
+def pad(ring_id, total):
+    def edit(data):
+        items = ring_of(data, ring_id)["items"]
+        items.extend(extras(total - len(items)))
+    return edit
+
+
+def extra_rings(labels):
+    def edit(data):
+        for k, label in enumerate(labels, start=1):
+            data["rings"].append({"id": f"extra-ring-{k}", "label": label,
+                                  "items": [{"id": "one", "label": f"Area {k}",
+                                             "status": {"manual": "green"}}]})
+    return edit
+
+
+def both(*edits):
+    def edit(data):
+        for e in edits:
+            e(data)
+    return edit
+
+
+def bake_variant(name, why, edit):
+    data = copy.deepcopy(ALEX)
+    edit(data)
+    with tempfile.TemporaryDirectory() as tmp:
+        world = Path(tmp) / "alex"
+        shutil.copytree("fixtures/alex", world)
+        cfg = world / "circles.yaml"
+        cfg.write_text(yaml.dump(data, allow_unicode=True, sort_keys=False), encoding="utf-8")
+        art = add_capacity_warnings(resolve(load_config(cfg), reference_date=reference_date,
+                                            generated_at=GENERATED_AT))
+    path = out / name
+    path.write_text(render_page(art), encoding="utf-8")
+    print(f"  Wrote {path} ({why})")
+
+
+def set_items(ring_id, items):
+    def edit(data):
+        ring_of(data, ring_id)["items"] = items
+    return edit
+
+
+def set_shares(ring_id, shares, more=()):
+    def edit(data):
+        items = ring_of(data, ring_id)["items"]
+        for it, share in zip(items, shares):
+            it["share"] = share
+        items.extend(more)
+    return edit
+
+
+def manual(ref, light):
+    def edit(data):
+        ring_id, item_id = ref.split("/")
+        next(i for i in ring_of(data, ring_id)["items"] if i["id"] == item_id)["status"] = {"manual": light}
+    return edit
+
+
+# CIR-RENDER-CAPACITY rows
+bake_variant("index-cap-at-limit.html", "6 rings; ① Self holds 8 items",
+             both(pad("self", 8), extra_rings(["⑤ Community", "⑥ Work"])))
+bake_variant("index-cap-7-rings.html", "7 rings",
+             extra_rings(["⑤ Community", "⑥ Work", "⑦ Faith"]))
+bake_variant("index-cap-9-items.html", "④ Wider life holds 9 items", pad("wider", 9))
+bake_variant("index-cap-minimum.html", "1 ring (② Partner), 1 item",
+             lambda d: d.update(rings=[ring_of(d, "partner")]))
+bake_variant("index-cap-empty-ring.html", "② Partner holds zero items", set_items("partner", []))
+# CIR-RENDER-RING-PARTITION#partition-ring-boundaries-visible: adjacent rings both 🟢
+bake_variant("index-adjacent-green.html", "partner/date-night manual: green (② and ③ both all-green)",
+             manual("partner/date-night", "green"))
+# CIR-RENDER-ARC-SHARE#arc-share-mixed-weights and CIR-RENDER-MIN-ARC#min-arc-tiny-share-still-drawn
+bake_variant("index-shares-2-1-1.html", "③ Children shares 2 / 1 / 1 (nova, kit, Extra 1)",
+             set_shares("children", [2, 1], more=extras(1, share=1)))
+bake_variant("index-shares-100-1.html", "③ Children shares 100 / 1 (nova, kit)",
+             set_shares("children", [100, 1]))
+# CIR-RENDER-MIN-ARC rows: one crowded ring (the outermost, ④ Wider life)
+bake_variant("index-min-arc-30.html", "④ Wider life holds 30 items", pad("wider", 30))
+bake_variant("index-min-arc-120.html", "④ Wider life holds 120 items", pad("wider", 120))
+bake_variant("index-min-arc-mixed.html", "④ Wider life holds 20 items share 50 + 100 items share 1",
+             set_items("wider", extras(20, share=50) + extras(100, start=21, share=1)))
+bake_variant("index-min-arc-200.html", "④ Wider life holds 200 items", pad("wider", 200))
+
+# CIR-RENDER-BOOT-FAILURE inputs: pages whose embedded payload is unusable. The fixture page as
+# baked above at the fixed generated_at (index-no-threshold.html) is the base.
+base = (out / "index-no-threshold.html").read_text(encoding="utf-8")
+block = re.search(r'<script id="artifact-data" type="application/json">.*?</script>\n?', base, re.S)
+assert block is not None
+path = out / "index-boot-no-payload.html"
+path.write_text(base.replace(block.group(0), ""), encoding="utf-8")
+print(f"  Wrote {path} (the inlined payload block removed)")
+# `rings: []` — the hand-edited artifact the bake would never emit, rendered by the page renderer.
+path = out / "index-boot-empty-rings.html"
+path.write_text(render_page({**fixture, "rings": []}), encoding="utf-8")
+print(f"  Wrote {path} (artifact rings: [])")
 PY
 
 # ── step 2: run the browser tier ─────────────────────────────────────────────────────

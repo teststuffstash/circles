@@ -33,6 +33,9 @@ API (the whole of it):
 - ``ax_names(page)`` — data-item → the cell's COMPUTED accessible name (CDP accessibility tree).
 - ``GEOMETRY`` — a ``page.evaluate`` script: every cell's polar geometry (radius range, start
   angle and span clockwise from noon, label corners) from its drawn path, in SVG user space.
+- ``COVERAGE`` — a ``page.evaluate`` script (arg: a CSS selector of chart paths): the degrees of
+  the circle each path's FILL covers at its mid radius, and its largest uncovered run — what
+  ``GEOMETRY``'s sampled span cannot resolve for a full 360° band (a notch, a missing half).
 - ``pdf_colours(pdf, palette)`` — the palette hexes actually painted on a printed PDF's page 1.
 - ``REFERENCE_VIEWPORT`` (CIR-RENDER-REFERENCE-VIEWPORT, as a Playwright viewport dict) and
   ``FURNITURE`` (the page furniture CIR-RENDER-ONE-SCREEN names, as selectors).
@@ -149,6 +152,39 @@ GEOMETRY = """() => {
     return {item: c.getAttribute('data-item'),
             rMin: Math.min(...pts.map(q => q.r)), rMax: Math.max(...pts.map(q => q.r)),
             start: start, span: span, labelCorners: corners};
+  });
+}"""
+
+
+# Angular coverage of chart paths, measured by hit-testing the painted fill: for each path matched
+# by the selector (arg), points on the circle at the path's mid radius are tested every 0.1°
+# with isPointInFill. covered = degrees inside the fill; maxGap = the longest run of degrees
+# outside it (0 for a band closed all the way round). item = the enclosing cell's data-item, or
+# null for a path that is not a cell (an empty ring's band).
+COVERAGE = """(sel) => {
+  const svg = document.querySelector('#chart-area svg');
+  const vb = svg.viewBox.baseVal, cx = vb.x + vb.width / 2, cy = vb.y + vb.height / 2;
+  return Array.from(svg.querySelectorAll(sel)).map(p => {
+    const len = p.getTotalLength(); let rMin = Infinity, rMax = 0;
+    for (let i = 0; i <= 120; i++) {
+      const q = p.getPointAtLength(len * i / 120), r = Math.hypot(q.x - cx, q.y - cy);
+      rMin = Math.min(rMin, r); rMax = Math.max(rMax, r);
+    }
+    const rMid = (rMin + rMax) / 2, n = 3600;
+    let inside = 0, run = 0, maxGap = 0;
+    const hit = [];
+    for (let i = 0; i < n; i++) {
+      const a = i * 2 * Math.PI / n;
+      hit.push(p.isPointInFill(new DOMPoint(cx + rMid * Math.sin(a), cy - rMid * Math.cos(a))));
+    }
+    // longest run of misses, wrapping round noon
+    for (let i = 0; i < 2 * n; i++) {
+      if (hit[i % n]) { run = 0; } else { run++; maxGap = Math.max(maxGap, Math.min(run, n)); }
+    }
+    inside = hit.filter(Boolean).length;
+    const cell = p.closest('[data-item]');
+    return {item: cell ? cell.getAttribute('data-item') : null, rMin: rMin, rMax: rMax,
+            covered: inside * 360 / n, maxGap: maxGap * 360 / n};
   });
 }"""
 
