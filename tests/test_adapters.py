@@ -16,11 +16,12 @@
 #
 # The bake runs in a subprocess, so the ⚖-R21 leash (30 s per item, 5 min per bake —
 # module constants in bake/adapters.py) cannot be monkeypatched from here. The timing rows shrink
-# it with `given_leash`: a tests-only `sitecustomize.py`, generated into the case's tmp dir and put
-# on PYTHONPATH, sets the constants before `python -m bake` runs its unchanged `main()`. The shrink
-# is named in the given step (and so in the when step) and its source is attached — the run is
-# the production CLI with the two numbers turned down, said so in the report. The production
-# values themselves are pinned by an unlabelled unit guard below.
+# it with `given_leash` (tests/evidence_helpers.py): a tests-only `sitecustomize.py`, generated into
+# the case's tmp dir and put on the bake's PYTHONPATH (`when_bake(..., env=)`), sets the constants
+# before `python -m bake` runs its unchanged `main()`. The shrink is named in the given step (and so
+# in the when step) and its source is attached — the run is the production CLI with the two
+# numbers turned down, said so in the report. The production values themselves are pinned by an
+# unlabelled unit guard below.
 #
 # The unlabelled tests at the bottom are unit guards (CONVENTIONS § Allure taxonomy): internals
 # the CLI cannot show — exact integer ages, the token scanner's rejected list, the AdapterResult
@@ -44,7 +45,19 @@ import bake.adapters as adapters_module
 from bake.adapters import WARNING_MAX_CHARS, AdapterResult, calendar_age, scan_dates
 from bake.config import load_config
 from bake.resolve import resolve
-from evidence_helpers import BakeRun, given_alex, item, item_of, verdict, when_bake
+from evidence_helpers import (
+    BakeRun,
+    given_alex,
+    given_file,
+    given_leash,
+    given_script,
+    item,
+    item_of,
+    then_grey_by_failure,
+    verdict,
+    warnings_for,
+    when_bake,
+)
 from rules import rule
 
 AlexCopy = Callable[..., Path]  # the `alex_copy` factory fixture (tests/conftest.py)
@@ -64,7 +77,7 @@ PROBE = "notes/probe.md"
 
 
 # ---------------------------------------------------------------------------- given (local)
-# Arrange-only helpers (CONVENTIONS § The helper razor). Candidates for tests/evidence_helpers.py.
+# Arrange-only helpers (CONVENTIONS § The helper razor) for the two knobs these rows turn.
 
 def sleep_source(source: str, yellow_after: int | None = None, red_after: int | None = None):
     """An ``edit`` for ``given_alex``: re-point self/sleep's freshness block (wire format)."""
@@ -78,84 +91,33 @@ def sleep_source(source: str, yellow_after: int | None = None, red_after: int | 
     return edit
 
 
-def given_file(config: Path, rel: str, text: str, *, executable: bool = False) -> Path:
-    """Given: a file at ``<config-dir>/<rel>`` holding ``text`` (attached), the world copy's
-    extra input that a config edit alone cannot express (a note's content, a script)."""
-    shown = text if len(text) <= 60 else text[:57] + "…"
-    with allure.step(f"Given: {rel} holds {shown!r}" + (" (mode 0755)" if executable else "")):
-        path = config.parent / rel
-        path.write_text(text, encoding="utf-8")
-        if executable:
-            path.chmod(0o755)
-        allure.attach(text, name=f"{rel} (world: alex copy)",
-                      attachment_type=allure.attachment_type.TEXT)
-    return path
-
-
-def given_script(config: Path, rel: str, body: str) -> Path:
-    """Given: an executable /bin/sh script at ``<config-dir>/<rel>`` running ``body``."""
-    return given_file(config, rel, "#!/bin/sh\n" + body, executable=True)
-
-
-def given_leash(monkeypatch: pytest.MonkeyPatch, tmp_path: Path, **constants: float) -> None:
-    """Given: the bake's ⚖-R21 leash shrunk to ``constants`` (bake.adapters module constants) —
-    a generated ``sitecustomize.py`` on PYTHONPATH sets them before ``python -m bake`` starts.
-    Nothing in bake/ reads it; the bake's own ``main()`` runs unchanged."""
-    shown = ", ".join(f"{k} = {v:g}" for k, v in constants.items())
-    with allure.step(f"Given: bake leash shrunk: {shown} (tests-only sitecustomize)"):
-        site = tmp_path / "leash"
-        site.mkdir()
-        source = "import bake.adapters as a\n" + "".join(f"a.{k} = {v!r}\n" for k, v in constants.items())
-        (site / "sitecustomize.py").write_text(source, encoding="utf-8")
-        monkeypatch.setenv("PYTHONPATH", os.pathsep.join(
-            filter(None, [str(site), os.environ.get("PYTHONPATH")])))
-        allure.attach(source, name="sitecustomize.py (leash)",
-                      attachment_type=allure.attachment_type.TEXT)
-
-
 def plants_command(alex_copy: AlexCopy, body: str, *args: str, note: str = "",
-                   also: Callable[[], None] | None = None) -> Path:
+                   world: Callable[[Path], None] | None = None) -> Path:
     """Given: alex whose wider/plants runs ``./notes/plants-probe.sh *args`` with ``body``.
-    ``also`` (e.g. a ``given_leash``) runs inside the same given step; ``note`` names it."""
+    ``world`` (e.g. a ``given_leash``) runs inside the same given step; ``note`` names it."""
     argv = ["./notes/plants-probe.sh", *args]
-
-    def edit(c: dict) -> None:
-        item(c, "wider/plants").update(status={"command": argv})
-        if also is not None:
-            also()
-    config = given_alex(alex_copy, f"wider/plants command: {argv}, script body {body!r}{note}", edit)
+    config = given_alex(alex_copy, f"wider/plants command: {argv}, script body {body!r}{note}",
+                        lambda c: item(c, "wider/plants").update(status={"command": argv}), world=world)
     given_script(config, "notes/plants-probe.sh", body)
     return config
 
 
+def leashed(env: dict[str, str], **constants: float) -> Callable[[Path], None]:
+    """A ``world`` knob for ``given_alex``: ``given_leash(**constants)`` inside the world's given
+    step, its env overrides collected into ``env`` (for ``when_bake(..., env=env)``)."""
+    return lambda world: env.update(given_leash(world / "circles.yaml", **constants))
+
+
 # ---------------------------------------------------------------------------- then (local)
-
-def warnings_for(run: BakeRun, ref: str) -> list[str]:
-    """The artifact's build-warning messages naming ``ref``."""
-    return [w["message"] for w in (run.data or {}).get("warnings", []) if w.get("item") == ref]
-
-
-def then_grey_by_failure(run: BakeRun, ref: str, guardrail: str | None = None) -> str:
-    """CIR-DATA-FAILURE-IS-GREY's shape for ``ref``, one verdict per claim: ⚪ by-failure, no
-    data date, exactly one warning naming the item, and that warning as the detail line's reason
-    segment after the guardrail and the status word (CIR-DATA-DETAIL-LINE: "guardrail · status ·
-    … · reason"; no guardrail → the line starts at the status). Returns the warning text."""
-    it = item_of(run.data, ref)
-    verdict(f"{ref} status, grey_reason, last_data_date",
-            [it["status"], it["grey_reason"], it["last_data_date"]], ["grey", "by-failure", None])
-    messages = warnings_for(run, ref)
-    verdict(f"warnings naming {ref}", len(messages), 1)
-    prefix = f"{guardrail} · unmonitored · " if guardrail else "unmonitored · "
-    verdict(f"{ref} detail_line", it["detail_line"], prefix + messages[0])
-    return messages[0]
-
+# CIR-DATA-FAILURE-IS-GREY's shape with the whole detail line claimed (CIR-DATA-DETAIL-LINE:
+# "guardrail · status · … · reason"), for the two items these rows turn.
 
 def then_sleep_failure(run: BakeRun) -> str:
-    return then_grey_by_failure(run, "self/sleep", SLEEP_GUARDRAIL)
+    return then_grey_by_failure(run, "self/sleep", guardrail=SLEEP_GUARDRAIL, exact_detail=True)
 
 
 def then_plants_failure(run: BakeRun) -> str:
-    return then_grey_by_failure(run, "wider/plants")
+    return then_grey_by_failure(run, "wider/plants", exact_detail=True)
 
 
 # ===========================================================================
@@ -446,15 +408,14 @@ class TestDataAgeCalendar:
         pytest.param("Pacific/Auckland",
                      id="CIR-DATA-AGE-CALENDAR#age-host-zone-irrelevant host TZ=Pacific/Auckland"),
     ])
-    def test_age_host_zone_irrelevant(self, alex_copy: AlexCopy, monkeypatch: pytest.MonkeyPatch,
-                                      host_tz: str) -> None:
+    def test_age_host_zone_irrelevant(self, alex_copy: AlexCopy, host_tz: str) -> None:
         """The same config baked under TZ=UTC and TZ=Pacific/Auckland yields identical ages —
         both runs against the same expected values: the fixture's own (sleep 2026-08-01, age 2
         → 🟢; labs 2026-01-15, age 200 → 🔴)."""
         config = given_alex(alex_copy)
         with allure.step(f"Given: the bake host's TZ={host_tz}"):
-            monkeypatch.setenv("TZ", host_tz)
-        run = when_bake(config, "--evaluate")
+            host = {"TZ": host_tz}
+        run = when_bake(config, "--evaluate", env=host)
         verdict("self/sleep last_data_date, status",
                 [item_of(run.data, "self/sleep")[k] for k in ("last_data_date", "status")],
                 [SLEEP_NEWEST, "green"])
@@ -634,19 +595,18 @@ class TestAdaptCommand:
         verdict("wider/plants last_data_date", plants["last_data_date"], None)
 
     @rule("CIR-ADAPT-COMMAND")
-    def test_command_not_shell_interpreted(self, alex_copy: AlexCopy,
-                                           monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_command_not_shell_interpreted(self, alex_copy: AlexCopy) -> None:
         """CIR-ADAPT-COMMAND#command-not-shell-interpreted — `["./x.sh", "a b", "*", "$HOME"]`
         arrives as three arguments, verbatim: no word split, no glob, no $VAR expansion."""
         with allure.step("Given: the bake's environment holds HOME=/should-not-expand"):
-            monkeypatch.setenv("HOME", "/should-not-expand")
+            host = {"HOME": "/should-not-expand"}
         config = plants_command(
             alex_copy,
             '[ "$#" = 3 ] && [ "$1" = "a b" ] && [ "$2" = "*" ] && [ "$3" = \'$HOME\' ] '
             "&& echo green && exit 0\nexit 9\n",
             "a b", "*", "$HOME",
         )
-        run = when_bake(config, "--evaluate")
+        run = when_bake(config, "--evaluate", env=host)
         # Verbatim argv → the script's own check passes → it prints green → 🟢 (else exit 9 → ⚪).
         verdict("wider/plants status", item_of(run.data, "wider/plants")["status"], "green")
 
@@ -751,15 +711,15 @@ class TestAdaptBudget:
     """CIR-ADAPT-BUDGET — per-item timeout, process group, total budget, environment."""
 
     @rule("CIR-ADAPT-BUDGET")
-    def test_command_per_item_timeout(self, alex_copy: AlexCopy, tmp_path: Path,
-                                      monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_command_per_item_timeout(self, alex_copy: AlexCopy) -> None:
         """CIR-ADAPT-BUDGET#command-per-item-timeout — a command sleeping past the per-item
         timeout is killed; ⚪ + warning naming the timeout."""
+        leash: dict[str, str] = {}
         config = plants_command(alex_copy, "sleep 20\necho green\n",
                                 note=" (leash: COMMAND_TIMEOUT_SECONDS 0.5)",
-                                also=lambda: given_leash(monkeypatch, tmp_path, COMMAND_TIMEOUT_SECONDS=0.5))
+                                world=leashed(leash, COMMAND_TIMEOUT_SECONDS=0.5))
         started = time.monotonic()
-        run = when_bake(config, "--evaluate")
+        run = when_bake(config, "--evaluate", env=leash)
         elapsed = time.monotonic() - started
         verdict("wider/plants warning", then_plants_failure(run), "timed out", op="contains")
         # Killed at ~0.5 s, far short of the script's own 20 s.
@@ -770,27 +730,25 @@ class TestAdaptBudget:
         pytest.param("exits", "green", id="command exits, child lingers"),
         pytest.param("times out", "grey", id="command times out"),
     ])
-    def test_command_children_killed(self, alex_copy: AlexCopy, tmp_path: Path,
-                                     monkeypatch: pytest.MonkeyPatch, ends: str, light: str) -> None:
+    def test_command_children_killed(self, alex_copy: AlexCopy, ends: str, light: str) -> None:
         """CIR-ADAPT-BUDGET#command-children-killed — a child that would outlive its command is
         terminated with the process group, whether the command exits or times out."""
         # The script backgrounds a 60 s child, records its pid in child.pid (relative: the
         # command's cwd is the config dir), then exits with `green` or sleeps past the leash.
         tail = "echo green\n" if ends == "exits" else "sleep 20\n"
         leash = "" if ends == "exits" else " (leash: COMMAND_TIMEOUT_SECONDS 0.5)"
-        also = None if ends == "exits" else (
-            lambda: given_leash(monkeypatch, tmp_path, COMMAND_TIMEOUT_SECONDS=0.5))
+        env: dict[str, str] = {}
+        knob = None if ends == "exits" else leashed(env, COMMAND_TIMEOUT_SECONDS=0.5)
         config = plants_command(alex_copy, 'sleep 60 >/dev/null 2>&1 &\necho $! > "$1"\n' + tail,
-                                "child.pid", note=f", command {ends}{leash}", also=also)
-        run = when_bake(config, "--evaluate")
+                                "child.pid", note=f", command {ends}{leash}", world=knob)
+        run = when_bake(config, "--evaluate", env=env)
         child = int((config.parent / "child.pid").read_text().strip())
         verdict(f"the command's child (pid from child.pid) alive after the {ends} command",
                 not _wait_dead(child), False)
         verdict("wider/plants status", item_of(run.data, "wider/plants")["status"], light)
 
     @rule("CIR-ADAPT-BUDGET")
-    def test_bake_total_budget(self, alex_copy: AlexCopy, tmp_path: Path,
-                               monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_bake_total_budget(self, alex_copy: AlexCopy) -> None:
         """CIR-ADAPT-BUDGET#bake-total-budget — many slow adapters: the bake ends within the
         total budget; every item left unresolved is ⚪ + warning."""
         slow = ["self/sleep", "self/labs", "wider/plants"]
@@ -798,12 +756,13 @@ class TestAdaptBudget:
         def edit(c: dict) -> None:
             for ref in slow:
                 item(c, ref)["status"] = {"command": ["./notes/slow.sh"]}
-            given_leash(monkeypatch, tmp_path, BAKE_BUDGET_SECONDS=1.0)
+        leash: dict[str, str] = {}
         config = given_alex(alex_copy, f"{', '.join(slow)} command: ['./notes/slow.sh'] "
-                                       "(leash: BAKE_BUDGET_SECONDS 1)", edit)
+                                       "(leash: BAKE_BUDGET_SECONDS 1)", edit,
+                            world=leashed(leash, BAKE_BUDGET_SECONDS=1.0))
         given_script(config, "notes/slow.sh", "sleep 20\necho green\n")
         started = time.monotonic()
-        run = when_bake(config, "--evaluate")
+        run = when_bake(config, "--evaluate", env=leash)
         elapsed = time.monotonic() - started
         # Three 20 s commands under a 1 s budget: the bake ends near 1 s, not 60 s.
         verdict("bake wall time < 10 s", elapsed < 10, True)
@@ -817,16 +776,14 @@ class TestAdaptBudget:
         verdict("wider/friends status", item_of(run.data, "wider/friends")["status"], "red")
 
     @rule("CIR-ADAPT-BUDGET")
-    def test_environment_not_inherited_wholesale(self, alex_copy: AlexCopy,
-                                                 monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_environment_not_inherited_wholesale(self, alex_copy: AlexCopy) -> None:
         """CIR-ADAPT-BUDGET#environment-not-inherited-wholesale — the bake's env holds a token;
         the command receives a minimal, explicit environment without it."""
         with allure.step("Given: the bake's environment holds CIRCLES_REGISTRY_TOKEN=s3cret-token "
                          "and KUBECONFIG=/home/alex/.kube/config"):
-            monkeypatch.setenv("CIRCLES_REGISTRY_TOKEN", "s3cret-token")
-            monkeypatch.setenv("KUBECONFIG", "/home/alex/.kube/config")
+            host = {"CIRCLES_REGISTRY_TOKEN": "s3cret-token", "KUBECONFIG": "/home/alex/.kube/config"}
         config = plants_command(alex_copy, 'env > "$1"\necho green\n', "env.txt")
-        run = when_bake(config, "--evaluate")
+        run = when_bake(config, "--evaluate", env=host)
         seen = (config.parent / "env.txt").read_text()
         verdict("wider/plants status", item_of(run.data, "wider/plants")["status"], "green")
         # verdict()'s shape by hand, so the command's env.txt attaches under the claim it supports.

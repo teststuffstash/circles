@@ -26,6 +26,7 @@ import pytest
 from playwright.sync_api import Page
 from pypdf import PdfReader
 
+from browser.browser_helpers import FURNITURE  # CIR-RENDER-ONE-SCREEN's named furniture
 from rules import rule
 
 pytestmark = pytest.mark.browser
@@ -42,7 +43,6 @@ def _banner_text(hours: int) -> str:
 GREEN_RGB = "rgb(0, 145, 106)"   # #00916A
 RED_RGB = "rgb(178, 34, 34)"     # #B22222
 
-FURNITURE = ("#chart-area", "#ring-key", "#legend", "#stamp", "#detail-strip")
 
 _STATE = """() => {
   const banner = document.getElementById('stale-banner');

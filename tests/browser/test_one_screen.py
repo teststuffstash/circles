@@ -10,13 +10,11 @@ from __future__ import annotations
 import pytest
 from playwright.sync_api import Page
 
+from browser.browser_helpers import FURNITURE  # CIR-RENDER-ONE-SCREEN's named furniture
 from rules import rule
 
 pytestmark = pytest.mark.browser
 
-# The page furniture CIR-RENDER-ONE-SCREEN#one-screen-reference names: "chart, ring key,
-# legend, stamp and detail strip fully visible" (ids from bake/render.py).
-FURNITURE = ("#chart-area", "#ring-key", "#legend", "#stamp", "#detail-strip")
 
 _MEASURE_SCROLL = """() => {
   const d = document.documentElement, b = document.body;
