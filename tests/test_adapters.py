@@ -392,7 +392,9 @@ def given_probe(alex_copy: AlexCopy, token: str, yellow_after: int, red_after: i
 class TestDataAgeCalendar:
     """CIR-DATA-AGE-CALENDAR — calendar-day boundaries, never (now − then) ÷ 86400."""
 
-    @rule("CIR-DATA-AGE-CALENDAR")
+    # Unlabelled (seat ruling 2026-10-16): data.json carries no age and yellow_after ≥ 1, so the
+    # CLI cannot tell age 0 from age 1 — partial pinning is not row evidence. The exact integers
+    # are guarded by test_calendar_age_exact_integers.
     def test_age_same_day_is_zero(self, alex_copy: AlexCopy) -> None:
         """CIR-DATA-AGE-CALENDAR#age-same-day-is-zero — source 2026-08-03, reference 2026-08-03
         → 0: counted (not excluded as future, which age < 0 would be — ⚖-R8), 🟢 under
@@ -404,7 +406,9 @@ class TestDataAgeCalendar:
         verdict("self/sleep status", sleep["status"], "green")
         verdict("warnings naming self/sleep", warnings_for(run, "self/sleep"), [])
 
-    @rule("CIR-DATA-AGE-CALENDAR")
+    # Unlabelled (seat ruling 2026-10-16): data.json carries no age and yellow_after ≥ 1, so the
+    # CLI cannot tell age 0 from age 1 — partial pinning is not row evidence. The exact integers
+    # are guarded by test_calendar_age_exact_integers.
     def test_age_yesterday_is_one(self, alex_copy: AlexCopy) -> None:
         """CIR-DATA-AGE-CALENDAR#age-yesterday-is-one — source 2026-08-02, reference 2026-08-03
         → 1: 🟢 under yellow_after 1 (age 2 would be 🟡), counted (not future)."""
