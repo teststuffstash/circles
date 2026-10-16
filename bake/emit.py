@@ -2,23 +2,57 @@
 #
 # Requirements owned:
 #   CIR-BAKE-ATOMIC-WRITE — temp file + rename so a half-written artifact is never observable.
+#   CIR-BAKE-ARTIFACT — the artifact's shape is IMPORTED from the contract page's machine half,
+#     specs/data/data-json.schema.json (RULES rule 7), never re-declared here.
 
 from __future__ import annotations
 
 import json
 import os
 import tempfile
+from functools import cache
 from pathlib import Path
+
+import jsonschema
+
+# The sibling of specs/data/data-json.md. The image's bake stage copies it to the same
+# relative place (Dockerfile), so this resolves in the repo and in /build alike.
+ARTIFACT_SCHEMA = Path(__file__).resolve().parent.parent / "specs" / "data" / "data-json.schema.json"
+
+
+class ArtifactSchemaError(ValueError):
+    """The bake produced an artifact its own contract rejects — a bake bug, never a config error."""
+
+
+@cache
+def _validator() -> jsonschema.protocols.Validator:
+    schema = json.loads(ARTIFACT_SCHEMA.read_text(encoding="utf-8"))
+    cls = jsonschema.validators.validator_for(schema)
+    cls.check_schema(schema)
+    return cls(schema)
+
+
+def validate_artifact(artifact: dict) -> None:
+    """Raise ArtifactSchemaError naming every violation of data-json.schema.json."""
+    errors = sorted(_validator().iter_errors(artifact), key=lambda e: list(e.absolute_path))
+    if errors:
+        lines = [f"  {'/'.join(str(p) for p in e.absolute_path) or '<root>'}: {e.message}"
+                 for e in errors]
+        raise ArtifactSchemaError(
+            "artifact violates specs/data/data-json.schema.json:\n" + "\n".join(lines))
 
 
 def write_artifact(artifact: dict, out_dir: Path) -> Path:
-    """Atomic write of *out_dir*/data.json (CIR-BAKE-ATOMIC-WRITE).
+    """Validate, then atomically write *out_dir*/data.json (CIR-BAKE-ATOMIC-WRITE).
 
-    Writes to a temp file in the same directory, then renames atomically over
-    the target. If *out_dir* does not exist it is created (parents too).
+    The artifact is validated against the contract schema first; a violation raises
+    ArtifactSchemaError before anything touches the disk (a failed bake publishes nothing).
+    Then writes to a temp file in the same directory and renames atomically over the target.
+    If *out_dir* does not exist it is created (parents too).
 
     Returns the path to the written file.
     """
+    validate_artifact(artifact)
     out_dir = out_dir.resolve()
     out_dir.mkdir(parents=True, exist_ok=True)
 

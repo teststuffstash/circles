@@ -5,6 +5,10 @@ SSG-agnostic. This page is the contract between the bake (writes it) and the pag
 The page's consumption-side requirements live in [../render/layout.md](../render/layout.md) and
 [../render/interactions.md](../render/interactions.md).
 
+**Machine half:** [`data-json.schema.json`](data-json.schema.json) — the artifact's shape, which
+the bake imports and validates against before writing (RULES rule 7). Each rule below is
+annotated there (`x-requirements`) or named in its `x-not-schema-shaped` map.
+
 **World: alex** — every table on this page states behavior against the fixture person.
 
 ## CIR-BAKE-ARTIFACT

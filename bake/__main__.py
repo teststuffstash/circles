@@ -26,7 +26,7 @@ from pathlib import Path
 from zoneinfo import ZoneInfo
 
 from bake.config import ConfigError, load_config
-from bake.emit import write_artifact
+from bake.emit import ArtifactSchemaError, write_artifact
 from bake.render import add_capacity_warnings, render_page
 from bake.resolve import resolve
 
@@ -137,6 +137,10 @@ def main() -> None:
     try:
         data_path = write_artifact(artifact, args.out)
         print(f"Wrote {data_path}")
+    except ArtifactSchemaError as e:
+        # A bake bug, not a config error: nothing is written (index.html neither).
+        print(f"Bake bug: {e}", file=sys.stderr)
+        sys.exit(1)
     except OSError as e:
         print(f"Write error: {e}", file=sys.stderr)
         sys.exit(1)

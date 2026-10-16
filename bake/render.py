@@ -682,13 +682,13 @@ def _add_capacity_warnings(artifact: dict) -> list[dict]:
 
         if num_items == 0:
             warnings.append({
-                "item": f"{ring_id}",
+                "item": None,  # ring-level: not an item ref (CIR-BAKE-WARNINGS)
                 "message": f"Ring \"{ring_label}\" ({ring_id}) has no items — "
                            f"rendered as unmonitored band.",
             })
         elif num_items > 8:
             warnings.append({
-                "item": f"{ring_id}",
+                "item": None,  # ring-level: not an item ref (CIR-BAKE-WARNINGS)
                 "message": f"Ring \"{ring_label}\" ({ring_id}) has {num_items} items — "
                            f"exceeds legibility envelope of 8 per ring. "
                            f"Labels may be elided and cells below minimum hover target.",
@@ -700,7 +700,7 @@ def _add_capacity_warnings(artifact: dict) -> list[dict]:
             max_items_at_min = int(available_deg / MIN_ARC_DEG) if available_deg > 0 else 0
             if num_items > max_items_at_min:
                 warnings.append({
-                    "item": f"{ring_id}",
+                    "item": None,  # ring-level: not an item ref (CIR-BAKE-WARNINGS)
                     "message": f"Ring \"{ring_label}\" ({ring_id}) has {num_items} items — "
                                f"exceeds {max_items_at_min} items at {MIN_ARC_DEG}° minimum arc. "
                                f"Arcs are scaled proportionally to fit within 360°.",

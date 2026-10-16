@@ -17,6 +17,8 @@ COPY --from=ghcr.io/astral-sh/uv:0.5 /uv /usr/local/bin/uv
 # Copy the bake module, fixture config, and project metadata
 COPY bake/ bake/
 COPY fixtures/ fixtures/
+# The artifact's contract schema — bake/emit.py imports it (RULES rule 7) from this relative path
+COPY specs/data/data-json.schema.json specs/data/
 COPY pyproject.toml uv.lock ./
 
 # Install dependencies (bake/ must exist on disk before uv sync so setuptools

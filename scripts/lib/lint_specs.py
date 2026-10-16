@@ -16,12 +16,19 @@ committed, so the gate checks only that the page, the tests and the fragments ca
 - every `rule("…")` label in tests/ names an existing heading;
 - every parametrized test carrying a rule label has explicit intent ids.
 
+The schema half (RULES.md rule 7 — requirement ⇄ schema coupling is mechanical): every contract
+page (CONTRACT_PAGES, the one declaration) has a sibling `<name>.schema.json`, and every
+`*.schema.json` is the sibling of a declared contract page; every `x-requirements` ID heads a rule
+somewhere under specs/; every rule on a contract page is either annotated by its schema's
+`x-requirements` or named in that schema's root `x-not-schema-shaped` map (ID → why) — never both.
+
 Run via `scripts/lint-specs.sh`, wired into `devbox run ci`.
 """
 
 from __future__ import annotations
 
 import ast
+import json
 import re
 import sys
 from pathlib import Path
@@ -29,6 +36,12 @@ from pathlib import Path
 # The closed area vocabulary — ruled once (⚖-R22). A new area is a spec change to
 # specs/README.md's ownership table, not an authoring choice.
 AREAS = {"DATA", "ADAPT", "BAKE", "RENDER", "DETAIL", "PROC"}
+
+# The contract pages (RULES.md rule 7), relative to specs/ — the ONE place they are declared.
+# Each must have a sibling `<name>.schema.json` (the machine half the implementation imports).
+# Interface pages not listed here are not yet contract pages; a schema beside one is an error.
+CONTRACT_PAGES = ("data/data-json.md", "data/circles-yaml.md")
+SCHEMA_SUFFIX = ".schema.json"
 
 REQ_HEADING = re.compile(r"^##\s+(CIR-[A-Z0-9-]+)\b")
 REQ_ID = re.compile(r"^CIR-([A-Z]+)-([A-Z0-9-]+)$")
@@ -316,6 +329,75 @@ def check_param_ids(path: Path, f: Findings) -> int:
     return checked
 
 
+def _schema_requirements(node: object, out: list[str], f: Findings, path: Path) -> None:
+    """Collect every ``x-requirements`` list anywhere in a schema document."""
+    if isinstance(node, dict):
+        for key, value in node.items():
+            if key == "x-requirements":
+                if not (isinstance(value, list) and all(isinstance(v, str) for v in value)):
+                    f.error(path, f"x-requirements must be a list of rule IDs, got {value!r}")
+                    continue
+                out.extend(value)
+            else:
+                _schema_requirements(value, out, f, path)
+    elif isinstance(node, list):
+        for value in node:
+            _schema_requirements(value, out, f, path)
+
+
+def check_schemas(
+    specs: Path, seen_ids: dict[str, Path], f: Findings,
+    contract_pages: tuple[str, ...] = CONTRACT_PAGES,
+) -> int:
+    """The requirement ⇄ schema coupling (RULES.md rule 7). Returns how many schemas were checked."""
+    declared = {(specs / rel).resolve() for rel in contract_pages}
+    for page in sorted(declared):
+        if not page.exists():
+            f.error(page, "declared contract page (CONTRACT_PAGES) does not exist")
+        elif not page.with_suffix(SCHEMA_SUFFIX).exists():
+            f.error(page, f"contract page has no sibling {page.stem}{SCHEMA_SUFFIX} "
+                          f"(RULES.md rule 7 — the machine half)")
+
+    schemas = sorted(p for p in specs.rglob(f"*{SCHEMA_SUFFIX}")
+                     if (specs / "evidence") not in p.parents)
+    for schema_path in schemas:
+        page = schema_path.with_name(schema_path.name[: -len(SCHEMA_SUFFIX)] + ".md").resolve()
+        if page not in declared:
+            f.error(schema_path, f"schema is not the sibling of a declared contract page "
+                                 f"({page.name} is not in CONTRACT_PAGES)")
+            continue
+        try:
+            doc = json.loads(schema_path.read_text(encoding="utf-8"))
+        except json.JSONDecodeError as e:
+            f.error(schema_path, f"not valid JSON: {e}")
+            continue
+
+        annotated: list[str] = []
+        _schema_requirements(doc, annotated, f, schema_path)
+        for rule_id in sorted(set(annotated)):
+            if rule_id not in seen_ids:
+                f.error(schema_path, f"x-requirements names {rule_id!r}, which heads no rule "
+                                     f"under specs/ (an orphan annotation)")
+
+        not_shaped = doc.get("x-not-schema-shaped", {}) if isinstance(doc, dict) else {}
+        if not isinstance(not_shaped, dict):
+            f.error(schema_path, "x-not-schema-shaped must be a map of rule ID → reason")
+            not_shaped = {}
+        page_rules = {rid for rid, where in seen_ids.items() if where.resolve() == page}
+        for rule_id in sorted(not_shaped):
+            if rule_id not in page_rules:
+                f.error(schema_path, f"x-not-schema-shaped lists {rule_id!r}, which heads no "
+                                     f"rule on {page.name}")
+            if rule_id in annotated:
+                f.error(schema_path, f"{rule_id} is both annotated (x-requirements) and listed "
+                                     f"in x-not-schema-shaped — pick one")
+        for rule_id in sorted(page_rules - set(annotated) - set(not_shaped)):
+            f.error(page, f"{rule_id} is on a contract page but neither annotated in "
+                          f"{schema_path.name} (x-requirements) nor listed in its "
+                          f"x-not-schema-shaped — an orphan rule")
+    return len(schemas)
+
+
 def check_fixture(repo: Path, f: Findings) -> None:
     """Guard the fixture against spec drift.
 
@@ -379,6 +461,7 @@ def main() -> int:
     check_ambiguity_index(repo, all_refs, f)
     check_labels(labels, seen_ids, f)
     params = sum(check_param_ids(path, f) for path in _test_files(repo))
+    schemas = check_schemas(specs, seen_ids, f)
     check_fixture(repo, f)
 
     if f.errors:
@@ -389,7 +472,8 @@ def main() -> int:
 
     print(f"lint-specs: OK — {len(pages)} pages, {len(seen_ids)} requirement ids "
           f"({len(labelled & set(seen_ids))} labelled by tests), {params} labelled "
-          f"parametrizations with explicit ids, {len(all_refs)} ⚖ entries indexed")
+          f"parametrizations with explicit ids, {schemas} contract-page schemas coupled, "
+          f"{len(all_refs)} ⚖ entries indexed")
     return 0
 
 
