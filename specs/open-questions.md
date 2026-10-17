@@ -80,6 +80,7 @@ goal issue or the majority of the fan-out. They are where review attention is wo
 | ⚖-R50 | the wire value for phase-unevaluated adapters | `grey_reason: not-evaluated`, a third value | [`CIR-DATA-GREY-REASON`](data/status-resolution.md) |
 | ⚖-R51 | the grey status word in detail lines | always `unmonitored`; the reason follows as its own segment | [`CIR-DATA-GREY-REASON`](data/status-resolution.md) |
 | ⚖-R52 | overlapping validation checks | most-specific error wins; every row independently triggerable | [`CIR-DATA-IDENTITY`](data/circles-yaml.md) |
+| ⚖-R53 | does `adapter-never-writes` bind `command:`? | no — scoped to the adapters the bake implements; `command:` stays under the trust boundary, the CronJob's read-only config mount is the production guard | [`CIR-ADAPT-CONTRACT`](data/adapters.md) |
 
 ## What the fan-out missed entirely
 
