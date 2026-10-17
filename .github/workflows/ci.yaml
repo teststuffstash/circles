@@ -52,7 +52,7 @@ jobs:
     env:
       CIRCLES_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       - name: Kind system test (devbox run test-system)
         run: devbox run test-system
       # Browser evidence tier (CIR-PROC-BROWSER-EVIDENCE, #34): headless Chromium in the
@@ -82,7 +82,7 @@ jobs:
     env:
       CIRCLES_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
       # No toolchain install: the ARC runner image bakes single-user Nix + devbox + the LAN
       # nix substituter (homelab docker/arc-runner/, FU-015).
@@ -119,7 +119,7 @@ jobs:
     if: always()
     runs-on: homelab-ephemeral
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
       - name: Download unit + browser Allure results
         continue-on-error: true
