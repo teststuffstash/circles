@@ -35,7 +35,7 @@ item's problem.
 | adapter-cannot-return-grey | adapter attempts to resolve ⚪ | not expressible — ⚪ comes only from absence or failure ([`CIR-DATA-GREY-REASON`](status-resolution.md)) |
 | adapter-resolves-one-item | one `status:` block | exactly one status |
 | adapter-never-reads-the-clock | adapter needs "today" | uses the injected reference date |
-| adapter-never-writes | adapter attempts to write in the config dir | forbidden; the bake owns all output |
+| adapter-never-writes | a built-in or contributed adapter attempts to write in the config dir | forbidden; the bake owns all output. `command:` is out of scope — ⚖-R53 below |
 | adapter-unknown-name | `status: {prometheus: …}` on a build without it | config error (`CIR-DATA-SCHEMA-ADAPTER-SLOT`) |
 | adapter-failure-is-isolated | one of ten adapters raises an unexpected exception | that item is ⚪ + warning; the other nine resolve normally |
 
@@ -43,6 +43,15 @@ The last row matters more than it looks: an unhandled exception in a contributed
 not take down the bake, because a failed bake means a stale page
 ([`CIR-BAKE-STALE-SELF`](data-json.md)) and a stale page is the thing this product exists to
 prevent.
+
+**⚖-R53 — does `adapter-never-writes` bind `command:`?** Options: (a) scope the row to the adapters the bake implements; (b) detect writes (snapshot the config dir around each command → ⚪ + warning); (c) prevent them (run against a throwaway read-only copy). **Ruled (a)** (operator, 2026-10-16, circles#103). The row
+binds the adapters the bake *implements* — `manual:`, `freshness:` and any contributed built-in.
+`command:` runs the person's own code under the trust boundary of
+[`CIR-ADAPT-COMMAND`](#cir-adapt-command): "a stated trust boundary rather than a sandbox", so
+the bake does not police what that code writes. The production guard is the deployment, not the
+bake: the nightly CronJob mounts the cloned config read-only (`chart/templates/cronjob.yaml`, the
+`src` volume), so a write into the config dir fails there and the item resolves ⚪ + warning by
+the ordinary exit-code rule. A local `--evaluate` run has no such guard, by design.
 
 <details markdown="1"><summary>Evidence — latest run</summary>
 
