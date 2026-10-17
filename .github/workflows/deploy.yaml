@@ -37,7 +37,7 @@ jobs:
       contents: read
       packages: write # push image + chart to ghcr via the job's GITHUB_TOKEN
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           fetch-depth: 0 # deploy-pin.sh's monotonic ancestor guard needs full history
 
@@ -55,7 +55,7 @@ jobs:
           echo "→ deploying ${DATE}-g${SHA}"
 
       # auth to ghcr (action — pushing/auth via provided actions is fine)
-      - uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
+      - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
@@ -80,7 +80,7 @@ jobs:
       # homelab docs/sleep-iac.md (the pipeline reference) §"Deploy pipeline").
       - name: Mint circles-iac token
         id: iac
-        uses: actions/create-github-app-token@d72941d797fd3113feb6b93fd0dec494b13a2547 # v1
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3
         with:
           app-id: ${{ secrets.DEPLOY_APP_ID }}
           private-key: ${{ secrets.DEPLOY_APP_PRIVATE_KEY }}
