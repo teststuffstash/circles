@@ -231,7 +231,9 @@ answers here — the served page, or the config directory that every other path 
 
 `share` is a **relative weight normalized within its ring**, not a fraction that must sum to 1.
 An item's arc angle is `360° × share ÷ (sum of the ring's shares)`; absent `share` means
-weight 1. Shares are per-ring; there is no cross-ring constraint. Geometry consequences —
+weight 1. A share is **declared** when the `share:` key is present, whatever its value — an
+explicit `share: 1` is declared, not a default. Shares are per-ring; there is no cross-ring
+constraint. Geometry consequences —
 minimum arc angle — are [`CIR-RENDER-MIN-ARC`](../render/sunburst.md).
 
 | row id | inputs | expected |
@@ -240,6 +242,8 @@ minimum arc angle — are [`CIR-RENDER-MIN-ARC`](../render/sunburst.md).
 | shares-absent-equal | three siblings, no `share:` | three 120° arcs |
 | shares-mixed | `nova: share 2`, `kit:` no share (weight 1) | arcs 240° / 120°, plus a build warning |
 | shares-mixed-fractional | `nova: share 0.5`, `kit:` no share | arcs 120° / 240°, plus a build warning |
+| shares-declared-one | three siblings, `share: 2` / `share: 1` / `share: 1` | arcs 180° / 90° / 90°; no mixed-shares warning (every share is declared) |
+| shares-mixed-declared-one | `nova: share 1`, `kit:` no share | arcs 180° / 180°, plus a build warning (declared and undeclared, though the weights match) |
 | share-zero | `share: 0` | config error, bake fails |
 | share-negative | `share: -1` | config error, bake fails |
 
