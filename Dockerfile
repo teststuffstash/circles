@@ -40,7 +40,7 @@ FROM bake AS bake-job
 RUN apk add --no-cache git && chmod -R a+rX /build
 
 # ── Stage 2: serve ─────────────────────────────────────────────────────────
-FROM nginxinc/nginx-unprivileged:1.27-alpine
+FROM nginxinc/nginx-unprivileged:1.31-alpine
 
 # Copy the baked artifacts from stage 1
 COPY --from=bake --chmod=644 /build/dist/ /usr/share/nginx/html/
