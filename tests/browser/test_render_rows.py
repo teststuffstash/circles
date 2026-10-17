@@ -1231,10 +1231,6 @@ class TestCapacity:
         then("labels with a corner outside their cell", _labels_outside_cells(geo), [])
         then("labels past the chart's edge", edge["labelsPastEdge"], [])
 
-    @pytest.mark.xfail(strict=True, reason=(
-        "product bug (measured, circles#103 round 2): at 6 rings the outermost band ⑥ Work is drawn "
-        "at r 380–410.1 in an 800×800 viewBox (half-extent 400), so extra-ring-2/one is clipped at "
-        "12/3/6/9 o'clock by the svg viewport; ring radii are not fitted to the chart"))
     @rule("CIR-RENDER-CAPACITY")
     def test_capacity_at_limit(self, page: Page, served: str, pages_dir: Path) -> None:
         """CIR-RENDER-CAPACITY#capacity-at-limit — 6 rings, 8 items in one ring: renders legibly;
@@ -1259,10 +1255,6 @@ class TestCapacity:
         then("cells drawn past the chart's edge", edge["cellsPastEdge"], [])
         then("labels past the chart's edge", edge["labelsPastEdge"], [])
 
-    @pytest.mark.xfail(strict=True, reason=(
-        "product bug (measured, circles#103 round 2): at 7 rings ⑦ Faith is drawn at r 414–444.1 and "
-        "⑥ Work at r 380–410.1 in an 800×800 viewBox (half-extent 400) — ⑦ shows only in the "
-        "square's corners and both labels are clipped; ring radii are not fitted to the chart"))
     @rule("CIR-RENDER-CAPACITY")
     def test_capacity_exceeded_ring_count(self, page: Page, served: str, pages_dir: Path) -> None:
         """CIR-RENDER-CAPACITY#capacity-exceeded-ring-count — 7 rings: bake succeeds with a build
@@ -1313,11 +1305,6 @@ class TestCapacity:
         then("degrees of the circle the band covers", round(cover[0]["covered"], 1), 360.0)
         then("cell fill", cells[0]["fill"], _rgb(PALETTE["yellow"]))
 
-    @pytest.mark.xfail(strict=True, reason=(
-        "product bug (measured, circles#103 round 2): the empty ring's band is painted grey "
-        "rgb(158, 158, 158) at opacity 0.5 with stroke rgb(204, 204, 204), where an unmonitored "
-        "cell (self/exercise) is opacity 1, stroke rgb(255, 255, 255) — a reduced-opacity ghost, "
-        "which CIR-RENDER-GREY-VISIBLE forbids for the unmonitored surface"))
     @rule("CIR-RENDER-CAPACITY")
     def test_capacity_empty_ring_band(self, page: Page, served: str, pages_dir: Path) -> None:
         """CIR-RENDER-CAPACITY#capacity-empty-ring-band — ring with zero items: the band is drawn in
@@ -1345,7 +1332,8 @@ class TestCapacity:
         then("bands drawn in ② Partner's slot", len(bands), 1)
         then("degrees of the circle the band covers", round(bands[0]["covered"], 1), 360.0)
         then("ring key", key, ["① Self", "② Partner", "③ Children", "④ Wider life"])
-        then("warnings naming ② Partner", [line for line in lines if "② Partner" in line], [], op="!=")
+        then("warnings naming ② Partner (label or id)",
+             [line for line in lines if "② Partner" in line or "'partner'" in line], [], op="!=")
         band = next(p for p in paint if p["item"] is None)
         unmonitored = next(p for p in paint if p["item"] == "self/exercise")
         treatment = ("fill", "opacity", "stroke", "strokeWidth", "dash")
@@ -1420,10 +1408,6 @@ class TestMinArc:
         then("④ Wider life cells drawn", len(wider), 120)
         then("④ Wider life: arcs + gaps consumed (°)", round(_consumed(wider), 1), 360.5, op="<=")
 
-    @pytest.mark.xfail(strict=True, reason=(
-        "product bug (measured, circles#103 round 2): with 200 items in ④ Wider life every arc is "
-        "drawn 0.0° wide (degenerate — total_deg clamps to 0 but the 2° gaps are still laid), and "
-        "the cells' starts run 0° → 398°, so the ring consumes 400° and wraps past noon"))
     @rule("CIR-RENDER-MIN-ARC")
     def test_overflow_no_negative_arcs(self, page: Page, served: str, pages_dir: Path) -> None:
         """CIR-RENDER-MIN-ARC#overflow-no-negative-arcs — 200 items in one ring: no negative /
@@ -1588,11 +1572,6 @@ class TestRingThickness:
                             "CSS px per SVG user unit")
         then("centre hole radius (CSS px)", round(min(g["rMin"] for g in geo) * scale, 1), 0, op=">")
 
-    @pytest.mark.xfail(strict=True, reason=(
-        "product bug (measured, circles#103 round 2): the fixture's summary line \"2 ok · 1 "
-        "attention · 1 act · 1 unmonitored · 3 not evaluated\" is 8-unit text reaching r 102.2 "
-        "from the centre, but the hole is r 60 and ① Self's cells — drawn after it — paint over "
-        "everything from r 60 out, so the disc shows only the middle of the counts"))
     @rule("CIR-RENDER-RING-THICKNESS")
     def test_centre_disc_holds_identity(self, page: Page, served: str, pages_dir: Path) -> None:
         """CIR-RENDER-RING-THICKNESS#centre-disc-holds-identity — any config: the disc carries the

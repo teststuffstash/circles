@@ -22,13 +22,30 @@ from typing import Any
 
 CX = 400.0  # SVG centre X
 CY = 400.0  # SVG centre Y
-CENTRE_RADIUS = 60.0
+# The outermost ring's outer edge never passes this radius: the viewBox is 800×800 (half-extent
+# 400), less a margin for the hover/focus stroke — so every ring at every ring count is drawn
+# inside the chart (CIR-RENDER-CAPACITY#capacity-at-limit, #capacity-exceeded-ring-count).
+CHART_RADIUS = 396.0
+# The centre hole (CIR-RENDER-RING-THICKNESS#centre-hole-is-not-zero) is sized to hold the
+# identity — name, summary counts, stamp (#centre-disc-holds-identity); its texts are fitted
+# to it (_fit_font).
+CENTRE_RADIUS = 100.0
 RING_GAP = 4.0
 BASE_THICKNESS = 80.0
 THICKNESS_DECAY = 10.0
 MIN_THICKNESS = 30.0
 CELL_GAP_DEG = 2.0
+# Gaps never take more than this share of a ring's circle, so a ring holding more cells than
+# the 2° gaps allow still closes at 360° with every arc wider than 0°
+# (CIR-RENDER-MIN-ARC#overflow-capped-at-total-deg, #overflow-no-negative-arcs).
+MAX_GAP_SHARE = 0.5
 MIN_ARC_DEG = 3.0  # minimum arc angle after gap
+# Centre-disc text: nominal sizes (user units), and a conservative average glyph advance in em
+# for the bake-time width estimate (sans-serif mixed case/digits measures ≈ 0.49 em).
+NAME_FONT = 11.0
+SUMMARY_FONT = 8.0
+STAMP_FONT = 7.0
+GLYPH_EM = 0.55
 
 # Palette (CIR-RENDER-PALETTE)
 STATUS_COLORS: dict[str, str] = {
@@ -58,31 +75,70 @@ LABEL_COLORS: dict[str, str] = {
 # ---------------------------------------------------------------------------
 
 
+def _gap_deg(num_items: int) -> float:
+    """The inter-cell gap for a ring of ``num_items`` cells.
+
+    A single-item ring has no gap (CIR-RENDER-ARC-SHARE#arc-share-single-item-ring). Otherwise
+    the gap is CELL_GAP_DEG, shrunk only when a ring's gaps would take more than MAX_GAP_SHARE
+    of the circle — the overflow case, where fixed gaps alone would run past 360°
+    (CIR-RENDER-MIN-ARC#overflow-no-negative-arcs).
+    """
+    if num_items <= 1:
+        return 0.0
+    return min(CELL_GAP_DEG, 360.0 * MAX_GAP_SHARE / num_items)
+
+
 def _total_deg(num_items: int) -> float:
-    """Compute total degrees available for arc placement.
+    """Compute total degrees available for arc placement (360° less the ring's gaps).
 
     A single-item ring spans the full 360° with no visible gap
     (CIR-RENDER-ARC-SHARE#arc-share-single-item-ring,
-     CIR-RENDER-RING-PARTITION#partition-full-circle-per-ring).
+     CIR-RENDER-RING-PARTITION#partition-full-circle-per-ring). Never ≤ 0: the gaps are capped
+    (_gap_deg), so arcs plus gaps always make exactly 360°.
     """
-    if num_items == 1:
-        return 360.0
-    return max(360.0 - CELL_GAP_DEG * num_items, 0.0)
+    return 360.0 - _gap_deg(num_items) * num_items
 
 
 def _compute_radii(num_rings: int) -> list[tuple[float, float]]:
     """Compute (inner_radius, outer_radius) for each ring, inside-out.
 
-    Thickness is non-increasing outward (CIR-RENDER-RING-THICKNESS).
+    Thickness is non-increasing outward (CIR-RENDER-RING-THICKNESS, ⚖-R10 (b)). The nominal
+    thicknesses are scaled down uniformly — which keeps them non-increasing — when the rings
+    would otherwise pass CHART_RADIUS, so every ring at every ring count is drawn inside the
+    chart (CIR-RENDER-CAPACITY). The centre hole is never scaled away
+    (#centre-hole-is-not-zero).
     """
+    if num_rings <= 0:
+        return []
+    nominal = [max(BASE_THICKNESS - i * THICKNESS_DECAY, MIN_THICKNESS) for i in range(num_rings)]
+    available = CHART_RADIUS - CENTRE_RADIUS - RING_GAP * (num_rings - 1)
+    scale = min(1.0, available / sum(nominal))
     radii: list[tuple[float, float]] = []
     inner = CENTRE_RADIUS
-    for i in range(num_rings):
-        thickness = max(BASE_THICKNESS - i * THICKNESS_DECAY, MIN_THICKNESS)
-        outer = inner + thickness
+    for thickness in nominal:
+        outer = inner + thickness * scale
         radii.append((inner, outer))
         inner = outer + RING_GAP
     return radii
+
+
+def _fit_font(text: str, nominal: float, centre_dy: float, pad: float = 6.0) -> float:
+    """Font size for one centre-disc line: the nominal size, shrunk until the line's estimated
+    box fits inside the centre hole (CIR-RENDER-RING-THICKNESS#centre-disc-holds-identity).
+
+    The width is estimated from the character count at GLYPH_EM per em (no font metrics at
+    bake time); the line's box spans ``centre_dy`` ± half a line height from the centre.
+    """
+    if not text:
+        return nominal
+    font = nominal
+    for _ in range(4):  # the box's height depends on the font; converge
+        reach = abs(centre_dy) + 0.6 * font
+        if reach >= CENTRE_RADIUS:
+            break
+        chord = 2.0 * math.sqrt(CENTRE_RADIUS ** 2 - reach ** 2) - 2.0 * pad
+        font = min(nominal, chord / (GLYPH_EM * len(text)))
+    return round(font, 2)
 
 
 def _arc_path(
@@ -279,9 +335,16 @@ def _render_svg(artifact: dict) -> str:
         'stroke-opacity="0.55"/></pattern></defs>'
     )
     parts.append(f'<circle cx="{CX}" cy="{CY}" r="{CENTRE_RADIUS}" fill="#f8f8f8" stroke="#ccc" stroke-width="1"/>')
-    parts.append(f'<text x="{CX}" y="{CY - 8}" text-anchor="middle" dominant-baseline="central" font-size="11" font-weight="bold" fill="#333">{person}</text>')
-    parts.append(f'<text x="{CX}" y="{CY + 10}" text-anchor="middle" dominant-baseline="central" font-size="8" fill="#666">{summary}</text>')
-    parts.append(f'<text x="{CX}" y="{CY + 28}" text-anchor="middle" dominant-baseline="central" font-size="7" fill="#999">{generated_at}</text>')
+    # The identity sits inside the hole (CIR-RENDER-RING-THICKNESS#centre-disc-holds-identity):
+    # the summary — the longest line — on the centre line where the hole is widest, the name
+    # above it, the stamp below; each line's font fitted to the hole's chord at its height.
+    # Sizes are computed on the unescaped text (what is drawn).
+    name_font = _fit_font(artifact.get("person", ""), NAME_FONT, -18.0)
+    summary_font = _fit_font(_summary_text(counts), SUMMARY_FONT, 0.0)
+    stamp_font = _fit_font(artifact.get("generated_at", ""), STAMP_FONT, 15.0)
+    parts.append(f'<text x="{CX}" y="{CY - 18}" text-anchor="middle" dominant-baseline="central" font-size="{name_font}" font-weight="bold" fill="#333">{person}</text>')
+    parts.append(f'<text x="{CX}" y="{CY}" text-anchor="middle" dominant-baseline="central" font-size="{summary_font}" fill="#666">{summary}</text>')
+    parts.append(f'<text x="{CX}" y="{CY + 15}" text-anchor="middle" dominant-baseline="central" font-size="{stamp_font}" fill="#999">{generated_at}</text>')
 
     # --- Rings ---
     for ring_idx, ring in enumerate(rings_data):
@@ -291,17 +354,19 @@ def _render_svg(artifact: dict) -> str:
         items = ring.get("items", [])
 
         if not items:
-            # Empty ring: draw full grey band
+            # Empty ring: a full band in the unmonitored treatment — the very paint an
+            # unmonitored ⚪ cell gets, no reduced opacity, no ghost stroke
+            # (CIR-RENDER-CAPACITY#capacity-empty-ring-band, CIR-RENDER-GREY-VISIBLE).
             d = _arc_path(0, 360, inner_r, outer_r)
             parts.append(
-                f'<path d="{d}" fill="{STATUS_COLORS["grey"]}" '
-                f'stroke="#ccc" stroke-width="0.5" opacity="0.5"/>'
+                f'<path d="{d}" fill="{STATUS_COLORS["grey"]}" stroke="#fff" stroke-width="0.5"/>'
             )
             continue
 
         total_share = sum(item.get("share", 1.0) for item in items)
 
         total_deg = _total_deg(len(items))
+        gap_deg = _gap_deg(len(items))
 
         # Compute natural arc angles, then iteratively floor-and-redistribute
         # so floored arcs keep MIN_ARC_DEG and remaining arcs absorb the
@@ -403,7 +468,7 @@ def _render_svg(artifact: dict) -> str:
             )
             parts.append(close_tag)
 
-            current_angle = end_angle + CELL_GAP_DEG
+            current_angle = end_angle + gap_deg
 
     # Stale overlay (CIR-RENDER-STALE-MARK#stale-is-not-a-fifth-colour): one hatched disc
     # over the whole picture, a separate visual channel ON TOP of the cells — the cells'
@@ -683,13 +748,10 @@ def _add_capacity_warnings(artifact: dict) -> list[dict]:
         items = ring.get("items", [])
         num_items = len(items)
 
-        if num_items == 0:
-            warnings.append({
-                "item": None,  # ring-level: not an item ref (CIR-BAKE-WARNINGS)
-                "message": f"Ring \"{ring_label}\" ({ring_id}) has no items — "
-                           f"rendered as unmonitored band.",
-            })
-        elif num_items > 8:
+        # An empty ring is warned about by the config loader (CIR-DATA-VALIDATION#empty-ring,
+        # ⚖-R13) — that one warning is CIR-RENDER-CAPACITY#capacity-empty-ring-band's "plus a
+        # warning"; repeating it here would warn twice about one ring.
+        if num_items > 8:
             warnings.append({
                 "item": None,  # ring-level: not an item ref (CIR-BAKE-WARNINGS)
                 "message": f"Ring \"{ring_label}\" ({ring_id}) has {num_items} items — "

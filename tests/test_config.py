@@ -497,6 +497,21 @@ class TestDataValidation:
         verdict("partner items", next(r for r in run.data["rings"] if r["id"] == "partner")["items"], [])
         verdict("build warnings", run.warnings, "no items", op="contains")
 
+    @rule("CIR-DATA-VALIDATION")
+    def test_empty_ring_warned_once(self, alex_copy) -> None:
+        """CIR-DATA-VALIDATION#empty-ring — ring with items: [] → "build warning" (singular,
+        ⚖-R13): the empty ring is warned about exactly once — CIR-RENDER-CAPACITY
+        #capacity-empty-ring-band's "plus a warning" is this same warning, not a second one.
+
+        Counted: the artifact's warnings whose message names the ring (id `partner`, label
+        `② Partner` — either spelling, case-insensitive on "partner")."""
+        config = given_alex(alex_copy, "ring partner items: []",
+                            lambda c: ring(c, "partner").update(items=[]))
+        run = when_bake(config)
+        naming = [w["message"] for w in (run.data or {}).get("warnings", [])
+                  if "partner" in w["message"].lower()]
+        verdict("build warnings naming the partner ring", len(naming), 1)
+
 
 # ===========================================================================
 # CIR-DATA-FRESHNESS-THRESHOLDS — threshold validation (on alex's self/sleep, 7 / 30)
