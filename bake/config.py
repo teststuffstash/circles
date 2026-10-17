@@ -53,6 +53,7 @@ class Item:
     note: str | None
     link: str | None
     adapter: AdapterSpec | None
+    share_declared: bool = False   # `share:` key present — any valid value, 1 included (CIR-DATA-SHARE)
 
 
 @dataclass(frozen=True)
@@ -345,6 +346,7 @@ def _validate_item(raw: dict, ring_id: str, index: int, config_dir: Path) -> tup
         note=note,
         link=link,
         adapter=adapter,
+        share_declared="share" in raw,
     ), item_warnings
 
 
@@ -476,10 +478,11 @@ def load_config(path: Path) -> Config:
 
         rings.append(ring)
 
-    # CIR-DATA-SHARE: mixed share declaration warning
+    # CIR-DATA-SHARE: mixed share declaration warning (⚖-R12). Declared = the `share:` key is
+    # present, whatever its value — an explicit `share: 1` is declared (#shares-declared-one).
     for ring in rings:
-        declared = sum(1 for item in ring.items if item.share != 1.0)
-        undeclared = sum(1 for item in ring.items if item.share == 1.0)
+        declared = sum(1 for item in ring.items if item.share_declared)
+        undeclared = len(ring.items) - declared
         if declared > 0 and undeclared > 0:
             warnings.append(Warning(
                 item=None,

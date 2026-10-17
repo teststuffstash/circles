@@ -397,6 +397,38 @@ class TestDataShare:
         verdict("build warnings", run.warnings, "mixes declared and undeclared", op="contains")
 
     @rule("CIR-DATA-SHARE")
+    def test_shares_declared_one(self, alex_copy) -> None:
+        """CIR-DATA-SHARE#shares-declared-one — alex's self ring, every share declared 2 / 1 / 1 →
+        weights 2 / 1 / 1 (180° / 90° / 90° of a 4-weight ring), no mixed-shares warning: an
+        explicit share: 1 is declared."""
+        def declared(c):
+            item(c, "self/sleep")["share"] = 2
+            item(c, "self/labs")["share"] = 1
+            item(c, "self/exercise")["share"] = 1
+        config = given_alex(alex_copy, "self/sleep share: 2, self/labs share: 1, "
+                                       "self/exercise share: 1", declared)
+        run = when_bake(config)
+        verdict("exit code", run.exit_code, 0)
+        verdict("self/sleep, self/labs, self/exercise share",
+                [item_of(run.data, ref)["share"] for ref in ("self/sleep", "self/labs", "self/exercise")],
+                [2.0, 1.0, 1.0])
+        verdict("build warnings", run.warnings, "mixes declared and undeclared", op="not contains")
+
+    @rule("CIR-DATA-SHARE")
+    def test_shares_mixed_declared_one(self, alex_copy) -> None:
+        """CIR-DATA-SHARE#shares-mixed-declared-one — nova share: 1, kit no share → weights 1 / 1
+        (180° / 180°), plus a build warning: declared and undeclared, though the weights match."""
+        def mixed(c):
+            item(c, "children/nova")["share"] = 1
+            item(c, "children/kit").pop("share")
+        config = given_alex(alex_copy, "children/nova share: 1, children/kit share: deleted", mixed)
+        run = when_bake(config)
+        verdict("exit code", run.exit_code, 0)
+        verdict("children/nova, children/kit share",
+                [item_of(run.data, ref)["share"] for ref in ("children/nova", "children/kit")], [1.0, 1.0])
+        verdict("build warnings", run.warnings, "mixes declared and undeclared", op="contains")
+
+    @rule("CIR-DATA-SHARE")
     def test_share_zero(self, alex_copy) -> None:
         """CIR-DATA-SHARE#share-zero — share: 0 → config error."""
         config = given_alex(alex_copy, "children/kit share: 0",
