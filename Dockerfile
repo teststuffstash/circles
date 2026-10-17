@@ -12,7 +12,7 @@ FROM python:3.11-alpine AS bake
 WORKDIR /build
 
 # Install uv (deterministic Python toolchain, pinned via devbox)
-COPY --from=ghcr.io/astral-sh/uv:0.5 /uv /usr/local/bin/uv
+COPY --from=ghcr.io/astral-sh/uv:0.13 /uv /usr/local/bin/uv
 
 # Copy the bake module, fixture config, and project metadata
 COPY bake/ bake/
