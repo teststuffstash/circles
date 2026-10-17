@@ -13,6 +13,9 @@
 #   index-only-green.html       the fixture's `manual: green` items only
 #   index-click-<row_id>.html   one row of fixtures/click-destinations.yaml spliced into a
 #                               one-ring config for Alex
+#   index-cap-*, index-min-arc-*, index-shares-*, index-adjacent-green, index-boot-*
+#                               the geometry/capacity/boot-failure variants — listed at
+#                               "Round 2" below
 #
 # Each labelled case reads given (the page variant, world seed + the page's inlined artifact
 # attached, loaded in the browser where the action is not the load itself) → ONE when (the
@@ -39,6 +42,7 @@ import yaml
 from playwright.sync_api import Browser, Page
 
 from browser.browser_helpers import (
+    COVERAGE,
     GEOMETRY,
     REFERENCE_VIEWPORT,
     ax_names,
@@ -49,6 +53,7 @@ from browser.browser_helpers import (
     then,
     when,
 )
+from evidence_helpers import WORLD, world_seed
 from rules import rule
 
 pytestmark = pytest.mark.browser
@@ -1092,3 +1097,617 @@ class TestGeometry:
         then("children/nova label", labels["children/nova"]["text"], "◀ Nova")
         then("children/kit label", labels["children/kit"]["text"], "Kit ▶")
         then("narrower label width (px)", min(v["width"] for v in labels.values()), 0, op=">")
+
+
+# ===========================================================================
+# Round 2 (circles#103 step 2): CIR-RENDER-CAPACITY / -MIN-ARC / -ARC-SHARE / -RING-PARTITION /
+# -RING-THICKNESS / -RENDERER / -BOOT-FAILURE — measured on the drawn picture
+# ===========================================================================
+#
+# Page variants (scripts/test-browser.sh, all at generated_at 2026-08-03T02:00:00Z): the fixture's
+# circles.yaml mutated as a dict and baked from a copy of the world dir. Extra items are
+# `manual: green` "Extra <n>"; extra rings hold one `manual: green` item "Area <n>".
+#   index-cap-at-limit.html     6 rings (+ ⑤ Community, ⑥ Work); ① Self holds 8 items
+#   index-cap-7-rings.html      7 rings (+ ⑤ Community, ⑥ Work, ⑦ Faith)
+#   index-cap-9-items.html      ④ Wider life holds 9 items
+#   index-cap-minimum.html      1 ring (② Partner), 1 item
+#   index-cap-empty-ring.html   ② Partner holds zero items
+#   index-adjacent-green.html   partner/date-night manual: green — ② and ③ both all-🟢
+#   index-shares-2-1-1.html     ③ Children shares 2 / 1 / 1 (nova, kit, Extra 1)
+#   index-shares-100-1.html     ③ Children shares 100 / 1 (nova, kit)
+#   index-min-arc-<n>.html      ④ Wider life holds n items (30, 120, 200); -mixed: 20 × share 50
+#                               + 100 × share 1
+#   index-boot-no-payload.html  index-no-threshold.html with its inlined payload block removed
+#   index-boot-empty-rings.html the fixture artifact with `rings: []`, rendered by the renderer
+
+# Where every cell's drawn path and label sit relative to the chart's own drawing area (the SVG
+# viewBox — anything past it is clipped by the svg viewport, never painted).
+_PAST_CHART_EDGE = """() => {
+  const svg = document.querySelector('#chart-area svg'), vb = svg.viewBox.baseVal;
+  const out = (x, y) => x < vb.x - 0.5 || y < vb.y - 0.5 || x > vb.x + vb.width + 0.5 || y > vb.y + vb.height + 0.5;
+  const cells = [], labels = [];
+  document.querySelectorAll('.cell').forEach(c => {
+    const id = c.getAttribute('data-item'), pb = c.querySelector('path').getBBox();  // the path's geometric box
+    if (out(pb.x, pb.y) || out(pb.x + pb.width, pb.y + pb.height)) cells.push(id);
+    const t = c.querySelector('text'), bb = t.getBBox(), m = t.transform.baseVal.consolidate();
+    const corners = [[bb.x, bb.y], [bb.x + bb.width, bb.y], [bb.x, bb.y + bb.height], [bb.x + bb.width, bb.y + bb.height]];
+    if (corners.some(([x, y]) => { const q = m ? new DOMPoint(x, y).matrixTransform(m.matrix) : new DOMPoint(x, y); return out(q.x, q.y); }))
+      labels.push(id);
+  });
+  return {viewBox: [vb.x, vb.y, vb.width, vb.height], cellsPastEdge: cells, labelsPastEdge: labels};
+}"""
+
+_LABEL_TEXT = """() => Object.fromEntries(Array.from(document.querySelectorAll('.cell')).map(
+  c => [c.getAttribute('data-item'), c.querySelector('text').textContent]))"""
+
+_RING_KEY = "() => Array.from(document.querySelectorAll('#ring-key li')).map(li => li.textContent.trim())"
+_WARNING_LINES = "() => Array.from(document.querySelectorAll('#warnings li')).map(li => li.textContent.trim())"
+
+# The chart element itself, and the cells it paints in a status fill.
+_CHART_SHOWN = """() => {
+  const svg = document.querySelector('#chart-area svg');
+  const r = svg ? svg.getBoundingClientRect() : null;
+  return {chartShown: !!(r && r.width > 0 && r.height > 0 && getComputedStyle(svg).visibility !== 'hidden'),
+          cellFills: Array.from(document.querySelectorAll('.cell path')).filter(p => p.getClientRects().length)
+                       .map(p => getComputedStyle(p).fill)};
+}"""
+
+
+def _by_ring(geo: list[dict]) -> dict[str, list[dict]]:
+    """GEOMETRY rows grouped by ring id, in DOM (= config) order."""
+    rings: dict[str, list[dict]] = {}
+    for g in geo:
+        rings.setdefault(g["item"].split("/")[0], []).append(g)
+    return rings
+
+
+def _gaps(cells: list[dict]) -> list[float]:
+    """The angular gaps between consecutive cells of one ring (config order, wrapping round)."""
+    if len(cells) < 2:
+        return []
+    return [(cells[(i + 1) % len(cells)]["start"] - (c["start"] + c["span"])) % 360 for i, c in enumerate(cells)]
+
+
+def _consumed(cells: list[dict]) -> float:
+    """Total angle one ring consumes, arcs plus gaps, with the cells laid in config order from the
+    first one's start: each start is unwrapped to be >= the previous one (so a ring that runs past
+    noon a second time counts past 360°), and the closing gap is the ring's smallest gap."""
+    first = prev = cells[0]["start"]
+    end = first
+    for c in cells:
+        start = c["start"]
+        while start < prev - 1e-6:
+            start += 360
+        prev = start
+        end = max(end, start + c["span"])
+    closing = min(_gaps(cells), default=0.0)
+    return end - first + closing
+
+
+def _labels_outside_cells(geo: list[dict]) -> list[str]:
+    """Cells whose label box has a corner outside the cell's radial band or angular span (the
+    measurement of CIR-RENDER-LABELS#label-inside-arc)."""
+    outside = []
+    for g in geo:
+        for corner in g["labelCorners"]:
+            off = (corner["a"] - g["start"]) % 360
+            if not (g["rMin"] - 0.5 <= corner["r"] <= g["rMax"] + 0.5 and off <= g["span"] + 0.5):
+                outside.append(g["item"])
+                break
+    return outside
+
+
+def _artifact_labels(artifact: dict) -> dict[str, str]:
+    return {f"{r['id']}/{i['id']}": i["label"] for r in artifact["rings"] for i in r["items"]}
+
+
+# ---------------------------------------------------------------------------- capacity
+
+class TestCapacity:
+    """CIR-RENDER-CAPACITY (specs/render/sunburst.md) — the legibility envelope: ≤ 6 rings and
+    ≤ 8 items per ring render with every label legible (not elided); beyond it the bake warns
+    and the page still renders."""
+
+    @rule("CIR-RENDER-CAPACITY")
+    def test_capacity_inside_envelope(self, page: Page, served: str, pages_dir: Path) -> None:
+        """CIR-RENDER-CAPACITY#capacity-inside-envelope — 4 rings, ≤ 3 items/ring (the fixture): no
+        density warning; all labels legible at the reference viewport.
+
+        A density warning names the overflowing ring (by its label) or the page's ring count; the
+        fixture's own warnings are per-item adapter notes. Legible = the label drawn is the
+        artifact's label (not elided), inside its cell, inside the chart."""
+        artifact = given_page(pages_dir, "index-no-threshold.html", "unmodified, generated_at fixed")
+        with when("browser loads index-no-threshold.html at 1280×800"):
+            page.goto(f"{served}/index-no-threshold.html")
+            lines = observe(page, _WARNING_LINES, "warnings banner lines")
+            texts = observe(page, _LABEL_TEXT, "drawn label text per cell")
+            geo = observe(page, GEOMETRY, "cell geometry + label corners (polar, user space)")
+            edge = observe(page, _PAST_CHART_EDGE, "cells/labels past the chart's viewBox")
+        rings = [r["label"] for r in artifact["rings"]]
+        then("warnings naming a ring or the ring count",
+             [line for line in lines if any(r in line for r in rings) or re.search(r"\d+ rings", line)], [])
+        then("labels drawn other than the artifact's (elided)",
+             sorted(k for k, v in _artifact_labels(artifact).items() if texts.get(k) != v), [])
+        then("labels with a corner outside their cell", _labels_outside_cells(geo), [])
+        then("labels past the chart's edge", edge["labelsPastEdge"], [])
+
+    @pytest.mark.xfail(strict=True, reason=(
+        "product bug (measured, circles#103 round 2): at 6 rings the outermost band ⑥ Work is drawn "
+        "at r 380–410.1 in an 800×800 viewBox (half-extent 400), so extra-ring-2/one is clipped at "
+        "12/3/6/9 o'clock by the svg viewport; ring radii are not fitted to the chart"))
+    @rule("CIR-RENDER-CAPACITY")
+    def test_capacity_at_limit(self, page: Page, served: str, pages_dir: Path) -> None:
+        """CIR-RENDER-CAPACITY#capacity-at-limit — 6 rings, 8 items in one ring: renders legibly;
+        no warning.
+
+        The 8 items sit in the innermost ring (① Self), where arcs are shortest — the envelope's
+        hardest legal case. Legible = as capacity-inside-envelope, and every cell inside the
+        chart (a clipped band is not a fully visible cell)."""
+        artifact = given_page(pages_dir, "index-cap-at-limit.html", "6 rings; ① Self holds 8 items")
+        with when("browser loads index-cap-at-limit.html at 1280×800"):
+            page.goto(f"{served}/index-cap-at-limit.html")
+            lines = observe(page, _WARNING_LINES, "warnings banner lines")
+            texts = observe(page, _LABEL_TEXT, "drawn label text per cell")
+            geo = observe(page, GEOMETRY, "cell geometry + label corners (polar, user space)")
+            edge = observe(page, _PAST_CHART_EDGE, "cells/labels past the chart's viewBox")
+        rings = [r["label"] for r in artifact["rings"]]
+        then("warnings naming a ring or the ring count",
+             [line for line in lines if any(r in line for r in rings) or re.search(r"\d+ rings", line)], [])
+        then("labels drawn other than the artifact's (elided)",
+             sorted(k for k, v in _artifact_labels(artifact).items() if texts.get(k) != v), [])
+        then("labels with a corner outside their cell", _labels_outside_cells(geo), [])
+        then("cells drawn past the chart's edge", edge["cellsPastEdge"], [])
+        then("labels past the chart's edge", edge["labelsPastEdge"], [])
+
+    @pytest.mark.xfail(strict=True, reason=(
+        "product bug (measured, circles#103 round 2): at 7 rings ⑦ Faith is drawn at r 414–444.1 and "
+        "⑥ Work at r 380–410.1 in an 800×800 viewBox (half-extent 400) — ⑦ shows only in the "
+        "square's corners and both labels are clipped; ring radii are not fitted to the chart"))
+    @rule("CIR-RENDER-CAPACITY")
+    def test_capacity_exceeded_ring_count(self, page: Page, served: str, pages_dir: Path) -> None:
+        """CIR-RENDER-CAPACITY#capacity-exceeded-ring-count — 7 rings: bake succeeds with a build
+        warning; page renders with elision in force.
+
+        The warning names the overflow (7 rings). "Renders": every item drawn as a cell inside the
+        chart; "elision in force": no label paints outside its cell (CIR-RENDER-LABELS)."""
+        given_page(pages_dir, "index-cap-7-rings.html", "7 rings")
+        with when("browser loads index-cap-7-rings.html at 1280×800"):
+            page.goto(f"{served}/index-cap-7-rings.html")
+            lines = observe(page, _WARNING_LINES, "warnings banner lines")
+            geo = observe(page, GEOMETRY, "cell geometry + label corners (polar, user space)")
+            edge = observe(page, _PAST_CHART_EDGE, "cells/labels past the chart's viewBox")
+        then("warnings naming 7 rings", [line for line in lines if "7 rings" in line], [], op="!=")
+        # the fixture's 8 items + one per extra ring ⑤ ⑥ ⑦
+        then("cells drawn", len(geo), 11)
+        then("labels with a corner outside their cell", _labels_outside_cells(geo), [])
+        then("cells drawn past the chart's edge", edge["cellsPastEdge"], [])
+        then("labels past the chart's edge", edge["labelsPastEdge"], [])
+
+    @rule("CIR-RENDER-CAPACITY")
+    def test_capacity_exceeded_item_count(self, page: Page, served: str, pages_dir: Path) -> None:
+        """CIR-RENDER-CAPACITY#capacity-exceeded-item-count — 9 items in one ring: bake succeeds
+        with a build warning naming the ring.
+
+        The ring is ④ Wider life (its key label names it); the page renders all 9 of its cells."""
+        given_page(pages_dir, "index-cap-9-items.html", "④ Wider life holds 9 items")
+        with when("browser loads index-cap-9-items.html at 1280×800"):
+            page.goto(f"{served}/index-cap-9-items.html")
+            lines = observe(page, _WARNING_LINES, "warnings banner lines")
+            geo = observe(page, GEOMETRY, "cell geometry (polar, user space)")
+        then("warnings naming ④ Wider life", [line for line in lines if "④ Wider life" in line], [], op="!=")
+        then("④ Wider life cells drawn", len(_by_ring(geo)["wider"]), 9)
+
+    @rule("CIR-RENDER-CAPACITY")
+    def test_capacity_minimum_page(self, page: Page, served: str, pages_dir: Path) -> None:
+        """CIR-RENDER-CAPACITY#capacity-minimum-page — 1 ring, 1 item: a single full-circle band;
+        never an empty picture.
+
+        The one item is partner/date-night (manual: yellow — fixture comment): one cell whose
+        fill covers the whole circle at its mid radius, painted the 🟡 palette fill."""
+        given_page(pages_dir, "index-cap-minimum.html", "1 ring (② Partner), 1 item")
+        with when("browser loads index-cap-minimum.html at 1280×800"):
+            page.goto(f"{served}/index-cap-minimum.html")
+            cover = observe(page, COVERAGE, "angular coverage of every chart path", "#chart-area svg path")
+            cells = observe(page, _CELLS, "cells: computed fill")
+        then("cells drawn", [c["item"] for c in cover], ["partner/date-night"])
+        then("degrees of the circle the band covers", round(cover[0]["covered"], 1), 360.0)
+        then("cell fill", cells[0]["fill"], _rgb(PALETTE["yellow"]))
+
+    @pytest.mark.xfail(strict=True, reason=(
+        "product bug (measured, circles#103 round 2): the empty ring's band is painted grey "
+        "rgb(158, 158, 158) at opacity 0.5 with stroke rgb(204, 204, 204), where an unmonitored "
+        "cell (self/exercise) is opacity 1, stroke rgb(255, 255, 255) — a reduced-opacity ghost, "
+        "which CIR-RENDER-GREY-VISIBLE forbids for the unmonitored surface"))
+    @rule("CIR-RENDER-CAPACITY")
+    def test_capacity_empty_ring_band(self, page: Page, served: str, pages_dir: Path) -> None:
+        """CIR-RENDER-CAPACITY#capacity-empty-ring-band — ring with zero items: the band is drawn in
+        the unmonitored treatment with its ring label, plus a warning; never omitted.
+
+        ② Partner is emptied. The band: a full circle in ② Partner's radial slot (between ①'s
+        and ③'s cells). The unmonitored treatment is what the page gives an unmonitored ⚪ cell
+        (self/exercise, by choice) — colors.md: "no reduced opacity, no dashed ghost". Ring labels
+        live in the ring key (CIR-RENDER-LABELS), so "its ring label" is ② Partner's key entry."""
+        given_page(pages_dir, "index-cap-empty-ring.html", "② Partner holds zero items")
+        with when("browser loads index-cap-empty-ring.html at 1280×800"):
+            page.goto(f"{served}/index-cap-empty-ring.html")
+            cover = observe(page, COVERAGE, "angular coverage of every chart path", "#chart-area svg path")
+            paint = observe(page, """() => Array.from(document.querySelectorAll('#chart-area svg path')).map(p => {
+                const s = getComputedStyle(p), c = p.closest('[data-item]');
+                return {item: c ? c.getAttribute('data-item') : null, fill: s.fill, opacity: s.opacity,
+                        stroke: s.stroke, strokeWidth: s.strokeWidth, dash: s.strokeDasharray}; })""",
+                            "computed paint of every chart path")
+            key = observe(page, _RING_KEY, "ring key entries")
+            lines = observe(page, _WARNING_LINES, "warnings banner lines")
+        cells = {c["item"]: c for c in cover if c["item"]}
+        self_out = max(c["rMax"] for k, c in cells.items() if k.startswith("self/"))
+        children_in = min(c["rMin"] for k, c in cells.items() if k.startswith("children/"))
+        bands = [c for c in cover if c["item"] is None and self_out <= c["rMin"] and c["rMax"] <= children_in]
+        then("bands drawn in ② Partner's slot", len(bands), 1)
+        then("degrees of the circle the band covers", round(bands[0]["covered"], 1), 360.0)
+        then("ring key", key, ["① Self", "② Partner", "③ Children", "④ Wider life"])
+        then("warnings naming ② Partner", [line for line in lines if "② Partner" in line], [], op="!=")
+        band = next(p for p in paint if p["item"] is None)
+        unmonitored = next(p for p in paint if p["item"] == "self/exercise")
+        treatment = ("fill", "opacity", "stroke", "strokeWidth", "dash")
+        then("band paint (fill, opacity, stroke, width, dash)", [band[k] for k in treatment],
+             [unmonitored[k] for k in treatment])
+
+
+# ---------------------------------------------------------------------------- min-arc
+
+class TestMinArc:
+    """CIR-RENDER-MIN-ARC (specs/render/sunburst.md) — no unreadable slivers. The rule pins no
+    minimum angle; the claims below hold for any minimum."""
+
+    @rule("CIR-RENDER-MIN-ARC")
+    def test_min_arc_tiny_share_still_drawn(self, page: Page, served: str, pages_dir: Path) -> None:
+        """CIR-RENDER-MIN-ARC#min-arc-tiny-share-still-drawn — shares 100 and 1 in one ring: the
+        small item is drawn at the minimum arc angle; the others absorb the difference.
+
+        ③ Children: nova share 100, kit share 1. kit's natural arc is (360° − the ring's gaps)
+        × 1/101 (CIR-DATA-SHARE); a floor can only widen it. Drawn = its fill is hit at its mid
+        radius. nova absorbs: the two arcs plus the gaps fill exactly 360°."""
+        given_page(pages_dir, "index-shares-100-1.html", "③ Children shares 100 / 1 (nova, kit)")
+        with when("browser loads index-shares-100-1.html at 1280×800"):
+            page.goto(f"{served}/index-shares-100-1.html")
+            geo = observe(page, GEOMETRY, "cell geometry (polar, user space)")
+            cover = observe(page, COVERAGE, "angular coverage of kit's path", '[data-item="children/kit"] path')
+        children = _by_ring(geo)["children"]
+        nova, kit = children
+        gaps = sum(_gaps(children))
+        natural = (360 - gaps) / 101
+        then(f"kit span (°) vs its natural share {natural:.2f}°", round(kit["span"], 2), round(natural - 0.05, 2), op=">=")
+        then("kit: degrees its fill covers", round(cover[0]["covered"], 1), 0, op=">")
+        then("nova + kit + gaps (°)", round(nova["span"] + kit["span"] + gaps), 360)
+
+    @rule("CIR-RENDER-MIN-ARC")
+    def test_min_arc_exceeded_by_ring(self, page: Page, served: str, pages_dir: Path) -> None:
+        """CIR-RENDER-MIN-ARC#min-arc-exceeded-by-ring — 30 items in one ring against the minimum
+        angle: build warning; the page still draws.
+
+        ④ Wider life holds 30 items: a warning names the ring, and all 30 cells are drawn with a
+        non-zero arc."""
+        given_page(pages_dir, "index-min-arc-30.html", "④ Wider life holds 30 items")
+        with when("browser loads index-min-arc-30.html at 1280×800"):
+            page.goto(f"{served}/index-min-arc-30.html")
+            lines = observe(page, _WARNING_LINES, "warnings banner lines")
+            geo = observe(page, GEOMETRY, "cell geometry (polar, user space)")
+        wider = _by_ring(geo)["wider"]
+        then("warnings naming ④ Wider life", [line for line in lines if "④ Wider life" in line], [], op="!=")
+        then("④ Wider life cells drawn", len(wider), 30)
+        then("④ Wider life cells with a zero arc", [g["item"] for g in wider if g["span"] <= 0], [])
+
+    @rule("CIR-RENDER-MIN-ARC")
+    @pytest.mark.parametrize("name,variant", [
+        pytest.param("index-min-arc-120.html", "④ Wider life holds 120 items",
+                     id="CIR-RENDER-MIN-ARC#overflow-capped-at-total-deg"),
+        pytest.param("index-min-arc-mixed.html", "④ Wider life holds 20 items share 50 + 100 items share 1",
+                     id="CIR-RENDER-MIN-ARC#mixed-floored-natural-overflow-capped"),
+    ])
+    def test_overflow_capped(self, page: Page, served: str, pages_dir: Path, name: str, variant: str) -> None:
+        """CIR-RENDER-MIN-ARC#overflow-capped-at-total-deg — 120 items in one ring: total consumed
+        angle ≤ 360°; arcs never overlap even though every arc is below the minimum.
+        CIR-RENDER-MIN-ARC#mixed-floored-natural-overflow-capped — 20 big + 100 tiny items in one
+        ring: floored arcs alone overflow; total consumed angle still ≤ 360°.
+
+        Measured on ④ Wider life: the cells laid out in config order from the first one's start,
+        arcs plus gaps (_consumed — a ring that runs past noon twice counts past 360°)."""
+        given_page(pages_dir, name, variant)
+        with when(f"browser loads {name} at 1280×800"):
+            page.goto(f"{served}/{name}")
+            geo = observe(page, GEOMETRY, "cell geometry (polar, user space)")
+        wider = _by_ring(geo)["wider"]
+        then("④ Wider life cells drawn", len(wider), 120)
+        then("④ Wider life: arcs + gaps consumed (°)", round(_consumed(wider), 1), 360.5, op="<=")
+
+    @pytest.mark.xfail(strict=True, reason=(
+        "product bug (measured, circles#103 round 2): with 200 items in ④ Wider life every arc is "
+        "drawn 0.0° wide (degenerate — total_deg clamps to 0 but the 2° gaps are still laid), and "
+        "the cells' starts run 0° → 398°, so the ring consumes 400° and wraps past noon"))
+    @rule("CIR-RENDER-MIN-ARC")
+    def test_overflow_no_negative_arcs(self, page: Page, served: str, pages_dir: Path) -> None:
+        """CIR-RENDER-MIN-ARC#overflow-no-negative-arcs — 200 items in one ring: no negative /
+        degenerate arc angles; the capacity warning's count is non-negative.
+
+        Measured: every ④ Wider life cell's arc is wider than 0°, and no warning line states a
+        negative count."""
+        given_page(pages_dir, "index-min-arc-200.html", "④ Wider life holds 200 items")
+        with when("browser loads index-min-arc-200.html at 1280×800"):
+            page.goto(f"{served}/index-min-arc-200.html")
+            lines = observe(page, _WARNING_LINES, "warnings banner lines")
+            geo = observe(page, GEOMETRY, "cell geometry (polar, user space)")
+        wider = _by_ring(geo)["wider"]
+        then("warnings stating a negative count", [line for line in lines if re.search(r"(?<![\w-])-\d", line)], [])
+        then("④ Wider life cells drawn", len(wider), 200)
+        then("④ Wider life cells with a zero or negative arc", sum(1 for g in wider if g["span"] <= 0), 0)
+
+
+# ---------------------------------------------------------------------------- arc share
+
+class TestArcShare:
+    """CIR-RENDER-ARC-SHARE (specs/render/sunburst.md) — an arc is 360° × share ÷ Σ shares, less
+    the ring's uniform inter-cell gap (the gap size is not pinned — it is measured)."""
+
+    @rule("CIR-RENDER-ARC-SHARE")
+    def test_arc_share_half_arcs(self, page: Page, served: str, pages_dir: Path) -> None:
+        """CIR-RENDER-ARC-SHARE#arc-share-half-arcs — two siblings `share: 0.5` each: each arc ≈
+        180° minus the inter-cell gap (the fixture's Nova/Kit case).
+
+        Two arcs and two gaps make the circle, so each arc is 180° less one measured gap's worth
+        (half a gap at each end) — equal to each other, under 180°."""
+        given_page(pages_dir, "index.html", "unmodified")
+        with when("browser loads index.html at 1280×800"):
+            page.goto(f"{served}/index.html")
+            geo = observe(page, GEOMETRY, "cell geometry (polar, user space)")
+        nova, kit = _by_ring(geo)["children"]
+        gap = max(_gaps([nova, kit]))
+        then("|nova − kit| (°)", round(abs(nova["span"] - kit["span"]), 2), 0.5, op="<=")
+        then(f"|nova − (180° − gap {gap:.1f}°)| (°)", round(abs(nova["span"] - (180 - gap)), 2), 0.5, op="<=")
+        then("nova span (°)", round(nova["span"], 2), 180, op="<")
+
+    @rule("CIR-RENDER-ARC-SHARE")
+    def test_arc_share_single_item_ring(self, page: Page, served: str, pages_dir: Path) -> None:
+        """CIR-RENDER-ARC-SHARE#arc-share-single-item-ring — one item in a ring: a full 360° band,
+        gap invisible.
+
+        The fixture's ② Partner holds one item (date-night): its fill is hit all the way round at
+        its mid radius — no notch where a gap would sit."""
+        given_page(pages_dir, "index.html", "unmodified")
+        with when("browser loads index.html at 1280×800"):
+            page.goto(f"{served}/index.html")
+            cover = observe(page, COVERAGE, "angular coverage of partner/date-night",
+                            '[data-item="partner/date-night"] path')
+        then("degrees of the circle the band covers", round(cover[0]["covered"], 1), 360.0)
+        then("largest uncovered run (°)", round(cover[0]["maxGap"], 1), 0.0)
+
+    @rule("CIR-RENDER-ARC-SHARE")
+    def test_arc_share_mixed_weights(self, page: Page, served: str, pages_dir: Path) -> None:
+        """CIR-RENDER-ARC-SHARE#arc-share-mixed-weights — siblings with shares 2, 1, 1: arcs ≈ 180°
+        / 90° / 90°.
+
+        ③ Children: nova 2, kit 1, Extra 1 1. Each arc = (360° − the ring's measured gaps) ×
+        share ÷ 4 — 180/90/90 less the gaps' share."""
+        given_page(pages_dir, "index-shares-2-1-1.html", "③ Children shares 2 / 1 / 1 (nova, kit, Extra 1)")
+        with when("browser loads index-shares-2-1-1.html at 1280×800"):
+            page.goto(f"{served}/index-shares-2-1-1.html")
+            geo = observe(page, GEOMETRY, "cell geometry (polar, user space)")
+        children = _by_ring(geo)["children"]
+        room = 360 - sum(_gaps(children))
+        for cell, share in zip(children, (2, 1, 1)):
+            expected = room * share / 4
+            then(f"{cell['item']}: |span − {expected:.1f}°| (share {share} of 4)",
+                 round(abs(cell["span"] - expected), 2), 0.5, op="<=")
+
+
+# ---------------------------------------------------------------------------- ring partition
+
+class TestRingPartition:
+    """CIR-RENDER-RING-PARTITION (specs/render/sunburst.md) — rings are independent bands."""
+
+    @rule("CIR-RENDER-RING-PARTITION")
+    def test_partition_full_circle_per_ring(self, page: Page, served: str, pages_dir: Path) -> None:
+        """CIR-RENDER-RING-PARTITION#partition-full-circle-per-ring — ring with 1 item: one 360°
+        band.
+
+        The fixture's ② Partner (one item, date-night): one cell in the ring, its fill hit all
+        the way round."""
+        given_page(pages_dir, "index.html", "unmodified")
+        with when("browser loads index.html at 1280×800"):
+            page.goto(f"{served}/index.html")
+            cover = observe(page, COVERAGE, "angular coverage of every cell", ".cell path")
+        partner = [c for c in cover if c["item"].startswith("partner/")]
+        then("② Partner cells", [c["item"] for c in partner], ["partner/date-night"])
+        then("degrees of the circle the band covers", round(partner[0]["covered"], 1), 360.0)
+
+    @rule("CIR-RENDER-RING-PARTITION")
+    def test_partition_ring_boundaries_visible(self, page: Page, served: str, pages_dir: Path) -> None:
+        """CIR-RENDER-RING-PARTITION#partition-ring-boundaries-visible — adjacent rings, both 🟢: a
+        gap or stroke separates the bands so they do not read as one blob.
+
+        ② Partner (date-night set green) and ③ Children (nova, kit 🟢) are adjacent. Measured:
+        the radial gap between ②'s outer edge and ③'s inner edge, in CSS px on screen."""
+        artifact = given_page(pages_dir, "index-adjacent-green.html",
+                              "partner/date-night manual: green (② and ③ both all-green)")
+        assert {i["status"] for r in artifact["rings"] if r["id"] in ("partner", "children")
+                for i in r["items"]} == {"green"}, "arrange: ② and ③ must be all-green"
+        with when("browser loads index-adjacent-green.html at 1280×800"):
+            page.goto(f"{served}/index-adjacent-green.html")
+            geo = observe(page, GEOMETRY, "cell geometry (polar, user space)")
+            scale = observe(page, "() => document.querySelector('#chart-area svg').getScreenCTM().a",
+                            "CSS px per SVG user unit")
+        rings = _by_ring(geo)
+        gap_px = (min(g["rMin"] for g in rings["children"]) - max(g["rMax"] for g in rings["partner"])) * scale
+        then("gap between ② and ③ (CSS px)", round(gap_px, 2), 1, op=">=")
+
+
+# ---------------------------------------------------------------------------- ring thickness
+
+_DISC = """() => {
+  const svg = document.querySelector('#chart-area svg'), vb = svg.viewBox.baseVal;
+  const cx = vb.x + vb.width / 2, cy = vb.y + vb.height / 2;
+  const disc = svg.querySelector(':scope > circle');
+  return {fill: getComputedStyle(disc).fill,
+          texts: Array.from(svg.querySelectorAll(':scope > text')).map(t => {
+            const b = t.getBBox();
+            const r = Math.max(...[[b.x, b.y], [b.x + b.width, b.y], [b.x, b.y + b.height], [b.x + b.width, b.y + b.height]]
+                               .map(([x, y]) => Math.hypot(x - cx, y - cy)));
+            return {text: t.textContent.trim(), rMax: r}; })};
+}"""
+
+
+class TestRingThickness:
+    """CIR-RENDER-RING-THICKNESS (specs/render/sunburst.md) — measured on the fixture's bands."""
+
+    @rule("CIR-RENDER-RING-THICKNESS")
+    def test_thickness_non_increasing_outward(self, page: Page, served: str, pages_dir: Path) -> None:
+        """CIR-RENDER-RING-THICKNESS#thickness-non-increasing-outward — 4 rings: radial thickness
+        is non-increasing from the innermost ring outward.
+
+        Measured: each ring's band (outermost minus innermost drawn radius of its cells),
+        innermost first."""
+        given_page(pages_dir, "index.html", "unmodified")
+        with when("browser loads index.html at 1280×800"):
+            page.goto(f"{served}/index.html")
+            geo = observe(page, GEOMETRY, "cell geometry (polar, user space)")
+        rings = _by_ring(geo)
+        thickness = [round(max(g["rMax"] for g in cells) - min(g["rMin"] for g in cells), 1)
+                     for cells in sorted(rings.values(), key=lambda cs: min(g["rMin"] for g in cs))]
+        then("ring thickness inside-out (user units)", thickness, sorted(thickness, reverse=True))
+
+    @rule("CIR-RENDER-RING-THICKNESS")
+    def test_centre_hole_is_not_zero(self, page: Page, served: str, pages_dir: Path) -> None:
+        """CIR-RENDER-RING-THICKNESS#centre-hole-is-not-zero — any config: a hole remains; the
+        innermost ring is a band, not a pie.
+
+        Measured: the innermost drawn radius of any cell, in CSS px on screen."""
+        given_page(pages_dir, "index.html", "unmodified")
+        with when("browser loads index.html at 1280×800"):
+            page.goto(f"{served}/index.html")
+            geo = observe(page, GEOMETRY, "cell geometry (polar, user space)")
+            scale = observe(page, "() => document.querySelector('#chart-area svg').getScreenCTM().a",
+                            "CSS px per SVG user unit")
+        then("centre hole radius (CSS px)", round(min(g["rMin"] for g in geo) * scale, 1), 0, op=">")
+
+    @pytest.mark.xfail(strict=True, reason=(
+        "product bug (measured, circles#103 round 2): the fixture's summary line \"2 ok · 1 "
+        "attention · 1 act · 1 unmonitored · 3 not evaluated\" is 8-unit text reaching r 102.2 "
+        "from the centre, but the hole is r 60 and ① Self's cells — drawn after it — paint over "
+        "everything from r 60 out, so the disc shows only the middle of the counts"))
+    @rule("CIR-RENDER-RING-THICKNESS")
+    def test_centre_disc_holds_identity(self, page: Page, served: str, pages_dir: Path) -> None:
+        """CIR-RENDER-RING-THICKNESS#centre-disc-holds-identity — any config: the disc carries the
+        person's name, the generated-at stamp and the summary counts, never a light.
+
+        Measured: the texts drawn inside the centre hole (every corner within the innermost
+        cell radius), and the disc's computed fill against the four status fills. The name and
+        stamp come from the given's inlined artifact; the counts line is the summary
+        (CIR-RENDER-SUMMARY: the fixture as baked has 1 🟡 → "1 attention")."""
+        artifact = given_page(pages_dir, "index-no-threshold.html", "unmodified, generated_at fixed")
+        with when("browser loads index-no-threshold.html at 1280×800"):
+            page.goto(f"{served}/index-no-threshold.html")
+            geo = observe(page, GEOMETRY, "cell geometry (polar, user space)")
+            disc = observe(page, _DISC, "centre disc: fill + texts with their outermost radius")
+        hole = min(g["rMin"] for g in geo)
+        inside = [t["text"] for t in disc["texts"] if t["rMax"] <= hole]
+        summary = next(t for t in disc["texts"] if "1 attention" in t["text"])
+        then("texts inside the centre hole", inside, artifact["person"], op="contains")
+        then("texts inside the centre hole", inside, artifact["generated_at"], op="contains")
+        then("disc fill is a status fill", disc["fill"] in {_rgb(h) for h in PALETTE.values()}, False)
+        then(f"summary line's outermost radius vs the hole's {hole:.1f} (user units)",
+             round(summary["rMax"], 1), round(hole, 1), op="<=")
+
+
+# ---------------------------------------------------------------------------- renderer
+
+class TestRenderer:
+    """CIR-RENDER-RENDERER (specs/render/layout.md) — what draws the rings."""
+
+    @rule("CIR-RENDER-RENDERER")
+    def test_renderer_draws_independent_rings(self, page: Page, served: str, pages_dir: Path) -> None:
+        """CIR-RENDER-RENDERER#renderer-draws-independent-rings — 3-item inner ring, 2-item outer
+        ring: both rings span 360° on their own scale, with no parent-child binding.
+
+        The fixture's ① Self (3 items, innermost) and ③ Children (2 items). Each ring's arcs
+        plus its gaps make the full circle on their own, its arcs split equally by its own
+        count (① no shares; ③ 0.5/0.5) — so ③'s boundary at 6 o'clock is no boundary of ①'s."""
+        given_page(pages_dir, "index.html", "unmodified")
+        with when("browser loads index.html at 1280×800"):
+            page.goto(f"{served}/index.html")
+            geo = observe(page, GEOMETRY, "cell geometry (polar, user space)")
+        rings = _by_ring(geo)
+        for ring_id, n in (("self", 3), ("children", 2)):
+            cells = rings[ring_id]
+            spans = [c["span"] for c in cells]
+            then(f"{ring_id}: cells", len(cells), n)
+            then(f"{ring_id}: arcs + gaps (°)", round(sum(spans) + sum(_gaps(cells))), 360)
+            then(f"{ring_id}: spread of arc spans (°)", round(max(spans) - min(spans), 2), 0.5, op="<=")
+
+    @rule("CIR-RENDER-RENDERER")
+    def test_renderer_adds_no_runtime_egress(self, page: Page, served: str, pages_dir: Path) -> None:
+        """CIR-RENDER-RENDERER#renderer-adds-no-runtime-egress — built page: no library fetched at
+        run time.
+
+        Measured: every request the browser makes loading the page (only the document), and that
+        no script element points at a source — the drawing code is all inline."""
+        given_page(pages_dir, "index.html", "unmodified")
+        with when("browser loads index.html"):
+            rec = _load_recording(page, f"{served}/index.html", block=False)
+            scripts = observe(page, "() => Array.from(document.scripts).map(s => s.src || null)",
+                              "script elements: src (null = inline)")
+            allure.attach(json.dumps(rec, indent=2), name="requests + document bytes",
+                          attachment_type=allure.attachment_type.JSON)
+        then("requests made", [r["type"] for r in rec["requests"]], ["document"])
+        then("scripts loaded from a URL", [s for s in scripts if s], [])
+
+
+# ---------------------------------------------------------------------------- boot failure
+
+class TestBootFailure:
+    """CIR-RENDER-BOOT-FAILURE (specs/render/layout.md) — an unusable embedded payload gives a
+    visible boot-failure state: never a half-rendered chart, never a page of coloured cells.
+    The rule names no DOM hook for the state itself; what is measured is its "no chart" half."""
+
+    @pytest.mark.xfail(strict=True, reason=(
+        "product gap (measured, circles#103 round 2): with the inlined payload block removed the "
+        "page still shows the full chart — 8 cells in their status fills, svg 780×780 CSS px — "
+        "because the chart is baked as SVG and the page never reads its payload to draw; there "
+        "is no boot-failure state"))
+    @rule("CIR-RENDER-BOOT-FAILURE")
+    def test_boot_failure_payload_absent(self, page: Page, served: str, pages_dir: Path) -> None:
+        """CIR-RENDER-BOOT-FAILURE#boot-failure-payload-absent — the inlined payload block is
+        missing: boot-failure state, no chart.
+
+        The page is the fixture's (index-no-threshold.html) with its `<script id="artifact-data">`
+        block removed. Measured: whether the chart is shown, and the cells painted."""
+        with allure.step(f"Given: page index-boot-no-payload.html (world {WORLD}: "
+                         "index-no-threshold.html with the inlined payload block removed)"):
+            allure.attach(world_seed(), name=f"world: {WORLD} — seed (sha256 + circles.yaml)",
+                          attachment_type=allure.attachment_type.TEXT)
+            html = (pages_dir / "index-boot-no-payload.html").read_text(encoding="utf-8")
+            assert 'id="artifact-data"' not in html, "arrange: the payload block must be absent"
+            allure.attach(json.dumps(re.findall(r"<script[^>]*>", html)), name="script tags the page carries",
+                          attachment_type=allure.attachment_type.JSON)
+        with when("browser loads index-boot-no-payload.html at 1280×800"):
+            page.goto(f"{served}/index-boot-no-payload.html")
+            shown = observe(page, _CHART_SHOWN, "chart shown + cells painted")
+        then("cells painted", len(shown["cellFills"]), 0)
+        then("chart shown", shown["chartShown"], False)
+
+    @pytest.mark.xfail(strict=True, reason=(
+        "product gap (measured, circles#103 round 2): an artifact with rings: [] renders the chart "
+        "svg (780×780 CSS px) with the centre disc alone (\"0 items\") — a half-rendered chart, "
+        "no boot-failure state"))
+    @rule("CIR-RENDER-BOOT-FAILURE")
+    def test_boot_failure_empty_rings(self, page: Page, served: str, pages_dir: Path) -> None:
+        """CIR-RENDER-BOOT-FAILURE#boot-failure-empty-rings — `rings: []` (hand-edited; the bake
+        would never emit it): boot-failure state.
+
+        The fixture artifact with `rings: []`, rendered by the page renderer. Measured: the cells
+        painted (none can be), and whether the chart is shown — a boot-failure state shows none."""
+        artifact = given_page(pages_dir, "index-boot-empty-rings.html", "artifact rings: []")
+        assert artifact["rings"] == [], "arrange: the page's artifact must carry rings: []"
+        with when("browser loads index-boot-empty-rings.html at 1280×800"):
+            page.goto(f"{served}/index-boot-empty-rings.html")
+            shown = observe(page, _CHART_SHOWN, "chart shown + cells painted")
+        then("cells painted", len(shown["cellFills"]), 0)
+        then("chart shown", shown["chartShown"], False)
