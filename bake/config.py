@@ -1,4 +1,4 @@
-# bake/config.py  — the language is Python (⚖-R49); the repo already pins python@3.11 + uv
+# bake/config.py  — the language is Python (⚖-R49); the repo already pins python@3.15 + uv
 """
 Read + validate circles.yaml into a typed Config model.
 
@@ -172,6 +172,12 @@ def _validate_freshness(raw: dict, path: str, config_dir: Path) -> None:
     # CIR-BAKE-EXPOSURE#no-absolute-host-paths).
     try:
         resolved = (config_dir / source).resolve()
+        # Python ≥ 3.13 no longer raises on a loop in non-strict resolve(); following the
+        # result surfaces it as ELOOP. A merely missing source is judged later, not here.
+        try:
+            os.stat(resolved)
+        except FileNotFoundError:
+            pass
     except (RuntimeError, OSError) as e:
         why = ("is a symlink loop — it resolves to no file"
                if isinstance(e, RuntimeError) or getattr(e, "errno", None) == errno.ELOOP

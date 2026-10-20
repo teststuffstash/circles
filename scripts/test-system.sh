@@ -264,7 +264,7 @@ echo "==> step 2/7: build image $FULL_IMAGE"
 # Pre-pull the base images so docker build doesn't need to pull them mid-stream
 # (the registry mirror can be flaky with large layer downloads during build)
 echo "  pre-pulling base images (up to 3 attempts each)…"
-retry 3 docker pull python:3.11-alpine 2>&1 | sed 's/^/  /' || echo "  (pre-pull failed — will try during build)"
+retry 3 docker pull python:3.15-alpine 2>&1 | sed 's/^/  /' || echo "  (pre-pull failed — will try during build)"
 retry 3 docker pull nginxinc/nginx-unprivileged:1.27-alpine 2>&1 | sed 's/^/  /' || echo "  (pre-pull failed — will try during build)"
 
 # Build using the repo-root multi-stage Dockerfile (bake then serve)

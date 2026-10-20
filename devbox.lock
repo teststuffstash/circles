@@ -440,50 +440,50 @@
         }
       }
     },
-    "python@3.11": {
-      "last_modified": "2026-10-16T02:15:57Z",
+    "python@3.15": {
+      "last_modified": "2026-10-02T22:55:44Z",
       "plugin_version": "0.0.5",
-      "resolved": "github:NixOS/nixpkgs/f20cd90e28fe0403873f473b29e42662cd86e8c4#python311",
+      "resolved": "github:NixOS/nixpkgs/55ba7f49ef2962b42cbd126522b7df5f95037679#python315",
       "source": "devbox-search",
-      "version": "3.11.17",
+      "version": "3.15.0rc2",
       "systems": {
         "aarch64-darwin": {
           "outputs": [
             {
               "name": "out",
-              "path": "/nix/store/qkh877dgks4wrr3ppzbkcj18bamcrcrk-python3-3.11.17",
+              "path": "/nix/store/affplbnap60lj2wxlv9hndc0194pr2bq-python3-3.15.0rc2",
               "default": true
             }
           ],
-          "store_path": "/nix/store/qkh877dgks4wrr3ppzbkcj18bamcrcrk-python3-3.11.17"
+          "store_path": "/nix/store/affplbnap60lj2wxlv9hndc0194pr2bq-python3-3.15.0rc2"
         },
         "aarch64-linux": {
           "outputs": [
             {
               "name": "out",
-              "path": "/nix/store/vvaaiflnqz7q4xhn67j6z1m7p75j28vj-python3-3.11.17",
+              "path": "/nix/store/zmwznwqzi037facx4k0fdj6syblflqlf-python3-3.15.0rc2",
               "default": true
             },
             {
               "name": "debug",
-              "path": "/nix/store/84j205ipj6yj00kqsjxxqvd21hk0d341-python3-3.11.17-debug"
+              "path": "/nix/store/wzp6ghr734d9yfh02b47ldfz39x8a3c0-python3-3.15.0rc2-debug"
             }
           ],
-          "store_path": "/nix/store/vvaaiflnqz7q4xhn67j6z1m7p75j28vj-python3-3.11.17"
+          "store_path": "/nix/store/zmwznwqzi037facx4k0fdj6syblflqlf-python3-3.15.0rc2"
         },
         "x86_64-linux": {
           "outputs": [
             {
               "name": "out",
-              "path": "/nix/store/92nh78j17591c9gfcqlh1mh7byflpi62-python3-3.11.17",
+              "path": "/nix/store/66yk2g3njkn86v018mx40c4gfmc2p4wd-python3-3.15.0rc2",
               "default": true
             },
             {
               "name": "debug",
-              "path": "/nix/store/yxwrhpsaqzq54yihpxdqqgz6558hxsp2-python3-3.11.17-debug"
+              "path": "/nix/store/p5kq312pms50f7i5ir8kag4bxh2w668q-python3-3.15.0rc2-debug"
             }
           ],
-          "store_path": "/nix/store/92nh78j17591c9gfcqlh1mh7byflpi62-python3-3.11.17"
+          "store_path": "/nix/store/66yk2g3njkn86v018mx40c4gfmc2p4wd-python3-3.15.0rc2"
         }
       }
     },
