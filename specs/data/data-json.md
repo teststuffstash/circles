@@ -311,7 +311,7 @@ anything the UI merely does not display**.
 |---|---|---|
 | no-absolute-host-paths | missing source `/home/alex/notes/x.md` | the warning names the config-relative path only |
 | command-stderr-not-passed-through | command prints a stack trace with paths and env | warning is a bounded, sanitized summary |
-| warning-text-is-bounded | command prints 10 MB to stderr | truncated at a fixed cap |
+| warning-text-is-bounded | command prints 10 MB to stderr | truncated at a fixed cap of 200 characters (⚖-R57) |
 | no-source-content-in-the-artifact | freshness source with private notes | only the date is carried, never the surrounding text |
 
 <details markdown="1"><summary>Evidence — latest run</summary>
