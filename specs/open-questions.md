@@ -81,6 +81,7 @@ goal issue or the majority of the fan-out. They are where review attention is wo
 | ⚖-R51 | the grey status word in detail lines | always `unmonitored`; the reason follows as its own segment | [`CIR-DATA-GREY-REASON`](data/status-resolution.md) |
 | ⚖-R52 | overlapping validation checks | most-specific error wins; every row independently triggerable | [`CIR-DATA-IDENTITY`](data/circles-yaml.md) |
 | ⚖-R53 | does `adapter-never-writes` bind `command:`? | no — scoped to the adapters the bake implements; `command:` stays under the trust boundary, the CronJob's read-only config mount is the production guard | [`CIR-ADAPT-CONTRACT`](data/adapters.md) |
+| ⚖-R56 | what "the minimum touch-target size" is | 24 × 24 CSS px (WCAG 2.2 SC 2.5.8, AA) at the reference viewport: a 24 CSS px square fits inside the arc (radial thickness and mid-radius arc length each ≥ 24 CSS px); a cell that cannot is not activatable | [`CIR-RENDER-TOUCH`](render/interactions.md) |
 
 ## What the fan-out missed entirely
 

@@ -1639,6 +1639,88 @@ class TestRenderer:
         then("scripts loaded from a URL", [s for s in scripts if s], [])
 
 
+# ---------------------------------------------------------------------------- touch target size
+
+# CIR-RENDER-TOUCH#touch-target-size (⚖-R56): 24×24 CSS px at the reference viewport — WCAG 2.2
+# SC 2.5.8 Target Size (Minimum), level AA. A cell meets it when a 24 CSS px square fits inside
+# its arc: radial thickness ≥ 24 CSS px AND arc length at mid-radius ≥ 24 CSS px.
+TOUCH_TARGET_PX = 24
+
+# Which cells are activatable: a button/link role, or in the tab order (tabIndex ≥ 0 — an SVG
+# <a href> is focusable by default).
+_ACTIVATABLE = """() => Object.fromEntries(Array.from(document.querySelectorAll('.cell')).map(c =>
+  [c.getAttribute('data-item'), ['button', 'link'].includes(c.getAttribute('role')) || c.tabIndex >= 0]))"""
+
+_SCALE = "() => document.querySelector('#chart-area svg').getScreenCTM().a"
+
+
+def _touch_targets(geo: list[dict], scale: float, activatable: dict[str, bool]) -> dict[str, dict]:
+    """Every activatable cell's touch-target box in CSS px: radial thickness (rMax − rMin) and the
+    arc length at mid-radius (span in radians × (rMin + rMax) / 2), each × the svg's CSS scale."""
+    out = {}
+    for g in geo:
+        if not activatable.get(g["item"]):
+            continue
+        mid = (g["rMin"] + g["rMax"]) / 2
+        out[g["item"]] = {"thickness": round((g["rMax"] - g["rMin"]) * scale, 1),
+                          "arc": round(math.radians(g["span"]) * mid * scale, 1)}
+    return out
+
+
+def _then_touch_targets(targets: dict[str, dict]) -> None:
+    """The row's two claims over every activatable cell. A page with no activatable cell would
+    meet the row vacuously (its "not activatable at all" arm) — the cases here draw focusable
+    cells (CIR-RENDER-KEYBOARD#keyboard-tab-order), so an empty measurement is an arrange fault."""
+    assert targets, "arrange: no activatable cell measured — the claims below would be vacuous"
+    by_ring: dict[str, dict] = {}
+    for item, t in targets.items():
+        by_ring.setdefault(item.split("/")[0], {})[item] = t
+    allure.attach(json.dumps(by_ring, indent=2, ensure_ascii=False),
+                  name="touch-target box per activatable cell (CSS px), by ring",
+                  attachment_type=allure.attachment_type.JSON)
+    then(f"activatable cells thinner than {TOUCH_TARGET_PX} CSS px (radial)",
+         sorted(k for k, t in targets.items() if t["thickness"] < TOUCH_TARGET_PX), [])
+    then(f"activatable cells shorter than {TOUCH_TARGET_PX} CSS px (arc at mid-radius)",
+         sorted(k for k, t in targets.items() if t["arc"] < TOUCH_TARGET_PX), [])
+
+
+class TestTouch:
+    """CIR-RENDER-TOUCH (specs/render/interactions.md) — the touch-target row, measured on the
+    drawn cells at the reference viewport (1280×800)."""
+
+    @rule("CIR-RENDER-TOUCH")
+    def test_touch_target_size(self, page: Page, served: str, pages_dir: Path) -> None:
+        """CIR-RENDER-TOUCH#touch-target-size — any cell at the reference viewport (the fixture):
+        every activatable cell meets 24×24 CSS px.
+
+        Expected (⚖-R56): for every activatable cell, radial thickness ≥ 24 CSS px and arc length
+        at mid-radius ≥ 24 CSS px — no exceptions listed. Measured: each cell's drawn path in user
+        space (GEOMETRY) × the svg's CSS scale (getScreenCTM)."""
+        given_page(pages_dir, "index.html", "unmodified")
+        with when("browser loads index.html at 1280×800"):
+            page.goto(f"{served}/index.html")
+            geo = observe(page, GEOMETRY, "cell geometry (polar, user space)")
+            scale = observe(page, _SCALE, "CSS px per SVG user unit")
+            activatable = observe(page, _ACTIVATABLE, "activatable (role button/link or in tab order) per cell")
+        _then_touch_targets(_touch_targets(geo, scale, activatable))
+
+    @rule("CIR-RENDER-TOUCH")
+    def test_touch_target_size_at_capacity_limit(self, page: Page, served: str, pages_dir: Path) -> None:
+        """CIR-RENDER-TOUCH#touch-target-size — any cell at the reference viewport (the capacity
+        limit: 6 rings, 8 items in ① Self): every activatable cell meets 24×24 CSS px.
+
+        The envelope's hardest legal case (CIR-RENDER-CAPACITY#capacity-at-limit): the shortest
+        arcs (8 in the innermost ring) and the thinnest bands (6 rings). Expected and measured as
+        the fixture case."""
+        given_page(pages_dir, "index-cap-at-limit.html", "6 rings; ① Self holds 8 items")
+        with when("browser loads index-cap-at-limit.html at 1280×800"):
+            page.goto(f"{served}/index-cap-at-limit.html")
+            geo = observe(page, GEOMETRY, "cell geometry (polar, user space)")
+            scale = observe(page, _SCALE, "CSS px per SVG user unit")
+            activatable = observe(page, _ACTIVATABLE, "activatable (role button/link or in tab order) per cell")
+        _then_touch_targets(_touch_targets(geo, scale, activatable))
+
+
 # ---------------------------------------------------------------------------- boot failure
 
 class TestBootFailure:

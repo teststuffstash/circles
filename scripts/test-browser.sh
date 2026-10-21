@@ -36,7 +36,8 @@
 #   CIR-RENDER-A4#print-single-a4-portrait, #print-margins-are-declared, #print-chrome-complete
 #   CIR-BAKE-STALE-SELF, CIR-RENDER-STALE-MARK (all rows)
 #   the render rows of tests/browser/test_render_rows.py (keyboard, hover, click, palette,
-#   no-JS, legend, summary, grey, status encoding, chrome, a11y table, stamp, egress, …)
+#   no-JS, legend, summary, grey, status encoding, chrome, a11y table, stamp, egress, touch
+#   target size, …)
 
 cd "$(dirname "$0")/.."
 

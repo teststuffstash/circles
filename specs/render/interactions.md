@@ -105,7 +105,7 @@ accident. Focus shows the detail line exactly as hover does, plus a visible focu
 | touch-first-tap-detail | tap a linked cell | detail line shown, no navigation |
 | touch-second-tap-activates | tap the same cell again | the click behavior fires |
 | touch-tap-elsewhere-resets | tap outside the chart | the detail strip returns to idle |
-| touch-target-size | any cell at the reference viewport | the activatable area meets the minimum touch-target size, or the cell is not activatable at all |
+| touch-target-size | any cell at the reference viewport | the activatable area meets the minimum touch-target size of **24 × 24 CSS px** (⚖-R56) — a 24 CSS px square fits inside the cell's arc: radial thickness ≥ 24 CSS px AND arc length at mid-radius ≥ 24 CSS px — or the cell is not activatable at all (no `button`/`link` role, not in the tab order) |
 
 **⚖-R43 — what does a tap do?** Touch has no hover, which directly contradicts the goal's
 "hover = the item's detail line" once phone viewing exists. Options: (a) first tap shows the
@@ -116,6 +116,18 @@ explicit affordance. **Ruled: (a)** — the standard two-stage tooltip pattern, 
 purpose. (b) hides navigation behind an undiscoverable gesture; (c) costs a second tap for every
 read, which is the common case. Phone viewing is a later exposure path, but this ruling costs P0
 nothing and must not be retrofitted differently later.
+
+**⚖-R56 — how big is "the minimum touch-target size"?** The row named a minimum without a
+number, so nothing could measure it. Options: (a) 24 × 24 CSS px, WCAG 2.2 SC 2.5.8 Target Size
+(Minimum), level AA; (b) 44 × 44 CSS px, SC 2.5.5 Target Size (Enhanced), level AAA.
+**Ruled: (a)** (operator, circles#103, 2026-10-21), measured at
+the reference viewport (CIR-RENDER-REFERENCE-VIEWPORT). A cell is an annular sector, so the
+measurable form is "a 24 CSS px square fits inside its arc": radial thickness ≥ 24 CSS px and
+arc length at mid-radius ≥ 24 CSS px. A cell that cannot meet it takes the row's existing other
+arm — not activatable at all — rather than SC 2.5.8's spacing exception. A larger minimum (b)
+would bind ring thickness at the capacity limit (CIR-RENDER-CAPACITY's 6 rings) and the minimum
+arc. External: MUST — WCAG 2.2 SC 2.5.8 (the SC number and level are the operator's citation;
+its text was not re-fetched in this edit).
 
 <details markdown="1"><summary>Evidence — latest run</summary>
 
