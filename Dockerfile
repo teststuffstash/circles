@@ -7,7 +7,7 @@
 # Stage 2: nginx-unprivileged — serve the baked static site.
 
 # ── Stage 1: bake ──────────────────────────────────────────────────────────
-FROM python:3.11-alpine AS bake
+FROM python:3.15-alpine AS bake
 
 WORKDIR /build
 
