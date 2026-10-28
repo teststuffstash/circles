@@ -100,7 +100,7 @@ adapters are enabled and who pulls the trigger — never a second implementation
 | bake-same-validation-both-triggers | an invalid config | fails identically in both |
 | bake-runtime-is-declared | the repo | the bake runs on the Python already pinned in `devbox.json` (⚖-R49) |
 
-**⚖-R49 — what language the bake is written in.** `devbox.json` already pins `python@3.11` and
+**⚖-R49 — what language the bake is written in.** `devbox.json` already pins `python@3.15` and
 `uv`, and `CLAUDE.md` says this repo owns the code the bake runs — so the repo has half-decided
 and no arm in the fan-out said so. Options: (a) Python, as already pinned; (b) an explicit
 re-decision at implementation time. **Ruled: (a).** A spec tree that defines an adapter interface

@@ -6,7 +6,7 @@ build-backend = "setuptools.build_meta"
 name = "circles-bake"
 version = "0.1.0"
 description = "The circles P0 bake: circles.yaml -> a validated, typed config model"
-requires-python = ">=3.11"
+requires-python = ">=3.15"
 dependencies = [
     "jsonschema>=4.23",
     "PyYAML>=6.0",
