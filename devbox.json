@@ -12,7 +12,8 @@
     "gh@latest",
     "kind@latest",
     "docker-client@latest",
-    "minio-client@latest"
+    "minio-client@latest",
+    "rclone@latest"
   ],
   "env": {
     "VENV_DIR": "$HOME/.cache/devbox-venv/circles"

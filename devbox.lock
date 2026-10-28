@@ -487,6 +487,59 @@
         }
       }
     },
+    "rclone@latest": {
+      "last_modified": "2026-10-02T22:55:44Z",
+      "resolved": "github:NixOS/nixpkgs/55ba7f49ef2962b42cbd126522b7df5f95037679#rclone",
+      "source": "devbox-search",
+      "version": "1.75.1",
+      "systems": {
+        "aarch64-darwin": {
+          "outputs": [
+            {
+              "name": "out",
+              "path": "/nix/store/h842zgbmsnv71zj6by1wcsmg48pdw80z-rclone-1.75.1",
+              "default": true
+            },
+            {
+              "name": "man",
+              "path": "/nix/store/jv1nj5sp5nm1pyr4zrg8qzadw1zgl884-rclone-1.75.1-man",
+              "default": true
+            }
+          ],
+          "store_path": "/nix/store/h842zgbmsnv71zj6by1wcsmg48pdw80z-rclone-1.75.1"
+        },
+        "aarch64-linux": {
+          "outputs": [
+            {
+              "name": "out",
+              "path": "/nix/store/90ll9zapkwwafar0ra6app8s298cdi40-rclone-1.75.1",
+              "default": true
+            },
+            {
+              "name": "man",
+              "path": "/nix/store/a5dpmz3i5g0mlcmk6pb33ck8nxaip7a6-rclone-1.75.1-man",
+              "default": true
+            }
+          ],
+          "store_path": "/nix/store/90ll9zapkwwafar0ra6app8s298cdi40-rclone-1.75.1"
+        },
+        "x86_64-linux": {
+          "outputs": [
+            {
+              "name": "out",
+              "path": "/nix/store/ial4m522pkqk8c89ba53wqwwclkza1d9-rclone-1.75.1",
+              "default": true
+            },
+            {
+              "name": "man",
+              "path": "/nix/store/45h0mxdca2hizs689z2yw50i33hjvd72-rclone-1.75.1-man",
+              "default": true
+            }
+          ],
+          "store_path": "/nix/store/ial4m522pkqk8c89ba53wqwwclkza1d9-rclone-1.75.1"
+        }
+      }
+    },
     "uv@latest": {
       "last_modified": "2026-10-16T02:15:57Z",
       "resolved": "github:NixOS/nixpkgs/f20cd90e28fe0403873f473b29e42662cd86e8c4#uv",
