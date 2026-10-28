@@ -36,7 +36,6 @@ from zoneinfo import ZoneInfo
 import allure
 import pytest
 
-import bake.adapters as adapters_module
 import bake.resolve as resolve_module
 from bake.__main__ import default_reference_date
 from bake.config import load_config
@@ -1088,8 +1087,7 @@ class TestBakeExposure:
                 [s for s in ("Traceback", "/home/alex", "PATH=", "CIRCLES_SECRET", "s3cret-value", "plants-probe.sh")
                  if s in raw], [])
         message = " | ".join(warnings_for(run, "wider/plants"))
-        verdict(f"wider/plants warning length ≤ {adapters_module.WARNING_MAX_CHARS}",
-                0 < len(message) <= adapters_module.WARNING_MAX_CHARS, True)
+        verdict("wider/plants warning length ≤ 200 (⚖-R57)", 0 < len(message) <= 200, True)
 
     @rule("CIR-BAKE-EXPOSURE")
     @pytest.mark.parametrize("stream", [
@@ -1107,8 +1105,9 @@ class TestBakeExposure:
         verdict("exit code", run.exit_code, 0)
         verdict("wider/plants status", item_of(run.data, "wider/plants")["status"], "grey")
         message = " | ".join(warnings_for(run, "wider/plants"))
-        cap = adapters_module.WARNING_MAX_CHARS
-        verdict(f"wider/plants warning length ≤ cap {cap} < 10000", 0 < len(message) <= cap < 10_000, True)
+        # The cap is the spec's number (CIR-BAKE-EXPOSURE#warning-text-is-bounded, ⚖-R57), not
+        # the module constant: a constant read back from the code would pin whatever it says.
+        verdict("wider/plants warning length ≤ 200", 0 < len(message) <= 200, True)
         verdict("data.json size < 100000 bytes", len(run.raw.encode()) < 100_000, True)
 
 

@@ -9,8 +9,9 @@
 #     carries the same assertion;
 #   - CIR-RENDER-ASSET-BUDGET#budget-growth-is-linear is proven HERE too: page size is the
 #     bake's artifact, measured at its CLI boundary across item counts;
-#   - CIR-RENDER-TOUCH#touch-target-size stays labelled here, UNIT_ONLY: the spec states no
-#     minimum target size, so there is no browser measurement to compare against yet.
+#   - CIR-RENDER-TOUCH#touch-target-size moved to the browser tier once ⚖-R56 gave it a number
+#     (24 × 24 CSS px); its source-grep proxy here was deleted — the browser case measures the
+#     drawn cells, and keyboard-tab-order already proves the cells are in the tab order.
 
 from __future__ import annotations
 
@@ -409,19 +410,3 @@ class TestFixtureAcceptance:
         assert "act" in html
         # wider/plants ⚪ not-evaluated
 
-
-# ===========================================================================
-# CIR-RENDER-TOUCH — no hover on glass
-# ===========================================================================
-
-class TestRenderTouch:
-    """CIR-RENDER-TOUCH — no hover on glass."""
-
-    @rule("CIR-RENDER-TOUCH")
-    def test_touch_target_size(self) -> None:
-        """CIR-RENDER-TOUCH#touch-target-size —
-        cells are SVG elements with role=button and in the tab order. A source-level
-        check: measuring the target size needs the browser tier (#34)."""
-        html = _render_fixture()
-        assert 'role="button"' in html
-        assert 'tabindex="0"' in html

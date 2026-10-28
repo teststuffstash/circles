@@ -40,12 +40,25 @@ CELL_GAP_DEG = 2.0
 # (CIR-RENDER-MIN-ARC#overflow-capped-at-total-deg, #overflow-no-negative-arcs).
 MAX_GAP_SHARE = 0.5
 MIN_ARC_DEG = 3.0  # minimum arc angle after gap
-# Centre-disc text: nominal sizes (user units), and a conservative average glyph advance in em
-# for the bake-time width estimate (sans-serif mixed case/digits measures ≈ 0.49 em).
+# The floor for ALL chart text (CIR-RENDER-LABELS#labels-meet-minimum-font, ⚖-R55): never below
+# 10 CSS px at the reference viewport (1280×800, CIR-RENDER-REFERENCE-VIEWPORT). There the 800-unit
+# viewBox is drawn 780 CSS px wide (the chart area's height less its padding), 0.975 CSS px per
+# user unit, so 10 CSS px needs ≥ 10.26 user units — 10.5 leaves a margin (≈ 10.24 CSS px).
+MIN_CHART_FONT = 10.5
+# Item labels (user units), drawn at the floor.
+LABEL_FONT = MIN_CHART_FONT
+# Centre-disc text: nominal sizes (user units, none below the floor), and a conservative average
+# glyph advance in em for the bake-time width estimate (sans-serif mixed case/digits measures
+# ≈ 0.49 em).
 NAME_FONT = 11.0
-SUMMARY_FONT = 8.0
-STAMP_FONT = 7.0
+SUMMARY_FONT = MIN_CHART_FONT
+STAMP_FONT = MIN_CHART_FONT
 GLYPH_EM = 0.55
+# Vertical pitch between the centre disc's lines (user units): ≥ half the name's line box plus
+# half a floor-size line box, so name, summary line(s) and stamp never overlap.
+CENTRE_LINE_PITCH = 15.0
+SUMMARY_SEPARATOR = " · "
+ELLIPSIS = "…"
 
 # Palette (CIR-RENDER-PALETTE)
 STATUS_COLORS: dict[str, str] = {
@@ -120,6 +133,70 @@ def _compute_radii(num_rings: int) -> list[tuple[float, float]]:
         radii.append((inner, outer))
         inner = outer + RING_GAP
     return radii
+
+
+def _chord_width(font: float, centre_dy: float, pad: float = 6.0) -> float:
+    """The usable width of the centre hole for one line of ``font`` centred ``centre_dy`` from the
+    centre: the hole's chord at the line box's edge farthest from the centre, less ``pad`` each
+    side (0 when the line box reaches the hole's edge)."""
+    reach = abs(centre_dy) + 0.6 * font
+    if reach >= CENTRE_RADIUS:
+        return 0.0
+    return max(0.0, 2.0 * math.sqrt(CENTRE_RADIUS ** 2 - reach ** 2) - 2.0 * pad)
+
+
+def _fits(text: str, font: float, centre_dy: float) -> bool:
+    """Whether ``text``'s estimated width at ``font`` fits the hole's chord at ``centre_dy``."""
+    return GLYPH_EM * font * len(text) <= _chord_width(font, centre_dy)
+
+
+def _truncate(text: str, font: float, centre_dy: float) -> str:
+    """``text`` cut and ended with ELLIPSIS so it fits the chord at ``centre_dy`` (unchanged when it
+    already fits)."""
+    if _fits(text, font, centre_dy):
+        return text
+    room = int(_chord_width(font, centre_dy) / (GLYPH_EM * font)) - len(ELLIPSIS)
+    return text[:max(room, 0)].rstrip() + ELLIPSIS
+
+
+def _fit_line(text: str, nominal: float, centre_dy: float) -> tuple[str, float]:
+    """One centre-disc line: shrunk toward the fit (_fit_font) but never below MIN_CHART_FONT;
+    a line that does not fit even at the floor is truncated with ELLIPSIS (⚖-R55)."""
+    font = max(_fit_font(text, nominal, centre_dy), MIN_CHART_FONT)
+    return _truncate(text, font, centre_dy), font
+
+
+def _layout_summary(segments: list[str]) -> list[str]:
+    """The summary's lines (CIR-RENDER-SUMMARY#summary-wraps-before-shrinking,
+    #summary-truncates-past-two-lines; ⚖-R55) — the summary is drawn at SUMMARY_FONT (the floor):
+
+    - one line when the whole summary fits on the centre line;
+    - else two lines broken at a SUMMARY_SEPARATOR (never mid-segment), the first keeping the
+      separator's dot at its end, at the most balanced break that fits both lines;
+    - else (no break fits both) line one takes as many whole segments as fit and the second line
+      is truncated with ELLIPSIS.
+
+    Joining the lines with a space gives the summary text back whenever nothing is truncated.
+    """
+    font = SUMMARY_FONT
+    whole = SUMMARY_SEPARATOR.join(segments)
+    if len(segments) <= 1 or _fits(whole, font, 0.0):
+        return [_truncate(whole, font, 0.0)]
+    dy = CENTRE_LINE_PITCH / 2.0
+    dot = SUMMARY_SEPARATOR.rstrip()
+    splits = [
+        (SUMMARY_SEPARATOR.join(segments[:k]) + dot, SUMMARY_SEPARATOR.join(segments[k:]))
+        for k in range(1, len(segments))
+    ]
+    fitting = [s for s in splits if _fits(s[0], font, -dy) and _fits(s[1], font, dy)]
+    if fitting:
+        return list(min(fitting, key=lambda s: max(len(s[0]), len(s[1]))))
+    first, rest = splits[0]
+    for line_one, line_two in splits[1:]:
+        if not _fits(line_one, font, -dy):
+            break
+        first, rest = line_one, line_two
+    return [_truncate(first, font, -dy), _truncate(rest, font, dy)]
 
 
 def _fit_font(text: str, nominal: float, centre_dy: float, pad: float = 6.0) -> float:
@@ -258,6 +335,11 @@ def _compute_summary(artifact: dict) -> dict[str, int]:
 
 def _summary_text(counts: dict[str, int]) -> str:
     """Build the summary line from counts."""
+    return SUMMARY_SEPARATOR.join(_summary_segments(counts))
+
+
+def _summary_segments(counts: dict[str, int]) -> list[str]:
+    """The summary's segments (``<n> <word>``), in order; ``["0 items"]`` when nothing is drawn."""
     parts: list[str] = []
     if counts["green"]:
         parts.append(f"{counts['green']} ok")
@@ -271,7 +353,7 @@ def _summary_text(counts: dict[str, int]) -> str:
         parts.append(f"{counts['grey_by_failure']} adapter failing")
     if counts["grey_not_evaluated"]:
         parts.append(f"{counts['grey_not_evaluated']} not evaluated")
-    return " · ".join(parts) if parts else "0 items"
+    return parts if parts else ["0 items"]
 
 
 # ---------------------------------------------------------------------------
@@ -321,10 +403,7 @@ def _render_svg(artifact: dict) -> str:
     parts: list[str] = []
 
     # --- Centre disc ---
-    person = html.escape(artifact.get("person", ""))
-    generated_at = html.escape(artifact.get("generated_at", ""))
     counts = _compute_summary(artifact)
-    summary = html.escape(_summary_text(counts))
 
     # Hatch pattern for the stale overlay (CIR-RENDER-STALE-MARK, ⚖-R42). Lines, not
     # paths, so the cell-path count stays the arc count.
@@ -336,15 +415,29 @@ def _render_svg(artifact: dict) -> str:
     )
     parts.append(f'<circle cx="{CX}" cy="{CY}" r="{CENTRE_RADIUS}" fill="#f8f8f8" stroke="#ccc" stroke-width="1"/>')
     # The identity sits inside the hole (CIR-RENDER-RING-THICKNESS#centre-disc-holds-identity):
-    # the summary — the longest line — on the centre line where the hole is widest, the name
-    # above it, the stamp below; each line's font fitted to the hole's chord at its height.
-    # Sizes are computed on the unescaped text (what is drawn).
-    name_font = _fit_font(artifact.get("person", ""), NAME_FONT, -18.0)
-    summary_font = _fit_font(_summary_text(counts), SUMMARY_FONT, 0.0)
-    stamp_font = _fit_font(artifact.get("generated_at", ""), STAMP_FONT, 15.0)
-    parts.append(f'<text x="{CX}" y="{CY - 18}" text-anchor="middle" dominant-baseline="central" font-size="{name_font}" font-weight="bold" fill="#333">{person}</text>')
-    parts.append(f'<text x="{CX}" y="{CY}" text-anchor="middle" dominant-baseline="central" font-size="{summary_font}" fill="#666">{summary}</text>')
-    parts.append(f'<text x="{CX}" y="{CY + 15}" text-anchor="middle" dominant-baseline="central" font-size="{stamp_font}" fill="#999">{generated_at}</text>')
+    # name, summary line(s), stamp stacked CENTRE_LINE_PITCH apart around the centre line, where
+    # the hole is widest. No line is drawn below MIN_CHART_FONT (⚖-R55): the summary wraps to two
+    # lines before it would shrink, and is truncated only past two (_layout_summary); a name or
+    # stamp too long for its chord at the floor is truncated (_fit_line). Fitting is computed on
+    # the unescaped text (what is drawn).
+    summary_lines = _layout_summary(_summary_segments(counts))
+    n_lines = len(summary_lines) + 2
+    ys = [(i - (n_lines - 1) / 2.0) * CENTRE_LINE_PITCH for i in range(n_lines)]
+    name, name_font = _fit_line(artifact.get("person", ""), NAME_FONT, ys[0])
+    stamp, stamp_font = _fit_line(artifact.get("generated_at", ""), STAMP_FONT, ys[-1])
+    text_attrs = 'text-anchor="middle" dominant-baseline="central"'
+    parts.append(f'<text x="{CX}" y="{CY + ys[0]}" {text_attrs} font-size="{name_font}" font-weight="bold" fill="#333">{html.escape(name)}</text>')
+    if len(summary_lines) == 1:
+        parts.append(f'<text x="{CX}" y="{CY + ys[1]}" {text_attrs} font-size="{SUMMARY_FONT}" fill="#666">{html.escape(summary_lines[0])}</text>')
+    else:
+        # One <text>, one <tspan> per line: the whitespace between them makes the element's text
+        # the summary verbatim again (the lines break at a separator, keeping its dot).
+        tspans = " ".join(
+            f'<tspan x="{CX}" y="{CY + y}" dominant-baseline="central">{html.escape(line)}</tspan>'
+            for line, y in zip(summary_lines, ys[1:-1])
+        )
+        parts.append(f'<text x="{CX}" y="{CY + ys[1]}" {text_attrs} font-size="{SUMMARY_FONT}" fill="#666">{tspans}</text>')
+    parts.append(f'<text x="{CX}" y="{CY + ys[-1]}" {text_attrs} font-size="{stamp_font}" fill="#999">{html.escape(stamp)}</text>')
 
     # --- Rings ---
     for ring_idx, ring in enumerate(rings_data):
@@ -462,7 +555,7 @@ def _render_svg(artifact: dict) -> str:
             # Label
             parts.append(
                 f'<text x="{lx:.2f}" y="{ly:.2f}" text-anchor="middle" '
-                f'dominant-baseline="central" font-size="9" fill="{label_color}" '
+                f'dominant-baseline="central" font-size="{LABEL_FONT}" fill="{label_color}" '
                 f'transform="rotate({lrot:.1f} {lx:.2f} {ly:.2f})" '
                 f'pointer-events="none">{label}</text>'
             )

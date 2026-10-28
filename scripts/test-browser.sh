@@ -36,7 +36,8 @@
 #   CIR-RENDER-A4#print-single-a4-portrait, #print-margins-are-declared, #print-chrome-complete
 #   CIR-BAKE-STALE-SELF, CIR-RENDER-STALE-MARK (all rows)
 #   the render rows of tests/browser/test_render_rows.py (keyboard, hover, click, palette,
-#   no-JS, legend, summary, grey, status encoding, chrome, a11y table, stamp, egress, …)
+#   no-JS, legend, summary, grey, status encoding, chrome, a11y table, stamp, egress, touch
+#   target size, …)
 
 cd "$(dirname "$0")/.."
 
@@ -326,6 +327,27 @@ print(f"  Wrote {path} (the inlined payload block removed)")
 path = out / "index-boot-empty-rings.html"
 path.write_text(render_page({**fixture, "rings": []}), encoding="utf-8")
 print(f"  Wrote {path} (artifact rings: [])")
+
+# CIR-RENDER-SUMMARY#summary-truncates-past-two-lines (⚖-R55): a summary too long for two lines
+# at the minimum font. All six summary categories at two-digit counts: the fixture artifact (as
+# baked above, generated_at fixed) plus a hand-built ring "⑤ Tally" of 10 items per category —
+# hand-built because `adapter failing` (grey by-failure) needs an evaluated adapter that fails,
+# which no unevaluated variant produces. Totals: 12 ok · 11 attention · 11 act · 11 unmonitored ·
+# 10 adapter failing · 13 not evaluated.
+TALLY = [("green", None, "ok"), ("yellow", None, "attention"), ("red", None, "act"),
+         ("grey", "by-choice", "unmonitored · by choice"),
+         ("grey", "by-failure", "unmonitored · adapter failing"),
+         ("grey", "not-evaluated", "unmonitored · not evaluated in this build")]
+tally_items = [
+    {"id": f"t{c}-{k}", "label": f"T{c}.{k}", "status": status, "grey_reason": reason,
+     "guardrail": None, "note": None, "link": None, "share": 1.0, "last_data_date": None,
+     "detail_line": line, "detail_page": None}
+    for c, (status, reason, line) in enumerate(TALLY) for k in range(1, 11)
+]
+tally = {**fixture, "rings": fixture["rings"] + [{"id": "tally", "label": "⑤ Tally", "items": tally_items}]}
+path = out / "index-summary-long.html"
+path.write_text(render_page(tally), encoding="utf-8")
+print(f"  Wrote {path} (+ ring ⑤ Tally: 10 items in each of the six summary categories)")
 PY
 
 # ── step 2: run the browser tier ─────────────────────────────────────────────────────

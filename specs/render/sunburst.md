@@ -191,6 +191,12 @@ Item labels render **inside their cell's arc**, centred on the arc's mid-angle. 
 overflows its cell. Ring labels never appear on the chart — the ring key names them
 ([`CIR-RENDER-CHROME`](layout.md)).
 
+**No chart text renders below 10 CSS px at the reference viewport** (1280×800,
+[`CIR-RENDER-REFERENCE-VIEWPORT`](layout.md)) — item labels and the centre disc's lines alike
+(⚖-R55). The chart is an 800×800 user-unit viewBox, so a size in user units renders at that size ×
+(the svg's rendered CSS width ÷ 800); the floor is on the rendered size. Text that does not fit at
+the floor is elided or wrapped, never shrunk below it.
+
 | row id | inputs | expected |
 |---|---|---|
 | label-inside-arc | fixture config | each item label rendered within its own cell's bounds |
@@ -198,6 +204,17 @@ overflows its cell. Ring labels never appear on the chart — the ring key names
 | label-omitted-when-tiny | an arc too small for any elided label | no label painted; the cell stays hoverable and focusable with the full label in its detail line |
 | label-full-text-always-reachable | any elided or omitted label | full text present in the detail line and the text alternative |
 | label-glyphs-passthrough | label `◀ Nova` | glyph rendered as-is |
+| labels-meet-minimum-font | any config, at the reference viewport | every chart text — item labels and the centre disc's name, summary and stamp — renders at ≥ 10 CSS px |
+
+**⚖-R55 — how small may chart text get?** The centre summary used to shrink to fit the hole
+(≈ 6.5 CSS px on the fixture) and item labels drew at 9 user units (≈ 8.8 CSS px). Options: (a)
+shrink to fit, no floor; (b) a floor for all chart text, with wrapping and truncation absorbing
+what no longer fits. **Ruled: (b), floor 10 CSS px at the
+reference viewport** (operator ruling, circles#103, 2026-10-21). A summary too wide for one line
+at the floor wraps to two lines at a ` · ` separator (never mid-segment); only if no two-line
+break fits is the second line truncated with `…` (`CIR-RENDER-SUMMARY`). A label that grows
+past its cell at the floor elides (`label-elided-when-tight`) — the accepted consequence. If the
+floor moved, every row here that measures rendered text would move with it.
 
 <details markdown="1"><summary>Evidence — latest run</summary>
 
@@ -242,7 +259,7 @@ change, not a bigger default.
 
 **— the count that survives everything**
 
-The page carries a one-line summary of its own statuses — greens, yellows, reds, and the grey
+The page carries a summary line of its own statuses — greens, yellows, reds, and the grey
 reasons counted separately: unmonitored by choice, adapter failing, not evaluated — taken
 verbatim from the artifact. The wording is reason-accurate by construction: it derives from
 `grey_reason` (⚖-R50), so a phase that evaluates nothing never reads as a page full of failures.
@@ -253,6 +270,8 @@ verbatim from the artifact. The wording is reason-accurate by construction: it d
 | summary-separates-grey-reasons | 1 by-choice, 1 by-failure, 1 not-evaluated (P0 `command:` item) | "1 unmonitored · 1 adapter failing · 1 not evaluated", never "3 unmonitored" ([`CIR-DATA-GREY-REASON`](../data/status-resolution.md)) |
 | summary-survives-print | printed page | present in the printed output |
 | summary-is-not-a-rollup | any config | no ring and no page is assigned a colour |
+| summary-wraps-before-shrinking | a summary wider than the centre hole on one line at 10 CSS px (the fixture) | drawn on two lines broken at a ` · ` separator (never mid-segment), at ≥ 10 CSS px; name, summary lines and stamp do not overlap and stay inside the hole |
+| summary-truncates-past-two-lines | a summary that no ` · ` break fits on two lines at 10 CSS px | line one holds whole segments; line two is truncated with `…`; both at ≥ 10 CSS px, inside the hole, not overlapping name or stamp |
 
 **⚖-R9 — should rings roll up to a status, and what lives in the centre hole?** The "innermost
 must hold" doctrine invites an aggregate light per ring, and the hole invites an overall one.

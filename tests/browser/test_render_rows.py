@@ -16,6 +16,8 @@
 #   index-cap-*, index-min-arc-*, index-shares-*, index-adjacent-green, index-boot-*
 #                               the geometry/capacity/boot-failure variants — listed at
 #                               "Round 2" below
+#   index-summary-long.html     the fixture + a ring of 10 items per summary category — listed at
+#                               "minimum font (⚖-R55)" below
 #
 # Each labelled case reads given (the page variant, world seed + the page's inlined artifact
 # attached, loaded in the browser where the action is not the load itself) → ONE when (the
@@ -1596,6 +1598,160 @@ class TestRingThickness:
              round(summary["rMax"], 1), round(hole, 1), op="<=")
 
 
+# ---------------------------------------------------------------------------- minimum font (⚖-R55)
+#
+# Operator ruling ⚖-R55 (circles#103, 2026-10-21; specs/open-questions.md): chart text never
+# renders below 10 CSS px at the reference viewport (REFERENCE_VIEWPORT, 1280×800). The summary
+# wraps to two lines (broken at a ` · ` separator, never mid-segment) before it would shrink, and
+# only past two lines is its second line truncated with `…`. Page variant (scripts/test-browser.sh):
+#   index-summary-long.html     the fixture artifact + ring ⑤ Tally, 10 items in each of the six
+#                               summary categories
+
+MIN_CSS_PX = 10.0  # ⚖-R55: "never below 10 CSS px at the reference viewport"
+
+# Every text the chart draws, with its rendered size: the computed font-size (SVG user units) × the
+# svg's CSS px per user unit — what the reader sees, whatever the source attribute says.
+_CHART_FONTS = """() => {
+  const svg = document.querySelector('#chart-area svg'), scale = svg.getScreenCTM().a;
+  return Array.from(svg.querySelectorAll('text')).map(t => ({
+    text: t.textContent.trim(), cell: t.closest('.cell') ? t.closest('.cell').getAttribute('data-item') : null,
+    cssPx: Math.round(parseFloat(getComputedStyle(t).fontSize) * scale * 100) / 100}));
+}"""
+
+# The centre disc's drawn lines, top to bottom: each `svg > text`, or each of its <tspan>s when it
+# has them, with its rendered size and its box in user space (polar extent from the chart centre,
+# vertical extent). `arg` = {probes, minPx}: strings to measure at the minPx CSS px floor (the
+# one-line / split alternatives a test needs as its precondition), returned as widths in user units.
+_CENTRE_LINES = """({probes, minPx}) => {
+  const svg = document.querySelector('#chart-area svg'), vb = svg.viewBox.baseVal, scale = svg.getScreenCTM().a;
+  const cx = vb.x + vb.width / 2, cy = vb.y + vb.height / 2;
+  const lines = [];
+  Array.from(svg.querySelectorAll(':scope > text')).forEach((t, i) => {
+    const spans = t.querySelectorAll('tspan');
+    (spans.length ? Array.from(spans) : [t]).forEach(e => {
+      const b = e.getBBox();
+      lines.push({element: i, text: e.textContent, cssPx: Math.round(parseFloat(getComputedStyle(e).fontSize) * scale * 100) / 100,
+                  top: b.y, bottom: b.y + b.height,
+                  rMax: Math.max(...[[b.x, b.y], [b.x + b.width, b.y], [b.x, b.y + b.height], [b.x + b.width, b.y + b.height]]
+                                 .map(([x, y]) => Math.hypot(x - cx, y - cy)))});
+    });
+  });
+  const widths = {};
+  (probes || []).forEach(s => {
+    const p = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+    p.setAttribute('font-size', String(minPx / scale)); p.textContent = s;
+    svg.appendChild(p); widths[s] = p.getComputedTextLength(); p.remove();
+  });
+  return {lines: lines, widths: widths};
+}"""
+
+
+def _splits(summary: str) -> list[tuple[str, str]]:
+    """Every two-line break of ``summary`` at a ` · ` separator, the dot kept at line one's end
+    (⚖-R55: break at a separator, never mid-segment)."""
+    segments = summary.split(" · ")
+    return [(" · ".join(segments[:k]) + " ·", " · ".join(segments[k:])) for k in range(1, len(segments))]
+
+
+def _overlapping(lines: list[dict]) -> list[str]:
+    """Pairs of vertically adjacent centre lines whose boxes overlap (top to bottom)."""
+    return [f"{a['text']!r} / {b['text']!r}" for a, b in zip(lines, lines[1:]) if b["top"] < a["bottom"] - 0.01]
+
+
+class TestMinimumFont:
+    """⚖-R55 — CIR-RENDER-LABELS#labels-meet-minimum-font, CIR-RENDER-SUMMARY
+    #summary-wraps-before-shrinking / #summary-truncates-past-two-lines (specs/render/sunburst.md)."""
+
+    @rule("CIR-RENDER-LABELS")
+    @pytest.mark.parametrize("name, variant", [
+        ("index.html", "unmodified"),
+        ("index-cap-at-limit.html", "6 rings; ① Self holds 8 items"),
+        ("index-summary-long.html", "+ ring ⑤ Tally: 10 items per summary category"),
+    ], ids=["fixture", "cap-at-limit", "summary-long"])
+    def test_labels_meet_minimum_font(self, page: Page, served: str, pages_dir: Path, name: str, variant: str) -> None:
+        """CIR-RENDER-LABELS#labels-meet-minimum-font — any config at the reference viewport: every
+        text the chart draws (item labels and the centre disc's lines) renders at ≥ 10 CSS px.
+
+        Expected: ⚖-R55's floor, 10 CSS px. Measured: each chart text's computed font-size × the
+        svg's CSS px per user unit, at 1280×800."""
+        given_page(pages_dir, name, variant)
+        with when(f"browser loads {name} at 1280×800"):
+            page.goto(f"{served}/{name}")
+            fonts = observe(page, _CHART_FONTS, "chart texts: rendered font size (CSS px)")
+        then("chart texts drawn", len(fonts), 0, op=">")
+        then(f"chart texts below {MIN_CSS_PX} CSS px",
+             [f"{f['cell'] or 'centre'}: {f['text']!r} @ {f['cssPx']}px" for f in fonts if f["cssPx"] < MIN_CSS_PX], [])
+
+    @rule("CIR-RENDER-SUMMARY")
+    def test_summary_wraps_before_shrinking(self, page: Page, served: str, pages_dir: Path) -> None:
+        """CIR-RENDER-SUMMARY#summary-wraps-before-shrinking — a summary wider than the centre hole
+        on one line at the minimum font: drawn on two lines broken at a ` · ` separator, at
+        ≥ 10 CSS px, never shrunk; name, summary lines and stamp do not overlap.
+
+        The fixture as the image build bakes it: "2 ok · 1 attention · 1 act · 1 unmonitored · 3 not
+        evaluated" (fixture comments, as TestSummary). Precondition, measured: that line at the
+        10 CSS px floor is wider than the hole's whole diameter, so no single line can hold it.
+        Expected (⚖-R55): two lines that join back to the summary with nothing lost (line one ends
+        at a separator's dot), each ≥ 10 CSS px and inside the hole."""
+        summary = "2 ok · 1 attention · 1 act · 1 unmonitored · 3 not evaluated"
+        artifact = given_page(pages_dir, "index-no-threshold.html", "unmodified, generated_at fixed")
+        with when("browser loads index-no-threshold.html at 1280×800"):
+            page.goto(f"{served}/index-no-threshold.html")
+            geo = observe(page, GEOMETRY, "cell geometry (polar, user space)")
+            centre = observe(page, _CENTRE_LINES, "centre lines: text, size, box + the one-line width at 10 CSS px",
+                             {"probes": [summary], "minPx": MIN_CSS_PX})
+        hole = min(g["rMin"] for g in geo)
+        lines = centre["lines"]
+        drawn = [ln for ln in lines if ln["element"] == 1]
+        then(f"one-line summary width vs the hole's diameter {2 * hole:.1f} (user units)",
+             round(centre["widths"][summary], 1), round(2 * hole, 1), op=">")
+        then("centre lines (name, summary…, stamp) first / last",
+             [lines[0]["text"], lines[-1]["text"]], [artifact["person"], artifact["generated_at"]])
+        then("summary lines drawn", len(drawn), 2)
+        then("summary lines joined", " ".join(ln["text"] for ln in drawn), summary)
+        then("line one ends at a separator", drawn[0]["text"].endswith(" ·"), True)
+        then(f"summary lines below {MIN_CSS_PX} CSS px", [ln["text"] for ln in drawn if ln["cssPx"] < MIN_CSS_PX], [])
+        then(f"centre lines reaching past the hole's {hole:.1f}", [ln["text"] for ln in lines if ln["rMax"] > hole], [])
+        then("overlapping centre lines", _overlapping(lines), [])
+
+    @rule("CIR-RENDER-SUMMARY")
+    def test_summary_truncates_past_two_lines(self, page: Page, served: str, pages_dir: Path) -> None:
+        """CIR-RENDER-SUMMARY#summary-truncates-past-two-lines — a summary that fits no two-line
+        break at the minimum font: line one holds whole segments, line two is truncated with `…`;
+        both ≥ 10 CSS px, inside the hole, not overlapping name or stamp.
+
+        index-summary-long.html: the fixture's 2 ok · 1 attention · 1 act · 1 unmonitored · 3 not
+        evaluated plus ring ⑤ Tally's 10 of each category → "12 ok · 11 attention · 11 act · 11
+        unmonitored · 10 adapter failing · 13 not evaluated". Precondition, measured at the 10 CSS
+        px floor: at every separator break the longer line is wider than the hole's whole diameter, so no two lines
+        can hold it."""
+        summary = "12 ok · 11 attention · 11 act · 11 unmonitored · 10 adapter failing · 13 not evaluated"
+        artifact = given_page(pages_dir, "index-summary-long.html", "+ ring ⑤ Tally: 10 items per summary category")
+        splits = _splits(summary)
+        with when("browser loads index-summary-long.html at 1280×800"):
+            page.goto(f"{served}/index-summary-long.html")
+            geo = observe(page, GEOMETRY, "cell geometry (polar, user space)")
+            centre = observe(page, _CENTRE_LINES, "centre lines: text, size, box + every split's widths at 10 CSS px",
+                             {"probes": [s for split in splits for s in split], "minPx": MIN_CSS_PX})
+        hole = min(g["rMin"] for g in geo)
+        widths = centre["widths"]
+        lines = centre["lines"]
+        drawn = [ln for ln in lines if ln["element"] == 1]
+        then(f"narrowest two-line break's longer line vs the hole's diameter {2 * hole:.1f} (user units)",
+             round(min(max(widths[a], widths[b]) for a, b in splits), 1), round(2 * hole, 1), op=">")
+        then("centre lines (name, summary…, stamp) first / last",
+             [lines[0]["text"], lines[-1]["text"]], [artifact["person"], artifact["generated_at"]])
+        then("summary lines drawn", len(drawn), 2)
+        line_one, line_two = drawn[0]["text"], drawn[1]["text"]
+        then("line one is whole segments ending at a separator", line_one in [a for a, _ in splits], True)
+        then("line two ends with", line_two[-1:], "…")
+        then("line two (less `…`) continues the summary after line one",
+             summary.startswith(f"{line_one} {line_two[:-1]}"), True)
+        then(f"summary lines below {MIN_CSS_PX} CSS px", [ln["text"] for ln in drawn if ln["cssPx"] < MIN_CSS_PX], [])
+        then(f"centre lines reaching past the hole's {hole:.1f}", [ln["text"] for ln in lines if ln["rMax"] > hole], [])
+        then("overlapping centre lines", _overlapping(lines), [])
+
+
 # ---------------------------------------------------------------------------- renderer
 
 class TestRenderer:
@@ -1637,6 +1793,88 @@ class TestRenderer:
                           attachment_type=allure.attachment_type.JSON)
         then("requests made", [r["type"] for r in rec["requests"]], ["document"])
         then("scripts loaded from a URL", [s for s in scripts if s], [])
+
+
+# ---------------------------------------------------------------------------- touch target size
+
+# CIR-RENDER-TOUCH#touch-target-size (⚖-R56): 24×24 CSS px at the reference viewport — WCAG 2.2
+# SC 2.5.8 Target Size (Minimum), level AA. A cell meets it when a 24 CSS px square fits inside
+# its arc: radial thickness ≥ 24 CSS px AND arc length at mid-radius ≥ 24 CSS px.
+TOUCH_TARGET_PX = 24
+
+# Which cells are activatable: a button/link role, or in the tab order (tabIndex ≥ 0 — an SVG
+# <a href> is focusable by default).
+_ACTIVATABLE = """() => Object.fromEntries(Array.from(document.querySelectorAll('.cell')).map(c =>
+  [c.getAttribute('data-item'), ['button', 'link'].includes(c.getAttribute('role')) || c.tabIndex >= 0]))"""
+
+_SCALE = "() => document.querySelector('#chart-area svg').getScreenCTM().a"
+
+
+def _touch_targets(geo: list[dict], scale: float, activatable: dict[str, bool]) -> dict[str, dict]:
+    """Every activatable cell's touch-target box in CSS px: radial thickness (rMax − rMin) and the
+    arc length at mid-radius (span in radians × (rMin + rMax) / 2), each × the svg's CSS scale."""
+    out = {}
+    for g in geo:
+        if not activatable.get(g["item"]):
+            continue
+        mid = (g["rMin"] + g["rMax"]) / 2
+        out[g["item"]] = {"thickness": round((g["rMax"] - g["rMin"]) * scale, 1),
+                          "arc": round(math.radians(g["span"]) * mid * scale, 1)}
+    return out
+
+
+def _then_touch_targets(targets: dict[str, dict]) -> None:
+    """The row's two claims over every activatable cell. A page with no activatable cell would
+    meet the row vacuously (its "not activatable at all" arm) — the cases here draw focusable
+    cells (CIR-RENDER-KEYBOARD#keyboard-tab-order), so an empty measurement is an arrange fault."""
+    assert targets, "arrange: no activatable cell measured — the claims below would be vacuous"
+    by_ring: dict[str, dict] = {}
+    for item, t in targets.items():
+        by_ring.setdefault(item.split("/")[0], {})[item] = t
+    allure.attach(json.dumps(by_ring, indent=2, ensure_ascii=False),
+                  name="touch-target box per activatable cell (CSS px), by ring",
+                  attachment_type=allure.attachment_type.JSON)
+    then(f"activatable cells thinner than {TOUCH_TARGET_PX} CSS px (radial)",
+         sorted(k for k, t in targets.items() if t["thickness"] < TOUCH_TARGET_PX), [])
+    then(f"activatable cells shorter than {TOUCH_TARGET_PX} CSS px (arc at mid-radius)",
+         sorted(k for k, t in targets.items() if t["arc"] < TOUCH_TARGET_PX), [])
+
+
+class TestTouch:
+    """CIR-RENDER-TOUCH (specs/render/interactions.md) — the touch-target row, measured on the
+    drawn cells at the reference viewport (1280×800)."""
+
+    @rule("CIR-RENDER-TOUCH")
+    def test_touch_target_size(self, page: Page, served: str, pages_dir: Path) -> None:
+        """CIR-RENDER-TOUCH#touch-target-size — any cell at the reference viewport (the fixture):
+        every activatable cell meets 24×24 CSS px.
+
+        Expected (⚖-R56): for every activatable cell, radial thickness ≥ 24 CSS px and arc length
+        at mid-radius ≥ 24 CSS px — no exceptions listed. Measured: each cell's drawn path in user
+        space (GEOMETRY) × the svg's CSS scale (getScreenCTM)."""
+        given_page(pages_dir, "index.html", "unmodified")
+        with when("browser loads index.html at 1280×800"):
+            page.goto(f"{served}/index.html")
+            geo = observe(page, GEOMETRY, "cell geometry (polar, user space)")
+            scale = observe(page, _SCALE, "CSS px per SVG user unit")
+            activatable = observe(page, _ACTIVATABLE, "activatable (role button/link or in tab order) per cell")
+        _then_touch_targets(_touch_targets(geo, scale, activatable))
+
+    @rule("CIR-RENDER-TOUCH")
+    def test_touch_target_size_at_capacity_limit(self, page: Page, served: str, pages_dir: Path) -> None:
+        """CIR-RENDER-TOUCH#touch-target-size — any cell at the reference viewport (the capacity
+        limit: 6 rings, 8 items in ① Self): every activatable cell meets 24×24 CSS px.
+
+        The envelope's hardest legal case (CIR-RENDER-CAPACITY#capacity-at-limit): the shortest
+        arcs (8 in the innermost ring) and the thinnest bands (6 rings). Expected and measured as
+        the fixture case."""
+        given_page(pages_dir, "index-cap-at-limit.html", "6 rings; ① Self holds 8 items")
+        with when("browser loads index-cap-at-limit.html at 1280×800"):
+            page.goto(f"{served}/index-cap-at-limit.html")
+            geo = observe(page, GEOMETRY, "cell geometry (polar, user space)")
+            scale = observe(page, _SCALE, "CSS px per SVG user unit")
+            activatable = observe(page, _ACTIVATABLE, "activatable (role button/link or in tab order) per cell")
+        _then_touch_targets(_touch_targets(geo, scale, activatable))
 
 
 # ---------------------------------------------------------------------------- boot failure
