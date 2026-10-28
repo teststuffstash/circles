@@ -49,13 +49,14 @@ jobs:
 
       - name: Purge pr-prefix from the specs bucket (close)
         if: github.event.action == 'closed'
+        # rclone, env-configured remote `specs:` (scripts/specs-pr-purge.sh holds the
+        # not-found-only tolerance). Garage = region `garage`, path-style.
         env:
-          SPECS_S3_ENDPOINT: http://garage.garage.svc.cluster.local:3900
-          SPECS_S3_ACCESS_KEY_ID: ${{ secrets.SPECS_S3_ACCESS_KEY_ID }}
-          SPECS_S3_SECRET_ACCESS_KEY: ${{ secrets.SPECS_S3_SECRET_ACCESS_KEY }}
-        run: |
-          devbox run -- bash -c '
-            mc alias set specs "$SPECS_S3_ENDPOINT" "$SPECS_S3_ACCESS_KEY_ID" "$SPECS_S3_SECRET_ACCESS_KEY" >/dev/null
-            mc rm --recursive --force "specs/circles-specs/pr-${{ github.event.number }}/" \
-              || echo "prefix pr-${{ github.event.number }}/ already absent"
-          '
+          RCLONE_CONFIG_SPECS_TYPE: s3
+          RCLONE_CONFIG_SPECS_PROVIDER: Other
+          RCLONE_CONFIG_SPECS_ENDPOINT: http://garage.garage.svc.cluster.local:3900
+          RCLONE_CONFIG_SPECS_REGION: garage
+          RCLONE_CONFIG_SPECS_FORCE_PATH_STYLE: "true"
+          RCLONE_CONFIG_SPECS_ACCESS_KEY_ID: ${{ secrets.SPECS_S3_ACCESS_KEY_ID }}
+          RCLONE_CONFIG_SPECS_SECRET_ACCESS_KEY: ${{ secrets.SPECS_S3_SECRET_ACCESS_KEY }}
+        run: devbox run -- bash scripts/specs-pr-purge.sh "${{ github.event.number }}"
