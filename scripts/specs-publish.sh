@@ -13,8 +13,10 @@
 # Soft-skips when creds are absent (local runs, forks) — oracle-fleet convention.
 set -euo pipefail
 cd "$(dirname "$0")/.."
-# Parallel upload path (oracle-fleet #129 lesson): small-object PUTs go out concurrently
-# instead of one-per-second serial against Garage's replicated fsync.
+# Verified parallel upload path (oracle-fleet #129/#318 lessons): small-object PUTs go out
+# concurrently instead of one-per-second serial against Garage's replicated fsync, and a write
+# that does not fully land fails the step. rclone via an env-configured remote (no secrets in
+# argv), implemented in scripts/lib/s3-publish.sh.
 source scripts/lib/s3-publish.sh
 
 if [ -z "${SPECS_S3_ACCESS_KEY_ID:-}" ] || [ -z "${SPECS_S3_SECRET_ACCESS_KEY:-}" ]; then
@@ -28,13 +30,13 @@ PREFIX="${SITE_PREFIX:-}"
 bash scripts/specs-build.sh
 
 echo "== upload =="
-s3_publish_alias specs "$ENDPOINT" "$SPECS_S3_ACCESS_KEY_ID" "$SPECS_S3_SECRET_ACCESS_KEY"
+s3_publish_remote specs "$ENDPOINT" "$SPECS_S3_ACCESS_KEY_ID" "$SPECS_S3_SECRET_ACCESS_KEY"
 if [ -n "$PREFIX" ]; then
   # A PR prefix is wholly owned by its PR: --remove keeps it an exact mirror of this build.
-  s3_publish_mirror --overwrite --remove specs-site/ "specs/$BUCKET/$PREFIX/"
+  s3_publish_mirror --remove specs-site/ "specs/$BUCKET/$PREFIX/"
   echo "published: https://specs-${PREFIX#pr-}.circles.teststuff.net/  (bucket $BUCKET/$PREFIX via $ENDPOINT)"
 else
   # Bucket root also holds the pr-*/ prefixes — NEVER --remove here.
-  s3_publish_mirror --overwrite specs-site/ "specs/$BUCKET/"
+  s3_publish_mirror specs-site/ "specs/$BUCKET/"
   echo "published: https://specs.circles.teststuff.net/  (bucket $BUCKET via $ENDPOINT)"
 fi
