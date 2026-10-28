@@ -13,6 +13,7 @@
     "kind@latest",
     "docker-client@latest",
     "minio-client@latest",
+    "rclone@latest",
     "github:NixOS/nixpkgs/f05535a0efcb2134c478d1e88434fadf486d42b5#python315"
   ],
   "env": {
