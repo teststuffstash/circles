@@ -1,5 +1,6 @@
 {
   "$schema": "https://raw.githubusercontent.com/jetify-com/devbox/0.16.0/.schema/devbox.schema.json",
+  "_comment": "python rides a nixpkgs FLAKE REF (3.15.0 final) because devbox's search index lagged at 3.15.0rc2 — the homelab#2610 pattern; swap back to `python@3.15` once `devbox search python@3.15` resolves the final. VENV_DIR is keyed on the interpreter minor so a cached venv from another python on a persistent runner is never reused (homelab#2757).",
   "packages": [
     "kubectl@latest",
     "uv@latest",
@@ -12,10 +13,10 @@
     "kind@latest",
     "docker-client@latest",
     "minio-client@latest",
-    "python@3.15"
+    "github:NixOS/nixpkgs/f05535a0efcb2134c478d1e88434fadf486d42b5#python315"
   ],
   "env": {
-    "VENV_DIR": "$HOME/.cache/devbox-venv/circles"
+    "VENV_DIR": "$HOME/.cache/devbox-venv/circles-py3.15"
   },
   "shell": {
     "init_hook": [],
