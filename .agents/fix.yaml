@@ -102,17 +102,6 @@ extensions:
     timeout: 900
     bundled: true
 
-# ── Self-verification: keep going until the real gate is green ────────────────────────────────
-# The fixer's success is not "the model thinks it's done" — it's `devbox run ci` passing. Re-run
-# with the failure fed back, up to a few attempts, before giving up.
-retry:
-  max_retries: 3
-  checks:
-    - type: shell
-      command: "devbox run ci"
-  on_failure: "devbox run ci 2>&1 | tail -40"
-
-# ── Structured result for the coordinator / auto-merge gate ───────────────────────────────────
 response:
   json_schema:
     type: object
