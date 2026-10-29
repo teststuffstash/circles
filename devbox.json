@@ -23,6 +23,9 @@
     "init_hook": [],
     "scripts": {
       "ci":             ["./scripts/ci.sh"],
+      "pr-gate": [
+        "./scripts/ci.sh"
+      ],
       "test-chart":     ["./scripts/test-chart.sh"],
       "test-system":    ["./scripts/test-system.sh"],
       "test-browser":   ["./scripts/test-browser.sh"],

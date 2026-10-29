@@ -120,12 +120,3 @@ extensions:
     timeout: 900
     bundled: true
 
-# ── Self-verification: keep going until the real acceptance gate is green ──────────────────────
-# A build task's success is the gate PASSING, observed — not the model's judgement. Re-run with the
-# failure fed back, up to a few attempts, before giving up.
-retry:
-  max_retries: 3
-  checks:
-    - type: shell
-      command: "devbox run ci"
-  on_failure: "devbox run ci 2>&1 | tail -40"
