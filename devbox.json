@@ -24,7 +24,7 @@
     "scripts": {
       "ci":             ["./scripts/ci.sh"],
       "pr-gate": [
-        "./scripts/ci.sh"
+        "./scripts/ci.sh && devbox run scan-secrets"
       ],
       "test-chart":     ["./scripts/test-chart.sh"],
       "test-system":    ["./scripts/test-system.sh"],

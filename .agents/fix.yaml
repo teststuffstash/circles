@@ -48,7 +48,7 @@ instructions: |
      incremental-push rule). This banks the reproduction before you spend anything on the fix.
   5. Make the MINIMAL change to go green. Keep `devbox run ci` green end-to-end; don't break
      the other rows.
-  6. `devbox run scan-secrets` must be clean. Then open the PR.
+  6. Then open the PR with `pr-open --title "…" --body-file <file>` (the ground rules): it runs this repo's gate (`devbox run pr-gate` = `devbox run ci` + `scan-secrets`) and opens the PR only on green — do not run that gate yourself just before.
 
   Anomaly circuit-breaker (homelab FU-069 — same convention as the coordinator/reviewer): if at
   any point you detect the LOOP misbehaving — an open PR already exists for this issue and round,
@@ -76,7 +76,7 @@ instructions: |
   - Branch `fix/issue-{{ issue }}-<slug>` and PUSH IT EARLY — right after the first (RED) commit,
     then again after each green step. Incremental pushes are cheap insurance: if the run dies midway
     (budget / rate-limit / crash) the branch survives and the next run resumes from it instead of
-    re-deriving — and re-paying — from scratch. Open the PR once `devbox run ci` is green and clean.
+    re-deriving — and re-paying — from scratch. Open it with `pr-open` (it gates on `pr-gate`).
     NEVER push to master.
   - If the bug is NOT reproducible in the current code, STOP and report that with the (passing) test
     you wrote as evidence — do not fabricate a fix or weaken an assertion to force green.
@@ -98,7 +98,7 @@ parameters:
 
 extensions:
   - type: builtin
-    name: developer        # file read/edit + shell (devbox run ci/scan-secrets, git, gh pr create)
+    name: developer        # file read/edit + shell (devbox run ci/scan-secrets, git, pr-open)
     timeout: 900
     bundled: true
 

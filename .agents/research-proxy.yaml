@@ -85,7 +85,7 @@ instructions: |
     .github/. Never modify or push to the arm branches.
   - Branch `research/issue-{{ issue }}-proxy-<arm-slug>`. Push EARLY (file skeleton after step
     1) and again after each section lands — a died run must leave a resumable branch.
-  - `devbox run ci` must stay green and `devbox run scan-secrets` clean before the PR.
+  - Open the PR with `pr-open --title "…" --body-file <file>` (the ground rules): it runs this repo's gate (`devbox run pr-gate` = `devbox run ci` + `scan-secrets`) and opens the PR only on green — do not run that gate yourself just before.
   - Open the PR un-armed (the launcher enforces it), body leading with the Verdict counts line.
     This PR waits for the operator — never enable auto-merge.
 

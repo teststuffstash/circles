@@ -41,7 +41,7 @@ instructions: |
      task's success is the acceptance gate ACTUALLY passing, observed — not your judgement that it would.
   4. Keep `devbox run ci` green end-to-end (chart validation + tests, and the new gate once it
      is wired into CI).
-  5. `devbox run scan-secrets` must be clean. Then open the PR.
+  5. Then open the PR with `pr-open --title "…" --body-file <file>` (the ground rules): it runs this repo's gate (`devbox run pr-gate` = `devbox run ci` + `scan-secrets`) and opens the PR only on green — do not run that gate yourself just before.
 
   Scope: a build/infra issue routinely needs `chart/`, `.github/workflows/`, new `scripts/`, or
   `devbox.json` — those ARE in scope WHEN the issue authorizes them (it says so in its body; this
@@ -116,7 +116,7 @@ settings:
 
 extensions:
   - type: builtin
-    name: developer        # file read/edit + shell (docker/kind, devbox run test-integration/ci/scan-secrets, git, gh pr create)
+    name: developer        # file read/edit + shell (docker/kind, devbox run test-integration/ci/scan-secrets, git, pr-open)
     timeout: 900
     bundled: true
 
