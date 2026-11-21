@@ -31,7 +31,7 @@
 # `devbox run evidence -- <merged> <out>` for the whole-suite evidence (scripts/evidence.sh).
 #
 # Requirements evidenced (system tier):
-#   CIR-RENDER-ONE-SCREEN            (all 4 rows)
+#   CIR-RENDER-ONE-SCREEN            (all 7 rows — incl. the layout sweep, test_layout_sweep.py)
 #   CIR-RENDER-REFERENCE-VIEWPORT    (both rows)
 #   CIR-RENDER-A4#print-single-a4-portrait, #print-margins-are-declared, #print-chrome-complete
 #   CIR-BAKE-STALE-SELF, CIR-RENDER-STALE-MARK (all rows)

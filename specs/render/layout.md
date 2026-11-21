@@ -50,6 +50,9 @@ at and above the reference viewport.
 | one-screen-with-warnings | artifact with 2 warnings | banner shown; still no scrolling (the chart yields the space) |
 | one-screen-larger-viewport | 1920 × 1080 | composition scales up, no scrollbars |
 | one-screen-smaller-viewport | 700 × 500 | still no scrollbars — the chart scales down; legibility not guaranteed |
+| one-screen-phone-portrait | fixture config, 390 × 844 (portrait phone) | no page scrollbars; the chart sits ABOVE the chrome and spans ≥ 90 % of the viewport width; the chrome scrolls inside its own box (⚖-R58) |
+| layout-sweep-clean | fixture config, every width 320 → 1280 CSS px in 16 px steps at heights 844 and 800, plus 844 × 390 and 667 × 375 (landscape phones) | no layout defect: page-overflow, clipped, collision, crushed or ellipsis, as defined by `tests/browser/layout_checks.js` (oracle-fleet DEP-STATIC-LAYOUT's checks; the sunburst svg is exempt from collision, intended scrollers from clipped) |
+| layout-zoom-200 | fixture config, 390 × 844, root font size 200 % (32 px) — the WCAG 1.4.10 reflow case | no layout defect, same checks |
 
 **⚖-R38 — below the reference viewport, scale or scroll?** Options: (a) always scale to fit, no
 scrolling at any size; (b) a minimum size, scrolling below it; (c) a responsive breakpoint
@@ -59,6 +62,18 @@ far below reference size, and text is what degrades first, which the detail line
 the multi-page-app smell the goal warns against. This is also the honest answer to the
 phone-vs-desktop tension the goal leaves open: the phone gets a complete, smaller picture rather
 than a different one.
+
+**⚖-R58 — a portrait screen: side by side or stacked?** ⚖-R38 keeps the picture whole at any
+size, but the desktop composition puts the chrome in a fixed 320 px column beside the chart; on a
+390 px-wide phone that column takes four fifths of the width and the chart shrinks to a ~110 px
+thumbnail (operator screenshot, 2026-11-21 — the page went LAN-live behind the passkey gate and
+the first phone view was unreadable). Options: (a) keep side by side and let ⚖-R38 shrink the
+chart; (b) on a portrait viewport (narrower than tall) stack: the chart full width on top, the
+same chrome below it, scrolling inside its own box; (c) a phone-specific page. **Ruled: (b)**
+(operator, 2026-11-21). The same page, the same furniture, the same order of reading — only the
+axis turns, so it is a reflow, not the breakpoint redesign ⚖-R38 rejected; the page itself still
+never scrolls, the chrome column already scrolled on its own. Legibility below the reference
+viewport stays unpromised (⚖-R38); the touch interactions are CIR-RENDER-TOUCH's.
 
 <details markdown="1"><summary>Evidence — latest run</summary>
 
