@@ -29,10 +29,20 @@ ZOOM_VIEWPORT = (390, 844)
 ZOOM_FONT_SIZE_PX = 32
 
 
+# layout_checks.js's page-overflow is horizontal only — oracle's pages scroll vertically by design.
+# circles never scrolls on EITHER axis (CIR-RENDER-ONE-SCREEN), so the sweep adds the vertical leg:
+# the same scrollHeight > clientHeight probe test_one_screen.py's _assert_no_scroll uses, for the
+# document element and the body.
+_PAGE_SCROLL_Y = """() => [document.documentElement, document.body]
+  .filter(e => e.scrollHeight > e.clientHeight + 1)
+  .map(e => ({check: 'page-overflow-y', selector: e.tagName.toLowerCase(),
+              detail: 'scrollHeight ' + e.scrollHeight + ' > clientHeight ' + e.clientHeight}))"""
+
+
 def _findings(page: Page, viewport: tuple[int, int]) -> list[str]:
     return [
         f"{f['check']} {f['selector']} at {viewport[0]}x{viewport[1]}: {f['detail']}"
-        for f in page.evaluate(LAYOUT_CHECKS_JS)
+        for f in [*page.evaluate(LAYOUT_CHECKS_JS), *page.evaluate(_PAGE_SCROLL_Y)]
     ]
 
 
@@ -43,7 +53,7 @@ class TestLayoutSweep:
     def test_layout_sweep_clean(self, page: Page, served: str) -> None:
         """CIR-RENDER-ONE-SCREEN#layout-sweep-clean — fixture config at every width
         320 → 1280 px in 16 px steps, heights 844 and 800, plus 844 × 390 and 667 × 375:
-        no page-overflow, clipped, collision, crushed or ellipsis finding."""
+        no page scroll on either axis and no clipped, collision, crushed or ellipsis finding."""
         page.goto(f"{served}/index.html")
         found: list[str] = []
         for width, height in SWEEP:
@@ -55,7 +65,7 @@ class TestLayoutSweep:
     @rule("CIR-RENDER-ONE-SCREEN")
     def test_layout_zoom_200(self, page: Page, served: str) -> None:
         """CIR-RENDER-ONE-SCREEN#layout-zoom-200 — fixture config at 390 × 844 with the root
-        font size at 200 % (32 px): no layout finding."""
+        font size at 200 % (32 px): no page scroll on either axis, no layout finding."""
         page.set_viewport_size({"width": ZOOM_VIEWPORT[0], "height": ZOOM_VIEWPORT[1]})
         page.goto(f"{served}/index.html")
         page.evaluate(f"document.documentElement.style.fontSize = '{ZOOM_FONT_SIZE_PX}px'")

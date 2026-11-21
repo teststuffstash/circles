@@ -732,7 +732,7 @@ html, body { height: 100%; font-family: -apple-system, BlinkMacSystemFont, "Sego
 @media screen and (orientation: portrait) {
   #app { flex-direction: column; }
   #chart-area { flex: 0 0 min(100vw, 62vh); min-height: 0; width: 100%; }  /* min-height: a flex item's auto minimum is its content — the square svg — and would undo the 62vh cap */
-  #chrome-panel { flex: 1 1 0; min-height: 0; border-left: none; border-top: 1px solid #e0e0e0; display: grid; grid-template-columns: 1fr 1fr; align-content: start; gap: 12px 16px; padding: 14px 16px; }
+  #chrome-panel { flex: 1 1 0; min-height: 0; overflow-y: auto; border-left: none; border-top: 1px solid #e0e0e0; display: grid; grid-template-columns: 1fr 1fr; align-content: start; gap: 12px 16px; padding: 14px 16px; }
   #stale-banner, #detail-strip, #stamp, #warnings, #a11y-table { grid-column: 1 / -1; }
 }
 /* Print styles */

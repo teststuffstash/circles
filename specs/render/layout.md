@@ -51,8 +51,8 @@ at and above the reference viewport.
 | one-screen-larger-viewport | 1920 × 1080 | composition scales up, no scrollbars |
 | one-screen-smaller-viewport | 700 × 500 | still no scrollbars — the chart scales down; legibility not guaranteed |
 | one-screen-phone-portrait | fixture config, 390 × 844 (portrait phone) | no page scrollbars; the chart sits ABOVE the chrome and spans ≥ 90 % of the viewport width; the chrome scrolls inside its own box (⚖-R58) |
-| layout-sweep-clean | fixture config, every width 320 → 1280 CSS px in 16 px steps at heights 844 and 800, plus 844 × 390 and 667 × 375 (landscape phones) | no layout defect: page-overflow, clipped, collision, crushed or ellipsis, as defined by `tests/browser/layout_checks.js` (oracle-fleet DEP-STATIC-LAYOUT's checks; the sunburst svg is exempt from collision, intended scrollers from clipped) |
-| layout-zoom-200 | fixture config, 390 × 844, root font size 200 % (32 px) — the WCAG 1.4.10 reflow case | no layout defect, same checks |
+| layout-sweep-clean | fixture config, every width 320 → 1280 CSS px in 16 px steps at heights 844 and 800, plus 844 × 390 and 667 × 375 (landscape phones) | no page scroll on either axis, and no layout defect — clipped, collision, crushed or ellipsis, as defined by `tests/browser/layout_checks.js` (oracle-fleet DEP-STATIC-LAYOUT's checks, whose page-overflow is horizontal only; the sunburst svg is exempt from collision, intended scrollers from clipped) |
+| layout-zoom-200 | fixture config, 390 × 844, root font size 200 % (32 px) — the WCAG 1.4.10 reflow case | no page scroll on either axis, no layout defect — same checks |
 
 **⚖-R38 — below the reference viewport, scale or scroll?** Options: (a) always scale to fit, no
 scrolling at any size; (b) a minimum size, scrolling below it; (c) a responsive breakpoint
