@@ -49,7 +49,7 @@ binds the adapters the bake *implements* — `manual:`, `freshness:` and any con
 `command:` runs the person's own code under the trust boundary of
 [`CIR-ADAPT-COMMAND`](#cir-adapt-command): "a stated trust boundary rather than a sandbox", so
 the bake does not police what that code writes. The production guard is the deployment, not the
-bake: the nightly CronJob mounts the cloned config read-only (`chart/templates/cronjob.yaml`, the
+bake: the nightly CronJob mounts the copied config read-only (`chart/templates/cronjob.yaml`, the
 `src` volume), so a write into the config dir fails there and the item resolves ⚪ + warning by
 the ordinary exit-code rule. A local `--evaluate` run has no such guard, by design.
 

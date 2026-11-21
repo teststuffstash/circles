@@ -1,6 +1,7 @@
-{{- /* The nightly bake (circles-iac docs/deploy-seam.md §"Pod shape"). The source repo's URL and
-       token live ONLY in Secret files under /secrets/source — no env var references the Secret
-       (CIR-ADAPT-BUDGET#environment-not-inherited-wholesale), neither value reaches an argv. */ -}}
+{{- /* The nightly bake (circles-iac docs/deploy-seam.md §"Pod shape", ADR-003). The source is a
+       private bucket the person's notes repo publishes a whitelisted export into; its reader key
+       lives ONLY in Secret files under /secrets/source — no env var references the Secret
+       (CIR-ADAPT-BUDGET#environment-not-inherited-wholesale), no key value reaches an argv. */ -}}
 {{- if .Values.bake.enabled }}
 apiVersion: batch/v1
 kind: CronJob
@@ -37,26 +38,37 @@ spec:
                     matchLabels: { app.kubernetes.io/name: {{ .Chart.Name }} }
                   topologyKey: kubernetes.io/hostname
           initContainers:
-            - name: clone
+            - name: copy-source
               image: "{{ .Values.bake.image.repository }}:{{ .Values.bake.image.tag | default .Chart.AppVersion }}"
               imagePullPolicy: {{ .Values.bake.image.pullPolicy }}
               workingDir: /src
               command: ["/bin/sh", "-ec"]
               args:
                 - |
-                  # URL: read by a shell builtin into the repo config — never an argv.
-                  # Token: handed to git by a credential helper that cats the file — never an argv.
-                  read -r url < /secrets/source/url
-                  git init -q /src/repo
-                  printf '[remote "origin"]\n\turl = %s\n\tfetch = +refs/heads/*:refs/remotes/origin/*\n' "$url" >> /src/repo/.git/config
-                  cd /src/repo
-                  git -c credential.helper='!f() { echo username=circles-bake; printf "password=%s\n" "$(cat /secrets/source/token)"; }; f' \
-                    fetch -q --depth 1 origin HEAD
-                  git checkout -q FETCH_HEAD
-                  echo "cloned $(git rev-parse --short HEAD)"
+                  # Keys: read through a pipe (cat's argv is the PATH, never the value) and written
+                  # by the printf builtin into a 0600 rclone config on the emptyDir — never an
+                  # argv, never the environment. Not `read -r`: Secret files carry no trailing
+                  # newline, so `read` returns 1 at EOF and `sh -e` would exit silently.
+                  bucket=$(cat /secrets/source/bucket)
+                  ak=$(cat /secrets/source/reader_access_key_id)
+                  sk=$(cat /secrets/source/reader_secret_access_key)
+                  umask 077
+                  printf '[src]\ntype = s3\nprovider = Other\nendpoint = %s\nregion = %s\nforce_path_style = true\naccess_key_id = %s\nsecret_access_key = %s\n' \
+                    "$S3_ENDPOINT" "$S3_REGION" "$ak" "$sk" > /tmp/rclone.conf
+                  unset ak sk
+                  rclone copy --config /tmp/rclone.conf "src:$bucket" /src/source
+                  rm -f /tmp/rclone.conf
+                  # S3 keeps no file modes: a copied file that starts with a shebang is an
+                  # executable (a `command:` adapter script, CIR-ADAPT-COMMAND) — mark it so.
+                  umask 022
+                  find /src/source -type f | while read -r f; do
+                    [ "$(head -c 2 "$f")" = '#!' ] && chmod 0755 "$f" || chmod 0644 "$f"
+                  done
+                  echo "copied $(find /src/source -type f | wc -l) files from $bucket"
               env:
                 - { name: HOME, value: /tmp }
-                - { name: GIT_TERMINAL_PROMPT, value: "0" }
+                - { name: S3_ENDPOINT, value: {{ .Values.bake.s3.endpoint | quote }} }
+                - { name: S3_REGION, value: {{ .Values.bake.s3.region | quote }} }
               securityContext:
                 allowPrivilegeEscalation: false
                 readOnlyRootFilesystem: true
@@ -75,7 +87,7 @@ spec:
               command: ["/build/.venv/bin/python", "-m", "bake"]
               args:
                 - --config
-                - /src/repo/{{ .Values.bake.configPath }}
+                - /src/source/{{ .Values.bake.configPath }}
                 - --out
                 - /content
                 - --evaluate
@@ -95,7 +107,13 @@ spec:
                 - { name: tmp, mountPath: /tmp }
           volumes:
             - name: source-secret
-              secret: { secretName: {{ .Values.bake.sourceSecretName }}, defaultMode: 0440 }
+              secret:
+                secretName: {{ .Values.bake.sourceSecretName }}
+                defaultMode: 0440
+                items: # the reader half only — the writer key belongs to the notes repo's CI
+                  - { key: bucket, path: bucket }
+                  - { key: reader_access_key_id, path: reader_access_key_id }
+                  - { key: reader_secret_access_key, path: reader_secret_access_key }
             - { name: src, emptyDir: {} }
             - { name: tmp, emptyDir: {} }
             - name: content

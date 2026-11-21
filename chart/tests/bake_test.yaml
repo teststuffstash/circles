@@ -1,7 +1,7 @@
 # The content/bake seam — circles-iac docs/deploy-seam.md (ADR-001) §"Values the overlay will set"
 # and §"Pod shape the chart renders for the CronJob". Expected values below come from that doc
 # and chart/values.yaml defaults (schedule "17 1 * * *", staleAfterHours 36, configPath
-# circles.yaml, sourceSecretName circles-source-git, claimName circles-content, storage 1Gi).
+# circles.yaml, sourceSecretName circles-source-s3, claimName circles-content, storage 1Gi).
 suite: content/bake seam
 templates: [cronjob.yaml, pvc.yaml, deployment.yaml]
 tests:
@@ -110,7 +110,7 @@ tests:
           value: ["/build/.venv/bin/python", "-m", "bake"]
       - equal:
           path: spec.jobTemplate.spec.template.spec.containers[0].args
-          value: ["--config", "/src/repo/circles.yaml", "--out", "/content", "--evaluate", "--stale-after-hours", "36"]
+          value: ["--config", "/src/source/circles.yaml", "--out", "/content", "--evaluate", "--stale-after-hours", "36"]
       - equal: { path: "spec.jobTemplate.spec.template.spec.containers[0].workingDir", value: /build }
   - it: staleAfterHours + configPath flow into the args
     template: cronjob.yaml
@@ -118,7 +118,7 @@ tests:
     asserts:
       - equal:
           path: spec.jobTemplate.spec.template.spec.containers[0].args
-          value: ["--config", "/src/repo/sub/c.yaml", "--out", "/content", "--evaluate", "--stale-after-hours", "12"]
+          value: ["--config", "/src/source/sub/c.yaml", "--out", "/content", "--evaluate", "--stale-after-hours", "12"]
   - it: both containers use the circles-bake image at the chart appVersion by default
     template: cronjob.yaml
     set: { bake: { enabled: true } }
@@ -130,7 +130,7 @@ tests:
       - equal:
           path: spec.jobTemplate.spec.template.spec.initContainers[0].image
           value: "ghcr.io/teststuffstash/circles-bake:2026.9.5-gabc"
-  - it: the PVC is mounted RW at /content, the clone lands in an emptyDir at /src
+  - it: the PVC is mounted RW at /content, the source copy lands in an emptyDir at /src
     template: cronjob.yaml
     set: { bake: { enabled: true } }
     asserts:
@@ -148,13 +148,21 @@ tests:
           content: { name: src, mountPath: /src }
 
   # ── the source Secret: files only (CIR-ADAPT-BUDGET#environment-not-inherited-wholesale) ──
-  - it: the source Secret is mounted read-only as files into the clone container only
+  - it: the source Secret is mounted read-only as files into the copy container only
     template: cronjob.yaml
     set: { bake: { enabled: true } }
     asserts:
       - contains:
           path: spec.jobTemplate.spec.template.spec.volumes
-          content: { name: source-secret, secret: { secretName: circles-source-git, defaultMode: 0440 } }
+          content:
+            name: source-secret
+            secret:
+              secretName: circles-source-s3
+              defaultMode: 0440
+              items:
+                - { key: bucket, path: bucket }
+                - { key: reader_access_key_id, path: reader_access_key_id }
+                - { key: reader_secret_access_key, path: reader_secret_access_key }
       - contains:
           path: spec.jobTemplate.spec.template.spec.initContainers[0].volumeMounts
           content: { name: source-secret, mountPath: /secrets/source, readOnly: true }
@@ -170,24 +178,67 @@ tests:
       - notExists: { path: "spec.jobTemplate.spec.template.spec.containers[0].env[?(@.valueFrom)]" }
       - notExists: { path: "spec.jobTemplate.spec.template.spec.initContainers[0].env[?(@.valueFrom)]" }
       - notMatchRegexRaw: { pattern: "secretRef|secretKeyRef" }
-  - it: the clone reads URL and token from the mounted files, never inlined
+  - it: the writer key is never projected into the pod (ADR-003 — it belongs to the notes repo's CI)
+    template: cronjob.yaml
+    set: { bake: { enabled: true } }
+    asserts:
+      - notMatchRegexRaw: { pattern: "writer_" }
+  - it: the copy reads bucket and reader key from the mounted files into a 0600 config, never an argv
     template: cronjob.yaml
     set: { bake: { enabled: true } }
     asserts:
       - matchRegex:
           path: spec.jobTemplate.spec.template.spec.initContainers[0].args[0]
-          pattern: "read -r url < /secrets/source/url"
+          pattern: "ak=\\$\\(cat /secrets/source/reader_access_key_id\\)"
       - matchRegex:
           path: spec.jobTemplate.spec.template.spec.initContainers[0].args[0]
-          pattern: "credential.helper=.*cat /secrets/source/token"
+          pattern: "sk=\\$\\(cat /secrets/source/reader_secret_access_key\\)"
       - matchRegex:
           path: spec.jobTemplate.spec.template.spec.initContainers[0].args[0]
-          pattern: "--depth 1"
+          pattern: "umask 077"
+      - matchRegex:
+          path: spec.jobTemplate.spec.template.spec.initContainers[0].args[0]
+          pattern: 'rclone copy --config /tmp/rclone.conf "src:\$bucket" /src/source'
+      - matchRegex:
+          path: spec.jobTemplate.spec.template.spec.initContainers[0].args[0]
+          pattern: "rm -f /tmp/rclone.conf"
+  - it: shebang files get the exec bit back (S3 keeps no modes; CIR-ADAPT-COMMAND executable-bit)
+    template: cronjob.yaml
+    set: { bake: { enabled: true } }
+    asserts:
+      - matchRegex:
+          path: spec.jobTemplate.spec.template.spec.initContainers[0].args[0]
+          pattern: "head -c 2 .*= '#!' \\] && chmod 0755"
+  - it: S3 endpoint + region default to in-cluster Garage, as plain env (not secret)
+    template: cronjob.yaml
+    set: { bake: { enabled: true } }
+    asserts:
+      - contains:
+          path: spec.jobTemplate.spec.template.spec.initContainers[0].env
+          content: { name: S3_ENDPOINT, value: "http://garage.garage.svc:3900" }
+      - contains:
+          path: spec.jobTemplate.spec.template.spec.initContainers[0].env
+          content: { name: S3_REGION, value: garage }
+  - it: bake.s3 overrides flow into the env
+    template: cronjob.yaml
+    set: { bake: { enabled: true, s3: { endpoint: "https://s3.example.test", region: r1 } } }
+    asserts:
+      - contains:
+          path: spec.jobTemplate.spec.template.spec.initContainers[0].env
+          content: { name: S3_ENDPOINT, value: "https://s3.example.test" }
+      - contains:
+          path: spec.jobTemplate.spec.template.spec.initContainers[0].env
+          content: { name: S3_REGION, value: r1 }
 
   # ── schema ────────────────────────────────────────────────────────────────
   - it: schema rejects an unknown content.mode
     template: deployment.yaml
     set: { content: { mode: foo } }
+    asserts:
+      - failedTemplate: {}
+  - it: schema rejects a non-URL s3 endpoint
+    template: cronjob.yaml
+    set: { bake: { enabled: true, s3: { endpoint: "garage:3900" } } }
     asserts:
       - failedTemplate: {}
   - it: schema rejects an unknown bake key
