@@ -84,6 +84,7 @@ goal issue or the majority of the fan-out. They are where review attention is wo
 | ⚖-R55 | the smallest chart text, and what a centre summary too long for it does | 10 CSS px at the reference viewport for all chart text; the summary wraps to two lines at a ` · ` separator before it would shrink, and only past two lines is the second truncated with `…` (operator ruling, circles#103, 2026-10-21) | [`CIR-RENDER-LABELS`](render/sunburst.md), [`CIR-RENDER-SUMMARY`](render/sunburst.md) |
 | ⚖-R56 | what "the minimum touch-target size" is | 24 × 24 CSS px (WCAG 2.2 SC 2.5.8, AA) at the reference viewport: a 24 CSS px square fits inside the arc (radial thickness and mid-radius arc length each ≥ 24 CSS px); a cell that cannot is not activatable | [`CIR-RENDER-TOUCH`](render/interactions.md) |
 | ⚖-R57 | how long may a build warning be? | 200 characters — long enough for a sanitized one-line cause, three orders of magnitude under a runaway command's output | [`CIR-BAKE-EXPOSURE`](data/data-json.md) |
+| ⚖-R58 | a portrait screen: chart beside the chrome or above it? | above: on a viewport narrower than tall the chart spans the width on top, the same chrome below scrolls inside its own box; the page never scrolls | [`CIR-RENDER-ONE-SCREEN`](render/layout.md) |
 
 ## What the fan-out missed entirely
 

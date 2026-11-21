@@ -143,6 +143,30 @@ class TestOneScreen:
             )
 
 
+    @rule("CIR-RENDER-ONE-SCREEN")
+    def test_one_screen_phone_portrait(self, page: Page, served: str) -> None:
+        """CIR-RENDER-ONE-SCREEN#one-screen-phone-portrait — fixture config at 390 × 844:
+        no page scrollbars, the chart above the chrome spanning ≥ 90 % of the width, the
+        chrome scrolling inside its own box (⚖-R58).
+
+        Expected from the contract: 90 % of 390 is 351 CSS px. "Above" = the svg's bottom
+        edge is at or above the chrome panel's top edge. "Scrolls inside its own box" = the
+        panel ends inside the viewport (its overflow is its own, never the page's)."""
+        viewport = (390, 844)
+        page.set_viewport_size({"width": viewport[0], "height": viewport[1]})
+        page.goto(f"{served}/index.html")
+        _assert_no_scroll(page, viewport)
+        chart = _assert_visible_inside(page, "#chart-area svg", viewport)
+        panel = page.evaluate(_MEASURE_RECT, "#chrome-panel")
+        assert chart["width"] >= 0.9 * viewport[0], (
+            f"chart is {chart['width']} px wide at 390x844, expected >= 351"
+        )
+        assert chart["bottom"] <= panel["top"] + 0.5, (
+            f"chart (bottom {chart['bottom']}) is not above the chrome (top {panel['top']})"
+        )
+        assert panel["bottom"] <= viewport[1] + 0.5, f"chrome runs past the viewport: {panel}"
+
+
 class TestReferenceViewport:
     """CIR-RENDER-REFERENCE-VIEWPORT — the tested screen."""
 

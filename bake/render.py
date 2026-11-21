@@ -724,6 +724,17 @@ html, body { height: 100%; font-family: -apple-system, BlinkMacSystemFont, "Sego
 #a11y-table table { width: 100%; border-collapse: collapse; margin-top: 8px; }
 #a11y-table th, #a11y-table td { text-align: left; padding: 4px 8px; border-bottom: 1px solid #eee; }
 #a11y-table th { font-weight: 600; color: #666; font-size: 11px; text-transform: uppercase; }
+/* Portrait screens (CIR-RENDER-ONE-SCREEN#one-screen-phone-portrait, ⚖-R58 (b)): the axis turns.
+   The chart takes a square band across the top — min(100vw, 62vh), so a tall phone gives it the
+   full width and a squat portrait window still leaves the chrome room — and the same chrome sits
+   below it, ring key | legend side by side, scrolling inside its own box. #app stays one 100vh
+   box, so the page itself never scrolls (⚖-R38). Print has its own block below and wins on paper. */
+@media screen and (orientation: portrait) {
+  #app { flex-direction: column; }
+  #chart-area { flex: 0 0 min(100vw, 62vh); min-height: 0; width: 100%; }  /* min-height: a flex item's auto minimum is its content — the square svg — and would undo the 62vh cap */
+  #chrome-panel { flex: 1 1 0; min-height: 0; overflow-y: auto; border-left: none; border-top: 1px solid #e0e0e0; display: grid; grid-template-columns: 1fr 1fr; align-content: start; gap: 12px 16px; padding: 14px 16px; }
+  #stale-banner, #detail-strip, #stamp, #warnings, #a11y-table { grid-column: 1 / -1; }
+}
 /* Print styles */
 @media print {
   @page { margin: 10mm; size: A4 portrait; }
@@ -917,11 +928,11 @@ def render_page(artifact: dict) -> str:
 <body>
 <div id="app">
 <div id="chart-area">
-<svg viewBox="0 0 800 800" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="circles sunburst chart for {person}">
+<svg viewBox="0 0 800 800" xmlns="http://www.w3.org/2000/svg" data-layout-overlay-ok role="img" aria-label="circles sunburst chart for {person}">
 {svg_content}
 </svg>
 </div>
-<div id="chrome-panel">
+<div id="chrome-panel" data-layout-scroll-ok>
 {chrome_html}
 {a11y_html}
 </div>
