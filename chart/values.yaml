@@ -17,8 +17,14 @@ bake:
   enabled: false # renders the nightly CronJob (+ the PVC it writes to)
   schedule: "17 1 * * *"
   staleAfterHours: 36 # → data.json stale_after_hours
-  configPath: circles.yaml # path inside the cloned private repo
-  sourceSecretName: circles-source-git # keys: url, token — mounted as files, never env
+  configPath: circles.yaml # path inside the copied source export
+  # The source: a private S3 bucket the person's notes repo publishes a whitelisted export into
+  # (circles-iac ADR-003). The Secret is the bucket's Crossplane connection Secret; ONLY its
+  # bucket + reader_* keys are projected, as files, into the copy container — never env.
+  sourceSecretName: circles-source-s3
+  s3:
+    endpoint: http://garage.garage.svc:3900 # in-cluster Garage
+    region: garage # Garage checks the SigV4 region; rclone's default us-east-1 is rejected
   image:
     repository: ghcr.io/teststuffstash/circles-bake
     tag: "" # chart appVersion by default (published at the page image's tag)

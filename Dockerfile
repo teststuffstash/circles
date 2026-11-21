@@ -32,12 +32,13 @@ RUN uv run --frozen python -m bake \
     --reference-date 2026-08-03
 
 # ── Stage 1b: bake-job — the nightly CronJob's image (published as circles-bake) ──
-# Not the default target: built with `--target bake-job` by scripts/build-image.sh. Adds git
-# (the CronJob's init container clones the private source repo with this same image) and
+# Not the default target: built with `--target bake-job` by scripts/build-image.sh. Adds rclone
+# (the CronJob's init container copies the source bucket with this same image — circles-iac
+# ADR-003: the notes repo PUSHES a whitelisted export; the cluster never clones it) and
 # makes /build readable by uid 101 (the CronJob runs as nginx-unprivileged's uid; it only
 # reads /build — the venv python runs directly, no uv cache writes).
 FROM bake AS bake-job
-RUN apk add --no-cache git && chmod -R a+rX /build
+RUN apk add --no-cache rclone && chmod -R a+rX /build
 
 # ── Stage 2: serve ─────────────────────────────────────────────────────────
 FROM nginxinc/nginx-unprivileged:1.31-alpine

@@ -30,6 +30,14 @@
         "staleAfterHours": { "type": "integer", "minimum": 1 },
         "configPath": { "type": "string", "minLength": 1 },
         "sourceSecretName": { "type": "string", "minLength": 1 },
+        "s3": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "endpoint": { "type": "string", "pattern": "^https?://" },
+            "region": { "type": "string", "minLength": 1 }
+          }
+        },
         "image": {
           "type": "object",
           "additionalProperties": false,
