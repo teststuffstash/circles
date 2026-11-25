@@ -18,12 +18,15 @@ S3_PUBLISH_WORKERS="${S3_PUBLISH_WORKERS:-32}"
 # s3_publish_alias <name> <endpoint> <access-key> <secret-key>
 # Define the rclone remote <name> via RCLONE_CONFIG_<NAME>_* env vars — no config file and no
 # secrets in argv. Exported into the caller's shell, so call it directly (not in a subshell).
+# Garage signs SigV4 with region `garage` (rclone's default us-east-1 → AuthorizationHeaderMalformed,
+# PR #148); NO_CHECK_BUCKET stops rclone trying CreateBucket on an existing bucket.
 s3_publish_alias() {
   local up
   up="$(printf '%s' "$1" | tr '[:lower:]-' '[:upper:]_')"
   export "RCLONE_CONFIG_${up}_TYPE=s3" "RCLONE_CONFIG_${up}_PROVIDER=Other" \
     "RCLONE_CONFIG_${up}_ENDPOINT=$2" "RCLONE_CONFIG_${up}_ACCESS_KEY_ID=$3" \
-    "RCLONE_CONFIG_${up}_SECRET_ACCESS_KEY=$4" "RCLONE_CONFIG_${up}_FORCE_PATH_STYLE=true"
+    "RCLONE_CONFIG_${up}_SECRET_ACCESS_KEY=$4" "RCLONE_CONFIG_${up}_FORCE_PATH_STYLE=true" \
+    "RCLONE_CONFIG_${up}_REGION=${S3_PUBLISH_REGION:-garage}" "RCLONE_CONFIG_${up}_NO_CHECK_BUCKET=true"
 }
 
 # s3_publish_cp <src-dir> <remote:bucket/path>
